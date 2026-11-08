@@ -7,13 +7,13 @@ How to keep this file: product-office Process P-9 § 6.
 Last update: 2026-11-08
 
 ## Phase
-Design: the specification's intent is approved by Adam (2026-11-08); the build has not started.
+Build: Phase 1, the first version (`docs/BACKLOG.md`); the specification's intent is approved (`docs/SPEC.md`).
 
 ## Current focus
-Setting the project up: sign-off ([#2](https://github.com/factoincognito/what-mushroom-is-this/pull/2)), purpose and goal (`memory/project.md`).
+The specification in `docs/SPEC.md` and the Phase 1 items, then PBI-1.1, the app shell.
 
 ## Next step
-Clead: the build, unattended ([PO-159](https://github.com/factoincognito/product-office/blob/2b85d6b57650b75888cf5af8b4270448cf53e92c/BACKLOG.md?plain=1#L390) step 4 in the product office), starting with `docs/SPEC.md` from the approved specification, without its private parts.
+Clead and Crog: PBI-1.1 to PBI-1.9, unattended, one PR each ([PO-159](https://github.com/factoincognito/product-office/blob/3be9e7f707f0da0811be1f1d8249482792d1c3f6/BACKLOG.md?plain=1#L390) step 4 in the product office).
 
 ## Blockers
-None.
+Adam: PBI-1.10, EAS Build, needs his Expo account signed in; it is not reached until PBI-1.9 is done.

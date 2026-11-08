@@ -29,12 +29,25 @@ one list he reads (product-office Process P-9 § 3 (1)), not here.
 
 ---
 
-## Phase 1 — [PHASE NAME]
+## Phase 1 — First version
 
-**Goal:** [What this phase delivers and how you know it is done.]
+**Goal:** the first version of `docs/SPEC.md` on Adam's Android phone,
+called done after his test session there (`docs/SPEC.md` 3.8). Built
+unattended (product-office PO-159 step 4, Adam, 2026-11-08 22:21). Each
+item: one PR, test first, CI green, reviewed by the role that did not
+write it.
 
-- [No items yet. The product owner describes the first PBI; Clead
-  specs it here.]
+- **[NEXT] PBI-1.1** — The app shell: `expo-router` with its routes under `src/app/` (Log as the start screen, Settings), the config and i18n modules (Swedish, English, Italian; the phone's language by default when it is one of the three, otherwise English), the disclaimer accepted once at first start. Replaces the starter `App`. Spec 2, 3.1, 3.5.
+- **[NEXT] PBI-1.2** — The API key and the model setting: the key module (secure store, trim, empty not saved, cleared on the first start after an install) and the Settings screen's key, model and language. Spec 3.2, 3.3.
+- **[NEXT] PBI-1.3** — The image module: the resize rule for both model tiers, tested with the docs' example and the 4:3 sizes, and the JPEG application-segment check. Spec 3.3.
+- **[NEXT] PBI-1.4** — The analysis module: the request builder, the answer's shape and its validation (low confidence shows "unknown"), the error classes of the table, the time limit, no retries. Spec 3.3.
+- **[NEXT] PBI-1.5** — The store: the database of finds and the photo files, add, read, replace the answer, delete with its photo. Spec 3.6.
+- **[NEXT] PBI-1.6** — New find: camera and gallery, the position rule, the gallery photo's metadata time and position. Spec 3.1, 3.6.
+- **[NEXT] PBI-1.7** — The queue: its triggers, its run, its stops and restarts. Spec 3.3, 3.4.
+- **[NEXT] PBI-1.8** — The Log and Find screens in full: names, edibility with the disclaimer, confidence and its note, general information, look-alikes, position with the map link, analyse again, delete. Spec 3.1, 3.5.
+- **[NEXT] PBI-1.9** — Out of the phone's backups (Android `allowBackup` and data extraction rules, iOS exclusion), the About view with the licences, and the project's third-party notices. Spec 3.1, 3.6.
+- **[BLOCKED] PBI-1.10** (needs Adam's Expo account signed in for `eas init`) — EAS Build, Android: the build profile and the project link, then an installable build. Spec 3.8.
+- **[LATER] PBI-1.11** — Adam's test session on his Android phone; the first version is done when it passes. Spec 3.8.
 
 ---
 
