@@ -1,0 +1,10 @@
+bin/
+obj/
+TestResults/
+coverage.json
+coverage.*.json
+*.user
+.vs/
+*.log
+.DS_Store
+Thumbs.db

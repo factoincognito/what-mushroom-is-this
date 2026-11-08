@@ -1,0 +1,8 @@
+# Development and CI tools: not needed to run the application.
+# Pinned exactly. Keep the ruff version equal to the ruff-pre-commit
+# rev in .pre-commit-config.yaml.
+ruff==0.16.9
+mypy==2.3.1
+pytest==9.1.1
+pytest-cov==7.1.0
+pre-commit==4.6.2

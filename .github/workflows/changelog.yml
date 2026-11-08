@@ -1,0 +1,35 @@
+name: Changelog Step
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  changelog:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      # A PR that already changed CHANGELOG.md (such as a project's setup
+      # PR) gets no reminder. If the file list cannot be read, the step
+      # fails and posts nothing. The files API lists at most 3000 files, in
+      # path order, so a root CHANGELOG.md is near the top. The check reads
+      # from a here-string, not a pipe: with grep -q at the end of a pipe,
+      # the writer can die of SIGPIPE and pipefail turns a match into "not
+      # found".
+      - name: Post changelog reminder
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          files="$(gh api "repos/$REPO/pulls/$PR_NUMBER/files?per_page=100" --paginate --jq '.[].filename')"
+          if grep -qxF CHANGELOG.md <<<"$files"; then
+            echo "PR #$PR_NUMBER already changes CHANGELOG.md, so no reminder is posted."
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" \
+            --body "<!-- clead-changelog-step --> PR merged. Crog: open a PR updating CHANGELOG.md." \
+            --repo "$REPO"

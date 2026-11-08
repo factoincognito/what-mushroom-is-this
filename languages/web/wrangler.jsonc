@@ -1,0 +1,10 @@
+// Cloudflare deploy config, used by deploy.yml. Serves dist/ as static assets; no Worker script.
+// Replace the name. To serve the site on your own domain, uncomment "routes" and enter it.
+{
+  "name": "[project-name]",
+  "compatibility_date": "2026-09-30",
+  // "routes": [{ "pattern": "example.com", "custom_domain": true }],
+  "assets": {
+    "directory": "./dist"
+  }
+}

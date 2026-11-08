@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history, so the base branch is there to compare with.
+          fetch-depth: 0
+
+      - name: Require a test change with a code change
+        run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'tests/*' --ignore 'src/*.csproj'
+
+      - name: Check the Rules edition
+        run: bash .github/scripts/check-rules-edition.sh rules
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Format and lint check
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Build, with warnings as errors
+        run: dotnet build --no-restore
+
+      - name: Test with coverage
+        run: dotnet test --no-build --coverlet --coverlet-threshold 80 --coverlet-threshold-type line --coverlet-threshold-stat total

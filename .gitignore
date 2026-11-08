@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.coverage
+*.log
+.DS_Store
+Thumbs.db
+node_modules/
+dist/
+coverage/
+.expo/
+.env

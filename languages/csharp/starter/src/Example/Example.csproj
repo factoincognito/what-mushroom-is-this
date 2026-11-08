@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A class library. TargetFramework and the checks are set for every
+       project in Directory.Build.props. -->
+</Project>

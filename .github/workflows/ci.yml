@@ -1,0 +1,16 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the Rules edition
+        run: bash .github/scripts/check-rules-edition.sh rules
+      # Language-specific steps added by bootstrap wizard

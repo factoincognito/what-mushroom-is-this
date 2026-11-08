@@ -1,0 +1,4 @@
+# Line endings: LF in the repo and in every checkout, on every OS.
+# Mandatory from day one (memory/decisions.md, 2026-07-23): mixed CRLF/LF
+# edits silently rewrote whole files in fomo-f.
+* text=auto eol=lf

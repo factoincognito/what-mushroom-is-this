@@ -1,0 +1,18 @@
+<Project>
+  <!-- Settings shared by every project under this folder. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Any compiler or analyzer warning fails the build. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- The .NET 10 recommended analyzer rules, fixed to 10.0 so a newer SDK
+         does not add rules on its own. -->
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
+    <!-- The code style rules in .editorconfig run in the build too. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- XML docs: a public member without a /// comment is a warning
+         (CS1591), and IDE0005 (unused usings) needs it to run in the build. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+</Project>

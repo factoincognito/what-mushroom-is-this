@@ -1,0 +1,36 @@
+# Tool configuration only. Dependencies are in requirements.txt
+# (runtime) and requirements-dev.txt (tools).
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "F",    # pyflakes
+  "I",    # import sorting
+  "B",    # bugbear, incl. B904: raise ... from exc inside except
+  "UP",   # modern syntax for the target Python
+  "PTH",  # pathlib instead of os.path and open()
+  "D101", # docstring on public classes
+  "D102", # docstring on public methods
+  "D103", # docstring on public functions
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/tests/**" = ["D101", "D102", "D103"]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["src"]
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
+addopts = ["--strict-markers"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/tests/*"]

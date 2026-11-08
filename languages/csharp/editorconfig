@@ -1,0 +1,34 @@
+# Laid out as the project's .editorconfig. dotnet format and the build read
+# it: a rule set to warning here fails CI (TreatWarningsAsErrors).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+# The project's code and config. Not [*]: Markdown keeps its trailing
+# spaces (a line break) and the other files their own indentation.
+[*.{cs,json,props,targets,csproj,slnx,yml,yaml}]
+indent_style = space
+trim_trailing_whitespace = true
+
+[*.{json,props,targets,csproj,slnx,yml,yaml}]
+indent_size = 2
+
+[*.cs]
+indent_size = 4
+# Formatting (whitespace, indentation, new lines).
+dotnet_diagnostic.IDE0055.severity = warning
+# One namespace per file, file-scoped: namespace Example;
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_diagnostic.IDE0161.severity = warning
+# Braces on every if, else, for, foreach, while and using.
+csharp_prefer_braces = true:warning
+dotnet_diagnostic.IDE0011.severity = warning
+# No unused using directives, private members or parameters.
+dotnet_diagnostic.IDE0005.severity = warning
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0060.severity = warning
+# System usings first, then the others, in alphabetical order.
+dotnet_sort_system_directives_first = true

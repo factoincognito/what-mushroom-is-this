@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "[PROJECT NAME]",
+    "slug": "[project-slug]",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic"
+  }
+}

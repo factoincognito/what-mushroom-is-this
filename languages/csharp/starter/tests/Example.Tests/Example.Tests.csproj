@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- xUnit v3 tests for the class library and the console app. They run
+       on Microsoft.Testing.Platform (global.json, "test"), with coverlet
+       measuring line coverage. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <IsPackable>false</IsPackable>
+    <!-- Test classes and methods need no XML docs. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.MTP" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <!-- Every project under src/, so the coverage gate counts each of them:
+       coverlet measures only the assemblies a test project loads. A new
+       project there is counted at once, at 0% until it has tests. -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/**/*.csproj" />
+  </ItemGroup>
+</Project>
