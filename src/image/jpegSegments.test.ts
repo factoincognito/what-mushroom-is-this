@@ -26,6 +26,16 @@ const SOF2 = segment(0xc2, [0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00
 const EXIF = segment(0xe1, [0x45, 0x78, 0x69, 0x66, 0x00, 0x00]);
 const DQT = segment(0xdb, [0x00, 0x01, 0x02, 0x03]);
 const SOF0 = segment(0xc0, [0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00]);
+const DRI = segment(0xdd, [0x00, 0x04]);
+const DAC = segment(0xcc, [0x00, 0x10]);
+/** "JFIF\0". */
+const JFIF_ID = [0x4a, 0x46, 0x49, 0x46, 0x00];
+/** Entropy-coded data with 0xFF00 stuffing and restart markers, as a DRI interval makes. */
+const RESTARTED = [0x11, 0xff, 0x00, 0x22, 0xff, 0xd0, 0x33, 0xff, 0xd1, 0x44, 0xff, 0xd7, 0x55];
+
+function hex(marker: number): string {
+  return `0xFF${marker.toString(16).toUpperCase().padStart(2, "0")}`;
+}
 
 function jpeg(...parts: number[][]): Uint8Array {
   return Uint8Array.from(parts.flat());
@@ -46,10 +56,31 @@ describe("checkJpegSegments: passing input", () => {
     });
   });
 
-  it("skips the standalone markers TEM and RSTn without a length", () => {
-    expect(checkJpegSegments(jpeg(SOI, [0xff, 0x01], [0xff, 0xd3], JFIF, SCAN, EOI))).toEqual({
+  it("passes a baseline JPEG with DQT, SOF0, DHT, DRI and restart markers in its scan", () => {
+    expect(checkJpegSegments(jpeg(SOI, JFIF, DQT, SOF0, DHT, DRI, SCAN, RESTARTED, EOI))).toEqual({
       ok: true,
     });
+  });
+
+  it("passes a progressive JPEG with DQT, SOF2, DHT, DRI, restart markers and several scans", () => {
+    expect(
+      checkJpegSegments(
+        jpeg(SOI, JFIF, ICC, DQT, SOF2, DHT, DRI, SCAN, RESTARTED, DHT, SCAN, RESTARTED, EOI),
+      ),
+    ).toEqual({ ok: true });
+  });
+
+  it("passes DAC, the arithmetic-coding table", () => {
+    expect(checkJpegSegments(jpeg(SOI, JFIF, DQT, DAC, SCAN, EOI))).toEqual({ ok: true });
+  });
+
+  it.each(
+    [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].map(
+      (marker) => [hex(marker), marker] as const,
+    ),
+  )("passes the frame marker SOFn %s", (_label, marker) => {
+    const frame = segment(marker, [0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00]);
+    expect(checkJpegSegments(jpeg(SOI, JFIF, DQT, frame, DHT, SCAN, EOI))).toEqual({ ok: true });
   });
 
   it("passes a Uint8Array view onto part of a larger buffer, reading only the view", () => {
@@ -355,10 +386,135 @@ describe("checkJpegSegments: truncated input", () => {
     });
   });
 
-  it("fails a cut-off APP1 as truncated: a segment is read whole before its marker is judged", () => {
-    expect(checkJpegSegments(jpeg(SOI, [0xff, 0xe1, 0x00, 0x40, 0x45]))).toEqual({
+  it("fails a cut-off APP0 as truncated: an allowed segment is read whole before its identifier is judged", () => {
+    expect(checkJpegSegments(jpeg(SOI, [0xff, 0xe0, 0x00, 0x40, 0x4a, 0x46]))).toEqual({
       ok: false,
       reason: "truncated",
+      marker: 0xffe0,
+    });
+  });
+});
+
+describe("checkJpegSegments: APP0 identifier", () => {
+  it("passes APP0 holding exactly the JFIF identifier", () => {
+    expect(checkJpegSegments(jpeg(SOI, segment(0xe0, JFIF_ID), SCAN, EOI))).toEqual({ ok: true });
+  });
+
+  it("fails a JFXX APP0, the JFIF extension that can hold a thumbnail JPEG", () => {
+    const jfxx = segment(0xe0, [0x4a, 0x46, 0x58, 0x58, 0x00, 0x10, ...SOI, ...EXIF, ...EOI]);
+    expect(checkJpegSegments(jpeg(SOI, JFIF, jfxx, SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffe0,
+    });
+  });
+
+  it("fails an APP0 with an unknown identifier", () => {
+    const unknown = segment(0xe0, [0x41, 0x56, 0x49, 0x31, 0x00, 0x00]);
+    expect(checkJpegSegments(jpeg(SOI, unknown, SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffe0,
+    });
+  });
+
+  it("fails an APP0 shorter than the JFIF identifier", () => {
+    expect(checkJpegSegments(jpeg(SOI, segment(0xe0, JFIF_ID.slice(0, 4)), SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffe0,
+    });
+  });
+
+  it("fails an APP0 whose identifier lacks the closing NUL byte of JFIF", () => {
+    const id = [...JFIF_ID.slice(0, 4), 0x20, 0x01, 0x01];
+    expect(checkJpegSegments(jpeg(SOI, segment(0xe0, id), SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffe0,
+    });
+  });
+});
+
+describe("checkJpegSegments: markers outside the allowlist", () => {
+  it.each(
+    [
+      ["JPG", 0xc8],
+      ["DNL", 0xdc],
+      ["DHP", 0xde],
+      ["EXP", 0xdf],
+      ["JPG0", 0xf0],
+      ["JPG1", 0xf1],
+      ["JPG2", 0xf2],
+      ["JPG3", 0xf3],
+      ["JPG4", 0xf4],
+      ["JPG5", 0xf5],
+      ["JPG6", 0xf6],
+      ["JPG7", 0xf7],
+      ["JPG8", 0xf8],
+      ["JPG9", 0xf9],
+      ["JPG10", 0xfa],
+      ["JPG11", 0xfb],
+      ["JPG12", 0xfc],
+      ["JPG13", 0xfd],
+      ["COM", 0xfe],
+      ["reserved", 0x02],
+      ["reserved", 0x4f],
+      ["reserved", 0xbf],
+    ].map(([name, marker]) => [`${name} ${hex(marker as number)}`, marker as number] as const),
+  )("fails %s before the scan", (_label, marker) => {
+    expect(checkJpegSegments(jpeg(SOI, JFIF, segment(marker, [0x00, 0x00]), SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xff00 | marker,
+    });
+  });
+
+  it("fails DNL where it would stand, after the first scan", () => {
+    expect(
+      checkJpegSegments(jpeg(SOI, JFIF, SOF0, SCAN, segment(0xdc, [0x00, 0x10]), EOI)),
+    ).toEqual({ ok: false, reason: "forbidden-segment", marker: 0xffdc });
+  });
+
+  it("fails JPG13 between two scans", () => {
+    expect(checkJpegSegments(jpeg(SOI, SCAN, segment(0xfd, [0x00]), SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xfffd,
+    });
+  });
+
+  it("fails TEM outside a scan, a marker with no length", () => {
+    expect(checkJpegSegments(jpeg(SOI, [0xff, 0x01], JFIF, SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xff01,
+    });
+  });
+
+  it.each([0xd0, 0xd3, 0xd7].map((marker) => [hex(marker), marker] as const))(
+    "fails the restart marker %s outside a scan",
+    (_label, marker) => {
+      expect(checkJpegSegments(jpeg(SOI, JFIF, [0xff, marker], SCAN, EOI))).toEqual({
+        ok: false,
+        reason: "forbidden-segment",
+        marker: 0xff00 | marker,
+      });
+    },
+  );
+
+  it("fails a cut-off APP1 as forbidden: a marker off the list is judged before its length", () => {
+    expect(checkJpegSegments(jpeg(SOI, [0xff, 0xe1, 0x00, 0x40, 0x45]))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffe1,
+    });
+  });
+
+  it("fails a forbidden marker that 0xFF fill bytes come before", () => {
+    expect(checkJpegSegments(jpeg(SOI, JFIF, [0xff, 0xff], EXIF, SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
       marker: 0xffe1,
     });
   });
