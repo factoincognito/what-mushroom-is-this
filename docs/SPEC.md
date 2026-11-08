@@ -171,9 +171,9 @@ When the queue has stopped (3.3), the Log screen says why and offers
   | an answer that does not fit the shape, or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops |
   | any other status | | the queue stops; the message gives the status |
 
-  A billing error is told apart from other 400 answers by the error type
-  in the answer's body. A `retry-after` value that is not a number of
-  seconds or a date is treated as missing (**[Clead]**).
+  **[Clead]**, both: a billing error is told apart from other 400 answers
+  by the error type in the answer's body, and a `retry-after` value that
+  is not a number of seconds or a date is treated as missing.
   A failed find is tried again only when the user asks. A stopped queue
   starts again when the user changes the setting named or taps "analyse
   now".
@@ -190,6 +190,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   none is left or one stays waiting for want of a network or a fault on
   Anthropic's side. A find can also be analysed at once from its screen.
   Nothing runs while the app is closed.
+- Position works without a network, from the phone's GPS. The map link of
+  3.1 needs the map app's own maps.
 
 ### 3.5 Edibility and the disclaimer
 

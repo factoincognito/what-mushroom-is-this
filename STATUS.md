@@ -7,7 +7,7 @@ How to keep this file: product-office Process P-9 § 6.
 Last update: 2026-11-08
 
 ## Phase
-Build: Phase 1, the first version ([`docs/BACKLOG.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/b50d84dce974ce2b14e1982e288bcb851caee0aa/docs/BACKLOG.md?plain=1)); the specification's intent is approved ([`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/b50d84dce974ce2b14e1982e288bcb851caee0aa/docs/SPEC.md?plain=1)).
+Build: Phase 1, the first version ([`docs/BACKLOG.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/BACKLOG.md)); the specification's intent is approved ([`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/SPEC.md)).
 
 ## Current focus
 The Phase 1 items, starting with the app shell and the image module.
