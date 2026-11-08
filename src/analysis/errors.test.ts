@@ -1,0 +1,233 @@
+import { classifyOutcome } from "./errors";
+
+const receivedAt = Date.UTC(2026, 10, 8, 12, 0, 0);
+
+function http(status: number, body = "", retryAfter: string | null = null) {
+  return { kind: "http" as const, status, body, retryAfter };
+}
+
+function apiError(type: string, message = "x"): string {
+  return JSON.stringify({ type: "error", error: { type, message }, request_id: "req_1" });
+}
+
+function messageWithText(text: string): string {
+  return JSON.stringify({ type: "message", role: "assistant", content: [{ type: "text", text }] });
+}
+
+describe("classifyOutcome, the find stays waiting", () => {
+  it("keeps the find waiting without a network", () => {
+    expect(classifyOutcome({ kind: "network" }, receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "stays-waiting", cause: "network", status: null },
+    });
+  });
+
+  it("keeps the find waiting when the time limit passed", () => {
+    expect(classifyOutcome({ kind: "time-out" }, receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "stays-waiting", cause: "time-out", status: null },
+    });
+  });
+
+  it.each([500, 504, 529])(
+    "keeps the find waiting on a fault on Anthropic's side, %i",
+    (status) => {
+      expect(classifyOutcome(http(status, apiError("api_error")), receivedAt)).toEqual({
+        ok: false,
+        error: { kind: "stays-waiting", cause: "server", status },
+      });
+    },
+  );
+});
+
+describe("classifyOutcome, rate limited", () => {
+  it("stops until the seconds of retry-after have passed", () => {
+    expect(classifyOutcome(http(429, apiError("rate_limit_error"), "120"), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: receivedAt + 120_000 },
+    });
+  });
+
+  it("stops until the date of retry-after", () => {
+    const result = classifyOutcome(
+      http(429, apiError("rate_limit_error"), "Sun, 08 Nov 2026 13:00:00 GMT"),
+      receivedAt,
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: Date.UTC(2026, 10, 8, 13, 0, 0) },
+    });
+  });
+
+  it.each([
+    ["without retry-after", null],
+    ["with a retry-after that is neither seconds nor a date", "later"],
+  ])("stops until the user starts it again %s", (_label, retryAfter) => {
+    expect(
+      classifyOutcome(http(429, apiError("rate_limit_error"), retryAfter), receivedAt),
+    ).toEqual({ ok: false, error: { kind: "rate-limited", retryAt: null } });
+  });
+});
+
+describe("classifyOutcome, a spend limit the user set", () => {
+  it.each([
+    [
+      "an organisation spend limit",
+      "You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+    ],
+    [
+      "a workspace spend limit",
+      "You have reached your specified workspace API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+    ],
+  ])("stops the queue until the user starts it again on 400 for %s", (_label, message) => {
+    expect(
+      classifyOutcome(http(400, apiError("invalid_request_error", message)), receivedAt),
+    ).toEqual({ ok: false, error: { kind: "rate-limited", retryAt: null } });
+  });
+
+  it("gives no time to stop until, even with a retry-after header", () => {
+    const body = apiError(
+      "invalid_request_error",
+      "You have reached your specified API usage limits",
+    );
+    expect(classifyOutcome(http(400, body, "30"), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+    });
+  });
+});
+
+describe("classifyOutcome, the queue stops for a setting", () => {
+  it.each([401, 403])("asks for a key on %i", (status) => {
+    expect(classifyOutcome(http(status, apiError("authentication_error")), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "key-refused", status },
+    });
+  });
+
+  it("says there is no credit on 402", () => {
+    expect(classifyOutcome(http(402, apiError("billing_error")), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "no-credit", status: 402 },
+    });
+  });
+
+  it("says there is no credit on 402 whatever the body", () => {
+    expect(classifyOutcome(http(402, "<html></html>"), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "no-credit", status: 402 },
+    });
+  });
+
+  it("says there is no credit on a 400 whose error type is billing_error", () => {
+    expect(classifyOutcome(http(400, apiError("billing_error")), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "no-credit", status: 400 },
+    });
+  });
+
+  it("asks for a model on 404", () => {
+    expect(classifyOutcome(http(404, apiError("not_found_error")), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "model-unknown" },
+    });
+  });
+});
+
+describe("classifyOutcome, the find fails and the queue goes on", () => {
+  it.each([
+    ["an API error", apiError("invalid_request_error")],
+    [
+      "the spend-limit text not at the start of the message",
+      apiError("invalid_request_error", "Note: You have reached your specified API usage limits"),
+    ],
+    [
+      "the spend-limit text under another error type",
+      apiError("api_error", "You have reached your specified API usage limits"),
+    ],
+    [
+      "the spend-limit text in another case",
+      apiError("invalid_request_error", "you have reached your specified API usage limits"),
+    ],
+    [
+      "a message that is not a string",
+      '{"type":"error","error":{"type":"invalid_request_error","message":5}}',
+    ],
+    ["a body that is not JSON", "Bad Request"],
+    ["an error body without a type", '{"type":"error","error":{}}'],
+    ["JSON without an error object", '{"type":"error","error":"billing_error"}'],
+    ["JSON that is not an object", '"billing_error"'],
+  ])("marks the find failed on 400 with %s", (_label, body) => {
+    expect(classifyOutcome(http(400, body), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" },
+    });
+  });
+
+  it("marks the find failed on 413, also with a body not from the API", () => {
+    expect(
+      classifyOutcome(http(413, "<html>413 Request Entity Too Large</html>"), receivedAt),
+    ).toEqual({
+      ok: false,
+      error: { kind: "find-failed", reason: "request-too-large", status: 413, queue: "goes-on" },
+    });
+  });
+});
+
+describe("classifyOutcome, a success answer", () => {
+  it("gives the validated answer", () => {
+    expect(
+      classifyOutcome(http(200, messageWithText('{"result":"no_mushroom"}')), receivedAt),
+    ).toEqual({ ok: true, answer: { result: "no_mushroom" } });
+  });
+
+  it("fails the find and stops the queue on an answer that does not fit the shape", () => {
+    expect(
+      classifyOutcome(http(200, messageWithText('{"result":"mushroom"}')), receivedAt),
+    ).toEqual({
+      ok: false,
+      error: {
+        kind: "find-failed",
+        reason: "shape",
+        detail: "result is not one of match, no_mushroom, cannot_tell",
+        status: 200,
+        queue: "stops",
+      },
+    });
+  });
+
+  it.each([
+    [200, "<html><body>Sign in to the Wi-Fi</body></html>"],
+    [204, ""],
+  ])("fails the find and stops the queue on %i with a body not from the API", (status, body) => {
+    expect(classifyOutcome(http(status, body), receivedAt)).toEqual({
+      ok: false,
+      error: {
+        kind: "find-failed",
+        reason: "not-api",
+        detail: "the body is not a Messages API message",
+        status,
+        queue: "stops",
+      },
+    });
+  });
+});
+
+describe("classifyOutcome, any other status", () => {
+  it.each([100, 302, 304, 405, 409, 418, 422, 501, 502, 503, 511, 599])(
+    "stops the queue and gives the status %i",
+    (status) => {
+      expect(classifyOutcome(http(status, apiError("api_error"), "30"), receivedAt)).toEqual({
+        ok: false,
+        error: { kind: "other", status },
+      });
+    },
+  );
+
+  it("ignores retry-after on a status other than 429", () => {
+    expect(classifyOutcome(http(529, apiError("overloaded_error"), "30"), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "stays-waiting", cause: "server", status: 529 },
+    });
+  });
+});

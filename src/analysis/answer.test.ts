@@ -1,0 +1,468 @@
+import { type Match, parseAnswerText, readMessageBody, shownEdibility } from "./answer";
+
+type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+
+function matchJson(): { [key: string]: Json } {
+  return {
+    result: "match",
+    names: {
+      sv: "Kantarell",
+      en: "Chanterelle",
+      la: "Cantharellus cibarius",
+      it: "Gallinaccio",
+    },
+    edibility: "edible",
+    confidence: "high",
+    general_information: {
+      sv: "En gul svamp i barr- och lövskog.",
+      en: "A yellow mushroom of coniferous and deciduous woods.",
+      it: "Un fungo giallo dei boschi di conifere e di latifoglie.",
+    },
+    look_alikes: [
+      {
+        names: {
+          sv: "Orange narrkantarell",
+          en: "False chanterelle",
+          la: "Hygrophoropsis aurantiaca",
+          it: "Falso gallinaccio",
+        },
+        edibility: "not_edible",
+      },
+    ],
+  };
+}
+
+const expectedMatch: Match = {
+  result: "match",
+  names: {
+    sv: "Kantarell",
+    en: "Chanterelle",
+    la: "Cantharellus cibarius",
+    it: "Gallinaccio",
+  },
+  edibility: "edible",
+  confidence: "high",
+  generalInformation: {
+    sv: "En gul svamp i barr- och lövskog.",
+    en: "A yellow mushroom of coniferous and deciduous woods.",
+    it: "Un fungo giallo dei boschi di conifere e di latifoglie.",
+  },
+  lookAlikes: [
+    {
+      names: {
+        sv: "Orange narrkantarell",
+        en: "False chanterelle",
+        la: "Hygrophoropsis aurantiaca",
+        it: "Falso gallinaccio",
+      },
+      edibility: "not_edible",
+    },
+  ],
+};
+
+function withChange(change: (answer: { [key: string]: Json }) => void): string {
+  const answer = matchJson();
+  change(answer);
+  return JSON.stringify(answer);
+}
+
+function record(value: Json | undefined): { [key: string]: Json } {
+  if (value === undefined || value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("test data is not an object");
+  }
+  return value;
+}
+
+function firstLookAlike(answer: { [key: string]: Json }): { [key: string]: Json } {
+  const list = answer.look_alikes;
+  if (!Array.isArray(list)) {
+    throw new Error("test data has no look-alikes");
+  }
+  return record(list[0]);
+}
+
+function expectFailure(text: string, detail: string): void {
+  const result = parseAnswerText(text);
+  expect(result).toEqual({ ok: false, reason: "shape", detail });
+}
+
+describe("parseAnswerText, accepted answers", () => {
+  it("reads a match into the answer", () => {
+    expect(parseAnswerText(JSON.stringify(matchJson()))).toEqual({
+      ok: true,
+      answer: expectedMatch,
+    });
+  });
+
+  it("accepts a match without look-alikes", () => {
+    const result = parseAnswerText(
+      withChange((a) => {
+        a.look_alikes = [];
+      }),
+    );
+    expect(result).toEqual({ ok: true, answer: { ...expectedMatch, lookAlikes: [] } });
+  });
+
+  it.each([
+    "edible",
+    "edible_after_preparation",
+    "not_edible",
+    "poisonous",
+    "deadly_poisonous",
+    "unknown",
+  ])("accepts the edibility %s", (edibility) => {
+    const result = parseAnswerText(
+      withChange((a) => {
+        a.edibility = edibility;
+      }),
+    );
+    expect(result.ok && result.answer.result === "match" && result.answer.edibility).toBe(
+      edibility,
+    );
+  });
+
+  it.each(["low", "medium", "high"])("accepts the confidence %s", (confidence) => {
+    const result = parseAnswerText(
+      withChange((a) => {
+        a.confidence = confidence;
+      }),
+    );
+    expect(result.ok && result.answer.result === "match" && result.answer.confidence).toBe(
+      confidence,
+    );
+  });
+
+  it("reads the no-mushroom form", () => {
+    expect(parseAnswerText('{"result":"no_mushroom"}')).toEqual({
+      ok: true,
+      answer: { result: "no_mushroom" },
+    });
+  });
+
+  it("reads the cannot-tell form", () => {
+    expect(parseAnswerText('{"result":"cannot_tell"}')).toEqual({
+      ok: true,
+      answer: { result: "cannot_tell" },
+    });
+  });
+
+  it("tolerates whitespace around the object", () => {
+    expect(parseAnswerText(`\n  ${JSON.stringify(matchJson())}  \n`)).toEqual({
+      ok: true,
+      answer: expectedMatch,
+    });
+  });
+});
+
+describe("parseAnswerText, text that is not one JSON object", () => {
+  it.each([
+    ["a code fence", '```json\n{"result":"no_mushroom"}\n```'],
+    ["text before the object", 'Here it is: {"result":"no_mushroom"}'],
+    ["text after the object", '{"result":"no_mushroom"} Hope this helps.'],
+    ["an empty text", ""],
+    ["plain words", "I cannot see a mushroom."],
+    ["a cut-off object", '{"result":"match","names":{'],
+  ])("fails %s as not JSON", (_label, text) => {
+    expectFailure(text, "the answer is not JSON");
+  });
+
+  it.each([
+    ["an array", "[]"],
+    ["a string", '"no_mushroom"'],
+    ["a number", "1"],
+    ["null", "null"],
+  ])("fails %s as not an object", (_label, text) => {
+    expectFailure(text, "the answer is not an object");
+  });
+});
+
+describe("parseAnswerText, the result field", () => {
+  it.each([
+    ["missing", "{}"],
+    ["unknown", '{"result":"maybe"}'],
+    ["not a string", '{"result":1}'],
+  ])("fails a result that is %s", (_label, text) => {
+    expectFailure(text, "result is not one of match, no_mushroom, cannot_tell");
+  });
+
+  it.each(["no_mushroom", "cannot_tell"])("fails the %s form with another key", (result) => {
+    expectFailure(JSON.stringify({ result, confidence: "low" }), "the answer has an unknown key");
+  });
+});
+
+describe("parseAnswerText, the fields of a match", () => {
+  it.each(["sv", "en", "la", "it"])("fails a match whose name %s is missing", (language) => {
+    expectFailure(
+      withChange((a) => {
+        delete record(a.names)[language];
+      }),
+      `names.${language} is not a non-empty string`,
+    );
+  });
+
+  it.each([
+    ["empty", ""],
+    ["blank", "   "],
+    ["a number", 7],
+    ["null", null],
+  ])("fails a match whose Latin name is %s", (_label, value) => {
+    expectFailure(
+      withChange((a) => {
+        record(a.names).la = value;
+      }),
+      "names.la is not a non-empty string",
+    );
+  });
+
+  it("fails a match whose names are not an object", () => {
+    expectFailure(
+      withChange((a) => {
+        a.names = "Kantarell";
+      }),
+      "names is not an object",
+    );
+  });
+
+  it("fails a match whose names have an extra language", () => {
+    expectFailure(
+      withChange((a) => {
+        record(a.names).de = "Pfifferling";
+      }),
+      "names has an unknown key",
+    );
+  });
+
+  it.each([
+    ["an unknown value", "toxic"],
+    ["another case", "Edible"],
+    ["the spec's words", "edible only after preparation"],
+    ["a number", 1],
+  ])("fails a match whose edibility is %s", (_label, value) => {
+    expectFailure(
+      withChange((a) => {
+        a.edibility = value;
+      }),
+      "edibility is not one of the six values",
+    );
+  });
+
+  it.each([
+    ["an unknown value", "very high"],
+    ["a number", 0.9],
+    ["missing", undefined],
+  ])("fails a match whose confidence is %s", (_label, value) => {
+    expectFailure(
+      withChange((a) => {
+        if (value === undefined) {
+          delete a.confidence;
+        } else {
+          a.confidence = value;
+        }
+      }),
+      "confidence is not one of low, medium, high",
+    );
+  });
+
+  it.each(["sv", "en", "it"])(
+    "fails a match whose general information in %s is empty",
+    (language) => {
+      expectFailure(
+        withChange((a) => {
+          record(a.general_information)[language] = "";
+        }),
+        `general_information.${language} is not a non-empty string`,
+      );
+    },
+  );
+
+  it("fails general information in Latin, which the shape does not have", () => {
+    expectFailure(
+      withChange((a) => {
+        record(a.general_information).la = "Fungus";
+      }),
+      "general_information has an unknown key",
+    );
+  });
+
+  it("fails a match whose general information is missing", () => {
+    expectFailure(
+      withChange((a) => {
+        delete a.general_information;
+      }),
+      "general_information is not an object",
+    );
+  });
+
+  it("fails a match whose look-alikes are not an array", () => {
+    expectFailure(
+      withChange((a) => {
+        a.look_alikes = {};
+      }),
+      "look_alikes is not an array",
+    );
+  });
+
+  it("fails a look-alike that is not an object", () => {
+    expectFailure(
+      withChange((a) => {
+        a.look_alikes = ["Hygrophoropsis aurantiaca"];
+      }),
+      "look_alikes[0] is not an object",
+    );
+  });
+
+  it("fails a look-alike without its Italian name", () => {
+    expectFailure(
+      withChange((a) => {
+        delete record(firstLookAlike(a).names).it;
+      }),
+      "look_alikes[0].names.it is not a non-empty string",
+    );
+  });
+
+  it("fails a look-alike with an unknown edibility", () => {
+    expectFailure(
+      withChange((a) => {
+        firstLookAlike(a).edibility = "bad";
+      }),
+      "look_alikes[0].edibility is not one of the six values",
+    );
+  });
+
+  it("fails a look-alike with an extra key", () => {
+    expectFailure(
+      withChange((a) => {
+        firstLookAlike(a).confidence = "high";
+      }),
+      "look_alikes[0] has an unknown key",
+    );
+  });
+
+  it("names the position of the failing look-alike", () => {
+    expectFailure(
+      withChange((a) => {
+        const list = a.look_alikes;
+        if (Array.isArray(list)) {
+          list.push({ names: "none", edibility: "poisonous" });
+        }
+      }),
+      "look_alikes[1].names is not an object",
+    );
+  });
+
+  it("fails a match with an extra key", () => {
+    expectFailure(
+      withChange((a) => {
+        a.position = "59.6, 17.1";
+      }),
+      "the answer has an unknown key",
+    );
+  });
+
+  it("fails an own __proto__ key as an extra key", () => {
+    const text = JSON.stringify(matchJson()).replace(/^\{/, '{"__proto__":{},');
+    expectFailure(text, "the answer has an unknown key");
+  });
+});
+
+function messageBody(content: Json): string {
+  return JSON.stringify({
+    id: "msg_1",
+    type: "message",
+    role: "assistant",
+    model: "claude-test",
+    content,
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: { input_tokens: 1, output_tokens: 1 },
+  });
+}
+
+describe("readMessageBody", () => {
+  it("reads the answer from the message's text block", () => {
+    const body = messageBody([{ type: "text", text: JSON.stringify(matchJson()) }]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: expectedMatch });
+  });
+
+  it("ignores blocks other than text", () => {
+    const body = messageBody([
+      { type: "thinking", thinking: "..." },
+      { type: "text", text: '{"result":"cannot_tell"}' },
+    ]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: { result: "cannot_tell" } });
+  });
+
+  it.each([
+    ["an HTML page", "<html><body>Sign in to the Wi-Fi</body></html>"],
+    ["an empty body", ""],
+    ["JSON that is not a message", '{"hello":"world"}'],
+    ["a message without content", JSON.stringify({ type: "message" })],
+    ["a message whose content is not an array", JSON.stringify({ type: "message", content: "x" })],
+    ["a content block that is not an object", messageBody(["text"])],
+    ["an API error body", '{"type":"error","error":{"type":"api_error","message":"x"}}'],
+  ])("fails %s as not from the API", (_label, body) => {
+    expect(readMessageBody(body)).toEqual({
+      ok: false,
+      reason: "not-api",
+      detail: "the body is not a Messages API message",
+    });
+  });
+
+  it("fails a message without a text block", () => {
+    expect(readMessageBody(messageBody([]))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the message has no single text block",
+    });
+  });
+
+  it("fails a message with two text blocks", () => {
+    const body = messageBody([
+      { type: "text", text: "{" },
+      { type: "text", text: '"result":"no_mushroom"}' },
+    ]);
+    expect(readMessageBody(body)).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the message has no single text block",
+    });
+  });
+
+  it("fails a text block whose text is not a string", () => {
+    expect(readMessageBody(messageBody([{ type: "text", text: 5 }]))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the message has no single text block",
+    });
+  });
+
+  it("fails a text that does not fit the shape", () => {
+    expect(readMessageBody(messageBody([{ type: "text", text: '{"result":"x"}' }]))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "result is not one of match, no_mushroom, cannot_tell",
+    });
+  });
+});
+
+describe("shownEdibility", () => {
+  it("shows unknown when the confidence is low, whatever the answer said", () => {
+    const answer: Match = { ...expectedMatch, edibility: "edible", confidence: "low" };
+    expect(shownEdibility(answer)).toBe("unknown");
+  });
+
+  it("leaves the stored answer as Claude gave it", () => {
+    const answer: Match = { ...expectedMatch, edibility: "deadly_poisonous", confidence: "low" };
+    shownEdibility(answer);
+    expect(answer.edibility).toBe("deadly_poisonous");
+    expect(answer.confidence).toBe("low");
+  });
+
+  it.each(["medium", "high"] as const)(
+    "shows the answer's edibility when the confidence is %s",
+    (confidence) => {
+      const answer: Match = { ...expectedMatch, edibility: "poisonous", confidence };
+      expect(shownEdibility(answer)).toBe("poisonous");
+    },
+  );
+});
