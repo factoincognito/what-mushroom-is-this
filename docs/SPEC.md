@@ -28,11 +28,16 @@ this?" app.
 The app's languages are Swedish, English and Italian. For each analysed
 find it shows the species' names in Swedish, English, Latin and Italian,
 its edibility, general information, and the poisonous look-alikes of the
-species.
+species (how they are shown: 3.1 and 3.3, **[Clead]**).
 
 The edibility shown is always that of the species the app matched, and a
 disclaimer says there is no guarantee the mushroom in the photo is that
 species (section 3.5).
+
+Marked **[Clead]** below: Clead's wording of what follows from Adam's
+decisions, not decided by Adam in those words (product-office `RULES.md`
+§ 7 (3)). Marked **[not checked]**: a fact still to be checked in the
+build, before the item that depends on it.
 
 ## 2. Architecture
 
@@ -83,9 +88,11 @@ There is no server.
    edibility with the disclaimer; Claude's confidence, with a note that it
    is Claude's own statement, not a measured probability; the general
    information; the poisonous look-alikes, each with its names in the four
-   languages and its edibility; date, time and position (as coordinates,
-   with a link that opens the phone's own map app). Buttons: analyse again,
-   and delete the find (after a confirmation).
+   languages and its edibility (**[Clead]**: the place and the details;
+   Adam decided that the look-alikes are listed); date, time and position
+   (as coordinates, with a link that opens the phone's own map app), each
+   with where it came from. Buttons: analyse again, and delete the find
+   (after a confirmation).
 4. **Settings**: the API key (enter, replace, remove; never shown again
    once saved); the app's language (the phone's language by default when
    it is one of the three, otherwise English); the model; "About", which
@@ -93,6 +100,9 @@ There is no server.
 
 The disclaimer is also shown once, to be accepted, the first time the app
 is opened.
+
+When the queue has stopped (3.3), the Log screen says why and offers
+"analyse now" (**[Clead]**: the spec names the control, not its place).
 
 ### 3.2 The API key
 
@@ -137,12 +147,13 @@ is opened.
   - the general information in Swedish, English and Italian, so a change
     of the app's language needs no new call;
   - the poisonous look-alikes, each with its names in the four languages
-    and its edibility;
+    and its edibility (**[Clead]**);
   - or that Claude cannot see a mushroom in the photo, or cannot tell.
   The app validates the answer against the shape; anything that does not
   fit is a failed analysis, which can be retried.
 - Whenever the confidence is low, the edibility shown is "unknown",
-  whatever the answer said.
+  whatever the answer said. The stored answer keeps what Claude said; the
+  rule applies where the edibility is shown (**[Clead]**).
 - The model is a setting holding a model ID, with one default chosen at the
   build from the models then available. An empty model ID is not saved.
 - Each request has a time limit (configuration; 60 seconds) and is sent
@@ -160,6 +171,9 @@ is opened.
   | an answer that does not fit the shape, or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops |
   | any other status | | the queue stops; the message gives the status |
 
+  A billing error is told apart from other 400 answers by the error type
+  in the answer's body. A `retry-after` value that is not a number of
+  seconds or a date is treated as missing (**[Clead]**).
   A failed find is tried again only when the user asks. A stopped queue
   starts again when the user changes the setting named or taps "analyse
   now".
@@ -196,7 +210,9 @@ is opened.
 
 - One SQLite database (`expo-sqlite`) and the photos as files in the app's
   own storage.
-- A find holds: an ID; the time it was taken, with the phone's UTC offset;
+- A find holds: an ID; the time it was taken, with the phone's UTC offset,
+  and where it came from (the moment of saving, or the photo's metadata,
+  with or without an offset of its own);
   the position (latitude, longitude, the accuracy the phone gives) or none,
   and where it came from (a fix, the last known position, the photo's
   metadata); the photo's file; its analysis state (waiting, done,
@@ -212,11 +228,14 @@ is opened.
   says so. The two limits are configuration. Without the permission the
   find has no position; nothing blocks the photo.
 - Deleting a find deletes its photo too.
-- The log is kept out of the phone's backups: on Android,
+- The log is kept out of the phone's backups (Adam's decision). How
+  (**[Clead]**, **[not checked]**, checked against Expo's and the
+  platforms' documentation first when it is built): on Android,
   `android.allowBackup` is off, and the data extraction rules also exclude
-  the database and the photos from device-to-device transfer; on iOS the
-  database and the photos are excluded from backup. Both are checked
-  against Expo's and the platforms' documentation when built.
+  the database and the photos from device-to-device transfer, which
+  `allowBackup` alone may not stop on some phones for apps that target
+  API level 31 or later; on iOS the database and the photos are excluded
+  from backup.
 - Uninstalling the app deletes the log. No export or sync in this version.
 
 ### 3.7 Not in this version
@@ -244,4 +263,9 @@ this?" app.
    and the Android data extraction rules (3.6).
 4. The default model, chosen at the build.
 5. EAS Build's setup for this project (its project ID and build profile),
-   which needs Adam's Expo account.
+   which needs Adam's Expo account: `eas init` signed in to that account
+   links the project.
+6. A library for the network state, which the queue's "network is back"
+   trigger needs (3.4); not in the expected list above.
+7. Whether reading a gallery photo's position on Android needs the
+   `ACCESS_MEDIA_LOCATION` permission (Crog's reading, not checked).
