@@ -49,6 +49,7 @@ write it.
 - **[BLOCKED] PBI-1.10** (needs Adam: `eas init` run signed in to his Expo account, which he has created, by his word in the product office, not checked, to link the project) — EAS Build, Android: the build profile and the project link, then an installable build. Spec 3.8, Known unknown 5.
 - **[LATER] PBI-1.11** — Adam's test session on his Android phone; the first version is done when it passes. Spec 3.8.
 - **[NEXT] PBI-1.12** (Clead-role reviewer's notes on #5) — Image module follow-ups: `countImageTokens` validates its input as `resizedSize` does; the name of the 952.5 tie test says only what it asserts.
+- **[NEXT] PBI-1.13** (Crog's note on #9) — The analysis module's error classes: the 400 that says the key is not scoped to a workspace is handled as 401, 403, with its message taken from the API's "Authentication" page. Spec 3.3, Known unknown 8.
 
 ---
 

@@ -181,7 +181,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   |---|---|---|
   | no network, time limit passed, 500, 504, 529 | not reachable, or a fault on Anthropic's side | the find stays waiting; the queue tries it again at its next run |
   | 429 | rate limit or spend limit | the queue stops until the time the answer's `retry-after` gives; without one, until the user starts it again |
-  | 400 whose message starts "You have reached your specified API usage limits" | the key owner's own spend limit, which the API reports this way (**[Clead]**, from the API's error documentation, read by Crog on 2026-11-08 for PBI-1.4) | as 429 without `retry-after` |
+  | 400 `invalid_request_error` whose message starts "You have reached your specified API usage limits" or "You have reached your specified workspace API usage limits" | the key owner's own spend limit, or a workspace's, which the API reports this way (**[Clead]**, from the API's "Rate limits" page, read by Crog on 2026-11-08 for PBI-1.4 and #9) | as 429 without `retry-after` |
+  | 400 `invalid_request_error` saying the key is not scoped to a workspace | the key needs the `anthropic-workspace-id` header (Known unknown 8; **[Clead]**, from the API's "Authentication" page as Crog read it on 2026-11-08, the exact message to be taken from that page when implemented) | as 401, 403 |
   | 401, 403 | the key is refused or lacks permission | the queue stops; Settings asks for a key |
   | 402 or a billing error | no credit on the key's account | the queue stops; the message says so |
   | 404 | the model is not known (for example retired) | the queue stops; Settings asks for a model |
@@ -192,6 +193,9 @@ When the queue has stopped (3.3), the Log screen says why and offers
   **[Clead]**, both: a billing error is told apart from other 400 answers
   by the error type in the answer's body, and a `retry-after` value that
   is not a number of seconds or a date is treated as missing.
+  **[Clead]**: a row that names a 400 by its error type and message takes
+  precedence over the "400, 413" row; it matches only when both the type
+  and the start of the message match.
   A failed find is tried again only when the user asks. A stopped queue
   starts again when the user changes the setting named or taps "analyse
   now".
