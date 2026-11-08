@@ -131,14 +131,31 @@ When the queue has stopped (3.3), the Log screen says why and offers
   tokens. For a 4:3 photo that is about 1270 × 952 px (1,564 tokens) and
   about 2212 × 1659 px (4,740 tokens). The limits are configuration kept
   with the model's ID. The size is computed by the resize rule of the
-  Claude docs' "Coordinates and bounding boxes" page; the module's tests
-  include that page's example (1075 × 1520 to 924 × 1307 on the standard
-  tier).
+  Claude docs' "Coordinates and bounding boxes" page, rounding the short
+  edge half to even as the page's reference code does (so 4032 × 3024 gives
+  1270 × 952, not 1269 × 952); the module's tests include that page's
+  example (1075 × 1520 to 924 × 1307 on the standard tier).
 - The photo sent carries no metadata. A plain module checks the bytes of
-  the JPEG to be sent: no application segment other than APP0 (JFIF) and
-  APP2 (the colour profile), since APP1 (EXIF, XMP) and APP13 (IPTC) can
-  carry a position. A JPEG that fails the check is not sent; the find is
-  marked failed.
+  the JPEG to be sent, through the whole file to its end, between scans
+  too (**[Clead]**: the check's detail). It is an allowlist:
+  - the structural markers pass (start and end of image, the frame
+    markers, Huffman and arithmetic tables, quantisation tables, restart
+    interval, start of scan, and restart markers inside a scan);
+  - APP0 passes only as JFIF (identifier `JFIF\0`), and APP2 only as an
+    ICC colour profile (identifier `ICC_PROFILE\0`);
+  - every other marker fails, among them APP1 (EXIF, XMP), APP13 (IPTC),
+    a JFIF extension APP0 (which can hold a thumbnail image with metadata
+    of its own), an APP2 of another kind (such as a Multi-Picture index,
+    which points to further images) and a comment: each can carry a
+    position, text or another image;
+  - any byte after the end of the image fails: phones can append further
+    images there, with metadata of their own;
+  - input that is not a JPEG, or is cut short or malformed, fails.
+  Not checked yet: what the phone's image encoder writes (Known unknown
+  2); if it writes something this check refuses, every analysis fails,
+  so it is checked as early as it can be: in PBI-1.6 if the encoder can
+  be run off a phone, otherwise in Adam's test session on his phone.
+  A JPEG that fails the check is not sent; the find is marked failed.
 - The prompt asks for one answer in a fixed JSON shape:
   - the best match: its names in Swedish, English, Latin and Italian;
   - its edibility, one of: edible, edible only after preparation, not
