@@ -248,3 +248,94 @@ describe("analysePhoto, the default fetch and clock", () => {
     platformFetch.mockRestore();
   });
 });
+
+describe("analysePhoto, a key that cannot be sent as a header value", () => {
+  it.each([
+    ["a zero-width space", "sk-ant-​key"],
+    ["a smart quote", "sk-ant-’key"],
+    ["a non-ASCII letter", "sk-ant-nyckelå"],
+    ["an inner space", "sk-ant- key"],
+    ["an inner tab", "sk-ant-\tkey"],
+    ["a control character", "sk-ant-\u0007key"],
+    ["DEL", "sk-ant-\u007Fkey"],
+    ["nothing", ""],
+    ["blanks only", " \n\t "],
+  ])("is never sent when it holds %s, and Settings asks for a key", async (_label, key) => {
+    const fetch = jest.fn(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    const result = await analysePhoto({ ...input, apiKey: key }, { fetch, now: clock });
+    expect(result).toEqual({ ok: false, error: { kind: "key-refused", status: null } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not put the refused key in the result", async () => {
+    const key = "sk-ant-​secret-key-1234567890";
+    const fetch = jest.fn(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    const result = await analysePhoto({ ...input, apiKey: key }, { fetch, now: clock });
+    expect(JSON.stringify(result)).not.toContain("secret-key-1234567890");
+  });
+
+  it("sends a key of every printable ASCII character", async () => {
+    let key = "";
+    for (let code = 0x21; code <= 0x7e; code += 1) {
+      key += String.fromCharCode(code);
+    }
+    const fetch = jest.fn<ReturnType<Fetcher>, Parameters<Fetcher>>(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    await analysePhoto({ ...input, apiKey: key }, { fetch, now: clock });
+    expect(fetch.mock.calls[0]?.[1].headers.authorization).toBe(`Bearer ${key}`);
+  });
+
+  it("sends the key trimmed of the blanks around it", async () => {
+    const fetch = jest.fn<ReturnType<Fetcher>, Parameters<Fetcher>>(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    await analysePhoto({ ...input, apiKey: `  ${apiKey}\n` }, { fetch, now: clock });
+    expect(fetch.mock.calls[0]?.[1].headers.authorization).toBe(`Bearer ${apiKey}`);
+  });
+});
+
+describe("analysePhoto, a time limit that is not valid configuration", () => {
+  it.each([
+    ["NaN", Number.NaN],
+    ["infinity", Number.POSITIVE_INFINITY],
+    ["zero", 0],
+    ["a negative number", -1],
+    ["a fraction", 1.5],
+    ["one more than a timer can hold", 2 ** 31],
+  ])("throws a programming error for %s, and sends nothing", async (_label, timeLimitMs) => {
+    const fetch = jest.fn(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    await expect(analysePhoto({ ...input, timeLimitMs }, { fetch, now: clock })).rejects.toThrow(
+      RangeError,
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["the smallest", 1],
+    ["the largest a timer can hold", 2 ** 31 - 1],
+  ])("accepts %s time limit", async (_label, timeLimitMs) => {
+    const fetch = jest.fn(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    await expect(analysePhoto({ ...input, timeLimitMs }, { fetch, now: clock })).resolves.toEqual({
+      ok: true,
+      answer: { result: "no_mushroom" },
+    });
+  });
+
+  it("checks the time limit before the key", async () => {
+    const fetch = jest.fn(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    await expect(
+      analysePhoto({ ...input, apiKey: "", timeLimitMs: 0 }, { fetch, now: clock }),
+    ).rejects.toThrow("timeLimitMs");
+  });
+});

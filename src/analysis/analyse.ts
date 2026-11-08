@@ -1,5 +1,5 @@
 import { type AnalysisResult, classifyOutcome, type Outcome } from "./errors";
-import { buildAnalysisRequest, type RequestInput } from "./request";
+import { buildAnalysisRequest, isSendableKey, type RequestInput } from "./request";
 
 /**
  * The call (docs/SPEC.md 3.3): sends the request once, within the time limit,
@@ -36,11 +36,28 @@ const platformDeps: AnalysisDeps = {
   now: () => Date.now(),
 };
 
+/** The longest delay a timer holds; a longer one fires at once. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
+/**
+ * Sends the photo for analysis. A time limit that is not an integer from 1 to
+ * 2^31 − 1 ms is a programming error (it is configuration) and rejects with a
+ * RangeError. A key that cannot be sent as a header value is refused without
+ * sending anything.
+ */
 export async function analysePhoto(
   input: AnalysisInput,
   deps: AnalysisDeps = platformDeps,
 ): Promise<AnalysisResult> {
-  const request = buildAnalysisRequest(input);
+  const { timeLimitMs } = input;
+  if (!Number.isInteger(timeLimitMs) || timeLimitMs < 1 || timeLimitMs > MAX_TIMER_MS) {
+    throw new RangeError(`timeLimitMs must be an integer from 1 to ${MAX_TIMER_MS}`);
+  }
+  const apiKey = input.apiKey.trim();
+  if (!isSendableKey(apiKey)) {
+    return { ok: false, error: { kind: "key-refused", status: null } };
+  }
+  const request = buildAnalysisRequest({ ...input, apiKey });
   const controller = new AbortController();
   let timedOut = false;
   const aborted = new Promise<never>((_resolve, reject) => {
@@ -52,7 +69,7 @@ export async function analysePhoto(
   const timer = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, input.timeLimitMs);
+  }, timeLimitMs);
 
   let outcome: Outcome;
   try {

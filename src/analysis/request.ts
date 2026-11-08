@@ -23,6 +23,18 @@ export const AUTHORIZATION_SCHEME = "Bearer";
 /** Room for the answer's JSON object in three languages, with its look-alikes. */
 export const MAX_TOKENS = 4096;
 
+/** Printable ASCII, 0x21 to 0x7E: what the key may hold to go in the `authorization` header. */
+const SENDABLE_KEY = /^[\x21-\x7e]+$/;
+
+/**
+ * Whether a key, already trimmed, can be sent as a header value. A key with a
+ * zero-width space, a smart quote, a non-ASCII letter or an inner blank cannot:
+ * fetch would refuse it before sending, which would look like no network.
+ */
+export function isSendableKey(key: string): boolean {
+  return SENDABLE_KEY.test(key);
+}
+
 export interface RequestInput {
   /** The API address from the config module, such as `https://api.anthropic.com`. */
   apiAddress: string;

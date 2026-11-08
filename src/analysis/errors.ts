@@ -13,8 +13,11 @@ export type AnalysisError =
    * stops until `retryAt` (ms since the epoch), or, when null, until the user starts it.
    */
   | { kind: "rate-limited"; retryAt: number | null }
-  /** 401, 403: the queue stops; Settings asks for a key. */
-  | { kind: "key-refused"; status: number }
+  /**
+   * 401, 403, or (`status` null) a key that cannot be sent as a header value, refused
+   * before sending: the queue stops; Settings asks for a key.
+   */
+  | { kind: "key-refused"; status: number | null }
   /** 402, or a 400 whose error type is `billing_error`: the queue stops. */
   | { kind: "no-credit"; status: number }
   /** 404: the queue stops; Settings asks for a model. */
