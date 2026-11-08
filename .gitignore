@@ -10,3 +10,7 @@ dist/
 coverage/
 .expo/
 .env
+android/
+ios/
+web-build/
+.env*.local

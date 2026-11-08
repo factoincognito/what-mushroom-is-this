@@ -9,8 +9,33 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, so the base branch is there to compare with.
+          fetch-depth: 0
+
+      - name: Require a test change with a code change
+        run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.test.tsx' 'src/*.spec.ts' 'src/*.spec.tsx' 'src/*__tests__/*'
+
       - name: Check the Rules edition
         run: bash .github/scripts/check-rules-edition.sh rules
-      # Language-specific steps added by bootstrap wizard
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint and format check
+        run: npx biome ci --error-on-warnings .
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test with coverage
+        run: npx jest --coverage --coverageThreshold='{"global":{"lines":80}}'

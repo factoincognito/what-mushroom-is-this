@@ -1,7 +1,7 @@
-# [PROJECT NAME] Product Backlog
+# What mushroom is this? Product Backlog
 
 **Status:** Living document
-**Owner:** [PO NAME] with Clead
+**Owner:** Adam Smolowicz with Clead
 
 ---
 
