@@ -1,3 +1,4 @@
+import { analysisConfig } from "../config/analysis";
 import { type Answer, isRecord, readMessageBody } from "./answer";
 import { parseRetryAfter } from "./retryAfter";
 
@@ -20,7 +21,10 @@ export type AnalysisError =
   | { kind: "key-refused"; status: number | null }
   /** 402, or a 400 whose error type is `billing_error`: the queue stops. */
   | { kind: "no-credit"; status: number }
-  /** 404: the queue stops; Settings asks for a model. */
+  /**
+   * 404, or a model ID that cannot be sent (not printable ASCII), refused before sending: the
+   * queue stops; Settings asks for a model.
+   */
   | { kind: "model-unknown" }
   /** 400, 413: the find is marked failed; the queue goes on with the next. */
   | {
@@ -50,8 +54,15 @@ export type Outcome =
 
 const SERVER_FAULTS = [500, 504, 529];
 
-/** Classifies what came back; `receivedAtMs` is when it came, for `retry-after` in seconds. */
-export function classifyOutcome(outcome: Outcome, receivedAtMs: number): AnalysisResult {
+/**
+ * Classifies what came back; `receivedAtMs` is when it came, for `retry-after` in seconds, and
+ * `retryAfterMaxMs` how far ahead of then a `retry-after` may lie before it counts as missing.
+ */
+export function classifyOutcome(
+  outcome: Outcome,
+  receivedAtMs: number,
+  retryAfterMaxMs: number = analysisConfig.retryAfterMaxMs,
+): AnalysisResult {
   if (outcome.kind !== "http") {
     return failure({ kind: "stays-waiting", cause: outcome.kind, status: null });
   }
@@ -75,7 +86,7 @@ export function classifyOutcome(outcome: Outcome, receivedAtMs: number): Analysi
     case 429:
       return failure({
         kind: "rate-limited",
-        retryAt: parseRetryAfter(outcome.retryAfter, receivedAtMs),
+        retryAt: parseRetryAfter(outcome.retryAfter, receivedAtMs, retryAfterMaxMs),
       });
     case 401:
     case 403:

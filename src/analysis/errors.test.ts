@@ -62,10 +62,24 @@ describe("classifyOutcome, rate limited", () => {
   it.each([
     ["without retry-after", null],
     ["with a retry-after that is neither seconds nor a date", "later"],
+    ["with a retry-after beyond the one-day bound", "86401"],
+    ["with a retry-after beyond what a Date holds", "9".repeat(20)],
   ])("stops until the user starts it again %s", (_label, retryAfter) => {
     expect(
       classifyOutcome(http(429, apiError("rate_limit_error"), retryAfter), receivedAt),
     ).toEqual({ ok: false, error: { kind: "rate-limited", retryAt: null } });
+  });
+
+  it("bounds retry-after by the bound it is given", () => {
+    const answer = http(429, apiError("rate_limit_error"), "120");
+    expect(classifyOutcome(answer, receivedAt, 60_000)).toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+    });
+    expect(classifyOutcome(answer, receivedAt, 120_000)).toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: receivedAt + 120_000 },
+    });
   });
 });
 
@@ -190,6 +204,25 @@ describe("classifyOutcome, a success answer", () => {
         kind: "find-failed",
         reason: "shape",
         detail: "result is not one of match, no_mushroom, cannot_tell",
+        status: 200,
+        queue: "stops",
+      },
+    });
+  });
+
+  it("fails the find and stops the queue on a cut-off answer, saying it was cut off", () => {
+    const body = JSON.stringify({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "thinking", thinking: "", signature: "x" }],
+      stop_reason: "max_tokens",
+    });
+    expect(classifyOutcome(http(200, body), receivedAt)).toEqual({
+      ok: false,
+      error: {
+        kind: "find-failed",
+        reason: "shape",
+        detail: "the answer was cut off (stop_reason max_tokens)",
         status: 200,
         queue: "stops",
       },

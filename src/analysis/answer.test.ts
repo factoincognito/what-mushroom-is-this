@@ -365,18 +365,98 @@ describe("parseAnswerText, the fields of a match", () => {
   });
 });
 
-function messageBody(content: Json): string {
+function messageBody(content: Json, stopReason: Json = "end_turn"): string {
   return JSON.stringify({
     id: "msg_1",
     type: "message",
     role: "assistant",
     model: "claude-test",
     content,
-    stop_reason: "end_turn",
+    stop_reason: stopReason,
     stop_sequence: null,
     usage: { input_tokens: 1, output_tokens: 1 },
   });
 }
+
+/** A thinking block as Claude 5 models return it by default: `display` "omitted". */
+const omittedThinking = { type: "thinking", thinking: "", signature: "EosnCkYICxIMMb3LzNrMu" };
+const redactedThinking = { type: "redacted_thinking", data: "EmwKAhgBEgy3va3pzix" };
+
+describe("readMessageBody, thinking before the text", () => {
+  it("reads the text after an omitted thinking block, as Claude 5 models return it", () => {
+    const body = messageBody([
+      omittedThinking,
+      { type: "text", text: JSON.stringify(matchJson()) },
+    ]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: expectedMatch });
+  });
+
+  it("reads the text after several thinking blocks and a redacted one", () => {
+    const body = messageBody([
+      omittedThinking,
+      redactedThinking,
+      { type: "thinking", thinking: '{"result":"no_mushroom"}', signature: "x" },
+      { type: "text", text: '{"result":"cannot_tell"}' },
+    ]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: { result: "cannot_tell" } });
+  });
+
+  it("fails a message with thinking only and no text, though it ended its turn", () => {
+    expect(readMessageBody(messageBody([omittedThinking]))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the message has no single text block",
+    });
+  });
+});
+
+describe("readMessageBody, a cut-off answer", () => {
+  it.each([
+    ["thinking only", [omittedThinking]],
+    ["thinking and part of the JSON", [omittedThinking, { type: "text", text: '{"result":"ma' }]],
+    ["part of the JSON", [{ type: "text", text: '{"result":"match","names":{' }]],
+    ["no blocks", []],
+  ])("says it was cut off at max_tokens when it holds %s", (_label, content) => {
+    expect(readMessageBody(messageBody(content, "max_tokens"))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the answer was cut off (stop_reason max_tokens)",
+    });
+  });
+
+  it("says it was cut off when the context window was filled", () => {
+    const body = messageBody([omittedThinking], "model_context_window_exceeded");
+    expect(readMessageBody(body)).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the answer was cut off (stop_reason model_context_window_exceeded)",
+    });
+  });
+
+  it("does not accept a complete-looking JSON text when the answer was cut off", () => {
+    const body = messageBody([{ type: "text", text: '{"result":"no_mushroom"}' }], "max_tokens");
+    expect(readMessageBody(body)).toMatchObject({ ok: false, reason: "shape" });
+  });
+
+  it("still fails a body that is not from the API as not from the API", () => {
+    const body = JSON.stringify({ type: "page", stop_reason: "max_tokens" });
+    expect(readMessageBody(body)).toMatchObject({ ok: false, reason: "not-api" });
+  });
+
+  it.each([
+    ["no stop_reason", undefined],
+    ["a null stop_reason", null],
+    ["a stop_reason that is not a string", 5],
+    ["another stop_reason", "stop_sequence"],
+  ])("reads the answer with %s", (_label, stopReason) => {
+    const content = [{ type: "text", text: '{"result":"no_mushroom"}' }];
+    const body =
+      stopReason === undefined
+        ? JSON.stringify({ type: "message", content })
+        : messageBody(content, stopReason);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: { result: "no_mushroom" } });
+  });
+});
 
 describe("readMessageBody", () => {
   it("reads the answer from the message's text block", () => {

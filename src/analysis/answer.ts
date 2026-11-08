@@ -58,7 +58,21 @@ export function shownEdibility(match: Match): Edibility {
   return match.confidence === "low" ? "unknown" : match.edibility;
 }
 
-/** Reads the body of a 2xx answer of the Messages API. */
+/**
+ * The `stop_reason` values of a truncated answer (Claude docs, "Stop reasons and fallback",
+ * https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons, read 2026-11-09):
+ * `max_tokens`, "The response reached your max_tokens limit", and
+ * `model_context_window_exceeded`, "Treat the response as truncated".
+ */
+export const CUT_OFF_STOP_REASONS = ["max_tokens", "model_context_window_exceeded"];
+
+/**
+ * Reads the body of a 2xx answer of the Messages API. The answer is its one text block; the
+ * thinking blocks that Claude 5 models put before it (`thinking`, `redacted_thinking`; Claude
+ * docs, "Thinking", https://platform.claude.com/docs/en/build-with-claude/thinking, read
+ * 2026-11-09) and any other block are skipped. A cut-off answer fails with its own detail,
+ * whatever its text holds.
+ */
 export function readMessageBody(body: string): AnswerResult {
   const notApi: AnswerFailure = {
     ok: false,
@@ -81,6 +95,10 @@ export function readMessageBody(body: string): AnswerResult {
     if (block.type === "text") {
       texts.push(block.text);
     }
+  }
+  const stopReason = parsed.value.stop_reason;
+  if (typeof stopReason === "string" && CUT_OFF_STOP_REASONS.includes(stopReason)) {
+    return shapeFailure(`the answer was cut off (stop_reason ${stopReason})`);
   }
   const [text] = texts;
   if (texts.length !== 1 || typeof text !== "string") {
