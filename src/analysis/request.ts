@@ -6,8 +6,19 @@ import { ANALYSIS_PROMPT } from "./prompt";
  * the photo and the prompt are sent.
  */
 
-/** The `anthropic-version` header (Claude API docs, "Versions"). */
-export const ANTHROPIC_VERSION = "2023-06-01";
+/**
+ * The API version and the key's header, as the Claude API docs recommend when
+ * calling without an SDK (read 2026-11-08): "Versions",
+ * https://platform.claude.com/docs/en/api/versioning ("Anthropic recommends using the
+ * latest API version whenever possible"; latest `2026-10-21`), and "API overview",
+ * https://platform.claude.com/docs/en/api/overview (`Authorization: Bearer <key>`;
+ * `x-api-key` is a legacy fallback). The request uses nothing `2026-10-21` refuses: no
+ * `temperature`, `top_p` or `top_k`, no document block, no citations
+ * (https://platform.claude.com/docs/en/api/migration-2026-10-21).
+ */
+export const ANTHROPIC_VERSION = "2026-10-21";
+export const AUTHORIZATION_HEADER = "authorization";
+export const AUTHORIZATION_SCHEME = "Bearer";
 
 /** Room for the answer's JSON object in three languages, with its look-alikes. */
 export const MAX_TOKENS = 4096;
@@ -34,7 +45,7 @@ export function buildAnalysisRequest(input: RequestInput): AnalysisRequest {
     url: `${input.apiAddress.replace(/\/+$/, "")}/v1/messages`,
     method: "POST",
     headers: {
-      "x-api-key": input.apiKey,
+      [AUTHORIZATION_HEADER]: `${AUTHORIZATION_SCHEME} ${input.apiKey}`,
       "anthropic-version": ANTHROPIC_VERSION,
       "content-type": "application/json",
     },

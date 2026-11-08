@@ -26,11 +26,28 @@ describe("buildAnalysisRequest", () => {
 
   it("sends the key, the API version and the content type, and no other header", () => {
     expect(buildAnalysisRequest(input).headers).toEqual({
-      "x-api-key": "sk-test-key",
-      "anthropic-version": "2023-06-01",
+      authorization: "Bearer sk-test-key",
+      "anthropic-version": "2026-10-21",
       "content-type": "application/json",
     });
-    expect(ANTHROPIC_VERSION).toBe("2023-06-01");
+    expect(ANTHROPIC_VERSION).toBe("2026-10-21");
+  });
+
+  it("does not send the legacy x-api-key header", () => {
+    expect(Object.keys(buildAnalysisRequest(input).headers)).not.toContain("x-api-key");
+  });
+
+  it("sends none of the sampling parameters that version 2026-10-21 refuses", () => {
+    const body = parsedBody(buildAnalysisRequest(input).body);
+    for (const parameter of ["temperature", "top_p", "top_k"]) {
+      expect(body).not.toHaveProperty(parameter);
+    }
+  });
+
+  it("sends no document block and no citations, which version 2026-10-21 refuses", () => {
+    const body = buildAnalysisRequest(input).body;
+    expect(body).not.toContain('"document"');
+    expect(body).not.toContain('"citations"');
   });
 
   it("sends the model, the token limit and one user message, and nothing else", () => {

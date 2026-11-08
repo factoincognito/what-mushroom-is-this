@@ -69,6 +69,34 @@ describe("classifyOutcome, rate limited", () => {
   });
 });
 
+describe("classifyOutcome, a spend limit the user set", () => {
+  it.each([
+    [
+      "an organisation spend limit",
+      "You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+    ],
+    [
+      "a workspace spend limit",
+      "You have reached your specified workspace API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+    ],
+  ])("stops the queue until the user starts it again on 400 for %s", (_label, message) => {
+    expect(
+      classifyOutcome(http(400, apiError("invalid_request_error", message)), receivedAt),
+    ).toEqual({ ok: false, error: { kind: "rate-limited", retryAt: null } });
+  });
+
+  it("gives no time to stop until, even with a retry-after header", () => {
+    const body = apiError(
+      "invalid_request_error",
+      "You have reached your specified API usage limits",
+    );
+    expect(classifyOutcome(http(400, body, "30"), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+    });
+  });
+});
+
 describe("classifyOutcome, the queue stops for a setting", () => {
   it.each([401, 403])("asks for a key on %i", (status) => {
     expect(classifyOutcome(http(status, apiError("authentication_error")), receivedAt)).toEqual({
@@ -110,8 +138,20 @@ describe("classifyOutcome, the find fails and the queue goes on", () => {
   it.each([
     ["an API error", apiError("invalid_request_error")],
     [
-      "a spend-limit error, which the API types as invalid_request_error",
-      apiError("invalid_request_error", "You have reached your specified API usage limits"),
+      "the spend-limit text not at the start of the message",
+      apiError("invalid_request_error", "Note: You have reached your specified API usage limits"),
+    ],
+    [
+      "the spend-limit text under another error type",
+      apiError("api_error", "You have reached your specified API usage limits"),
+    ],
+    [
+      "the spend-limit text in another case",
+      apiError("invalid_request_error", "you have reached your specified API usage limits"),
+    ],
+    [
+      "a message that is not a string",
+      '{"type":"error","error":{"type":"invalid_request_error","message":5}}',
     ],
     ["a body that is not JSON", "Bad Request"],
     ["an error body without a type", '{"type":"error","error":{}}'],
