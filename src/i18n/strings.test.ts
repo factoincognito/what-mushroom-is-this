@@ -1,5 +1,5 @@
 import { LANGUAGES } from "./languages";
-import { STRINGS } from "./strings";
+import { NOT_CHECKED_BY_A_SPEAKER, STRINGS } from "./strings";
 
 /** The UTF-8 bytes of a string, in hex. */
 function utf8Hex(text: string): string {
@@ -46,6 +46,60 @@ describe("STRINGS", () => {
     expect(STRINGS.sv.languageName).toBe("Svenska");
     expect(STRINGS.en.languageName).toBe("English");
     expect(STRINGS.it.languageName).toBe("Italiano");
+  });
+});
+
+describe("NOT_CHECKED_BY_A_SPEAKER", () => {
+  it("marks the Swedish and the Italian strings of the key and model settings (PBI-1.2)", () => {
+    expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({
+      sv: ["settings.key", "settings.model"],
+      it: ["settings.key", "settings.model"],
+    });
+  });
+
+  it.each(["sv", "it"] as const)("names in %s only groups of strings that exist", (language) => {
+    const paths = keyPaths(STRINGS[language]);
+    for (const group of NOT_CHECKED_BY_A_SPEAKER[language]) {
+      expect(paths.some((path) => path.startsWith(`${group}.`))).toBe(true);
+    }
+  });
+
+  it("does not mark the disclaimer, which an Italian speaker checked", () => {
+    for (const group of [...NOT_CHECKED_BY_A_SPEAKER.sv, ...NOT_CHECKED_BY_A_SPEAKER.it]) {
+      expect("disclaimer".startsWith(group)).toBe(false);
+    }
+  });
+});
+
+describe("the strings of the key and model settings", () => {
+  it.each(LANGUAGES)("are all there in %s", (language) => {
+    const paths = keyPaths(STRINGS[language]);
+    expect(paths.filter((path) => path.startsWith("settings.key."))).toEqual([
+      "settings.key.empty",
+      "settings.key.heading",
+      "settings.key.input",
+      "settings.key.none",
+      "settings.key.notSendable",
+      "settings.key.remove",
+      "settings.key.removeFailed",
+      "settings.key.removed",
+      "settings.key.save",
+      "settings.key.saveFailed",
+      "settings.key.saved",
+      "settings.key.stored",
+      "settings.key.unreadable",
+    ]);
+    expect(paths.filter((path) => path.startsWith("settings.model."))).toEqual([
+      "settings.model.default",
+      "settings.model.empty",
+      "settings.model.heading",
+      "settings.model.inUse",
+      "settings.model.input",
+      "settings.model.invalid",
+      "settings.model.save",
+      "settings.model.saveFailed",
+      "settings.model.saved",
+    ]);
   });
 });
 

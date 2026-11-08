@@ -41,6 +41,7 @@ shipped in the app (internal tooling).
 | `react-native-worklets` | 0.10.1 | MIT | depend | https://github.com/software-mansion/react-native-reanimated, `packages/react-native-worklets` | a peer library of `react-native-reanimated` (PBI-1.1) |
 | `expo-localization` | 57.0.2 | MIT | depend | https://github.com/expo/expo, `packages/expo-localization` | the phone's language (PBI-1.1) |
 | `@react-native-async-storage/async-storage` | 2.2.0 | MIT | depend | https://github.com/react-native-async-storage/async-storage, `packages/default-storage-backend` | the plain key-value store: the first-start acceptance of the disclaimer (PBI-1.1) |
+| `expo-secure-store` | 57.0.4 | MIT | depend | https://github.com/expo/expo, `packages/expo-secure-store` | the API key in the secure store (PBI-1.2) |
 
 ## Development tools
 
