@@ -1,2 +1,0 @@
-# Runtime dependencies: what the application needs to run.
-# Pin every entry exactly (name==version). Empty on a new project.

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "[PROJECT NAME]",
-    "slug": "[project-slug]",
+    "name": "What mushroom is this?",
+    "slug": "what-mushroom-is-this",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic"

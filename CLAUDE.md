@@ -1,4 +1,4 @@
-# [PROJECT NAME] — Agent Entry Point
+# What mushroom is this? — Agent Entry Point
 
 Before any other work, read these, and work by them from your first
 action:

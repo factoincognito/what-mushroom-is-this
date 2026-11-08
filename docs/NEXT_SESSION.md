@@ -1,6 +1,6 @@
-# [PROJECT NAME] — Next Session Planning
+# What mushroom is this? — Next Session Planning
 
-**Last Updated:** [DATE]
+**Last Updated:** 2026-11-08
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 

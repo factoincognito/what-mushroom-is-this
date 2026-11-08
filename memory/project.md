@@ -1,9 +1,8 @@
 # Project
 
-**Name:** [PROJECT NAME]
-**Repo:** [OWNER/REPO]
-**Description:** [What the project is, who it is for, and what problem
-it solves.]
+**Name:** What mushroom is this?
+**Repo:** factoincognito/what-mushroom-is-this
+**Description:** Give a forager a quick best assessment of a mushroom from a photo, and a private log of their finds
 
 **Goals:**
 - [Goal]

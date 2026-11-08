@@ -1,6 +1,6 @@
-# [PROJECT NAME] — Technical Specification
+# What mushroom is this? — Technical Specification
 
-**Date:** [DATE]
+**Date:** 2026-11-08
 **Status:** Draft
 **Owner:** Clead (technical correctness) / Adam (intent)
 
