@@ -75,7 +75,7 @@ On the other computer, once:
    `docs/DEV_INFRASTRUCTURE.md`, "New machine setup", steps 2 and 4.
 
 4. In the Claude app, sign in with the same Claude account and open
-   the product office's Claude Project, as on your first computer. The Claude
+   the product office's Claude Project ("Working setup" above). The Claude
    app needs nothing else on this computer; the copy is for working in
    VS Code with Claude Code.
 
