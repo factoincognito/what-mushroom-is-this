@@ -3,15 +3,22 @@ import { StatusBar } from "expo-status-bar";
 
 import { DisclaimerGate } from "../disclaimer/DisclaimerGate";
 import { LanguageProvider, useLanguage } from "../i18n/LanguageContext";
+import { KeyProvider } from "../key/KeyContext";
+import { deviceSecretStore } from "../key/secureStore";
 import { deviceStore } from "../storage/keyValueStore";
 
-/** The root layout: the language, then the first-start disclaimer, then the screens. */
+/**
+ * The root layout: the language, the key (whose first-start clearing runs at once), then the
+ * first-start disclaimer, then the screens.
+ */
 export default function RootLayout() {
   return (
-    <LanguageProvider>
-      <DisclaimerGate store={deviceStore}>
-        <Screens />
-      </DisclaimerGate>
+    <LanguageProvider store={deviceStore}>
+      <KeyProvider secrets={deviceSecretStore} store={deviceStore}>
+        <DisclaimerGate store={deviceStore}>
+          <Screens />
+        </DisclaimerGate>
+      </KeyProvider>
       <StatusBar style="auto" />
     </LanguageProvider>
   );

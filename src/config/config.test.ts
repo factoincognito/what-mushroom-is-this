@@ -1,5 +1,5 @@
 import type { ImageLimits } from "../image/resize";
-import { config, type ModelConfig } from "./config";
+import { config, HIGH_RESOLUTION_TIER, type ModelConfig, STANDARD_TIER } from "./config";
 
 describe("config", () => {
   it("holds the Claude API address of SPEC 3.3", () => {
@@ -18,11 +18,6 @@ describe("config", () => {
     expect(config.positionFixWaitMs).toBe(30_000);
   });
 
-  it("has a model list, each model with its image limits, empty until PBI-1.2 fills it", () => {
-    expect(Array.isArray(config.models)).toBe(true);
-    expect(config.models).toHaveLength(0);
-  });
-
   it("keeps each model's image limits in the image module's ImageLimits type", () => {
     const limits: ImageLimits = { maxEdge: 1568, maxTokens: 1568, patchSize: 28 };
     const model: ModelConfig = { id: "a-model", imageLimits: limits };
@@ -32,11 +27,65 @@ describe("config", () => {
   it("is frozen, so no module can change a value at run time", () => {
     expect(Object.isFrozen(config)).toBe(true);
     expect(Object.isFrozen(config.models)).toBe(true);
+    for (const model of config.models) {
+      expect(Object.isFrozen(model)).toBe(true);
+      expect(Object.isFrozen(model.imageLimits)).toBe(true);
+    }
+    expect(Object.isFrozen(config.unlistedModelImageLimits)).toBe(true);
   });
 
   it("holds no secret: no API key or token", () => {
     const text = JSON.stringify(config).toLowerCase();
     expect(text).not.toContain("sk-ant");
     expect(Object.keys(config).some((key) => /key|token|secret/i.test(key))).toBe(false);
+  });
+});
+
+describe("the image limits of the two tiers (SPEC 3.3)", () => {
+  it("are 1,568 px and 1,568 visual tokens on the standard tier, at 28 px patches", () => {
+    expect(STANDARD_TIER).toEqual({ maxEdge: 1568, maxTokens: 1568, patchSize: 28 });
+  });
+
+  it("are 2,576 px and 4,784 visual tokens on the high-resolution tier, at 28 px patches", () => {
+    expect(HIGH_RESOLUTION_TIER).toEqual({ maxEdge: 2576, maxTokens: 4784, patchSize: 28 });
+  });
+
+  it("are frozen", () => {
+    expect(Object.isFrozen(STANDARD_TIER)).toBe(true);
+    expect(Object.isFrozen(HIGH_RESOLUTION_TIER)).toBe(true);
+  });
+});
+
+describe("the model list", () => {
+  it("holds the current models of the Claude docs' models overview, read 2026-11-08", () => {
+    expect(config.models.map((model) => model.id)).toEqual([
+      "claude-fable-5-1",
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+      "claude-haiku-5-5",
+    ]);
+  });
+
+  it("gives every listed model the high-resolution tier (Claude 4.7 and later)", () => {
+    for (const model of config.models) {
+      expect(model.imageLimits).toEqual(HIGH_RESOLUTION_TIER);
+    }
+  });
+
+  it("has each model ID once", () => {
+    const ids = config.models.map((model) => model.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("has a default model that is one of the listed models", () => {
+    expect(config.models.map((model) => model.id)).toContain(config.defaultModelId);
+  });
+
+  it("proposes Claude Opus 5.5 as the default", () => {
+    expect(config.defaultModelId).toBe("claude-opus-5-5");
+  });
+
+  it("gives a model ID that is not listed the standard tier, which fits every model", () => {
+    expect(config.unlistedModelImageLimits).toEqual(STANDARD_TIER);
   });
 });
