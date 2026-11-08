@@ -175,6 +175,11 @@ When the queue has stopped (3.3), the Log screen says why and offers
   build from the models then available. An empty model ID is not saved.
 - Each request has a time limit (configuration; 60 seconds) and is sent
   once: no hidden retries by a client library.
+- The request uses API version `2026-10-21` and sends the key as
+  `Authorization: Bearer`; a key that, after the trim, holds anything but
+  printable ASCII (for example an invisible character or a smart quote
+  from a paste) is not sent, and is handled as 401, 403 (**[Clead]**,
+  PBI-1.4, #8).
 - Errors are shown in plain words, and each class has its own outcome:
 
   | Answer | Meaning | Outcome |
