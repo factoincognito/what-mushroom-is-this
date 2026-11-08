@@ -1,11 +1,15 @@
-# What mushroom is this? — Agent Entry Point
+# What mushroom is this?: agent entry point
 
-Before any other work, read these, and work by them from your first
-action:
+This project is bound by the Rules and Processes of factoincognito's
+product office, `factoincognito/product-office` (`RULES.md` L § 1 here).
+Work on it starts from the product office (product-office `RULES.md`
+§ 21).
 
-1. `rules/RULES.md`, in full: the Rules this project is bound by.
-2. `rules/processes/P-1-session-startup.md`, and carry out its startup.
-3. The processes in `rules/processes/` that your work needs.
-4. `RULES.md`: this project's local rules.
+## Before any other work
 
-Clead and Crog are the roles `rules/RULES.md` § 4 defines.
+Product-office `RULES.md` § 1 (2) and Process P-1 § 1. This
+repository's local rules are its `RULES.md`; L § 2 names its files,
+and L § 3 what Clead also reads at session start.
+
+This repository is public: product-office `RULES.md` § 19 (2) applies to
+everything written here.

@@ -19,9 +19,6 @@ jobs:
       - name: Require a test change with a code change
         run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.test.tsx' 'src/*.spec.ts' 'src/*.spec.tsx' 'src/*__tests__/*'
 
-      - name: Check the Rules edition
-        run: bash .github/scripts/check-rules-edition.sh rules
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
