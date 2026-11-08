@@ -1,4 +1,5 @@
-import { config } from "./config";
+import type { ImageLimits } from "../image/resize";
+import { config, type ModelConfig } from "./config";
 
 describe("config", () => {
   it("holds the Claude API address of SPEC 3.3", () => {
@@ -20,6 +21,12 @@ describe("config", () => {
   it("has a model list, each model with its image limits, empty until PBI-1.2 fills it", () => {
     expect(Array.isArray(config.models)).toBe(true);
     expect(config.models).toHaveLength(0);
+  });
+
+  it("keeps each model's image limits in the image module's ImageLimits type", () => {
+    const limits: ImageLimits = { maxEdge: 1568, maxTokens: 1568, patchSize: 28 };
+    const model: ModelConfig = { id: "a-model", imageLimits: limits };
+    expect(model.imageLimits).toBe(limits);
   });
 
   it("is frozen, so no module can change a value at run time", () => {

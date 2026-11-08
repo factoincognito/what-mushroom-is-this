@@ -23,6 +23,7 @@ function Screens() {
     <Stack>
       <Stack.Screen name="index" options={{ title: strings.log.title }} />
       <Stack.Screen name="settings" options={{ title: strings.settings.title }} />
+      <Stack.Screen name="+not-found" options={{ title: strings.notFound.title }} />
     </Stack>
   );
 }

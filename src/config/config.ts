@@ -4,20 +4,12 @@
  * own and is kept in the secure store, never in configuration.
  */
 
-/** The image limits of one model (docs/SPEC.md 3.3). */
-export type ModelImageLimits = {
-  /** The most pixels either edge may have, after rounding up to whole patches. */
-  readonly maxEdge: number;
-  /** The most visual tokens the image may cost. */
-  readonly maxTokens: number;
-  /** The edge, in pixels, of the square patch that costs one visual token. */
-  readonly patchSize: number;
-};
+import type { ImageLimits } from "../image/resize";
 
-/** A model the app can use, with its image limits kept with its ID. */
+/** A model the app can use, with its image limits (docs/SPEC.md 3.3) kept with its ID. */
 export type ModelConfig = {
   readonly id: string;
-  readonly imageLimits: ModelImageLimits;
+  readonly imageLimits: ImageLimits;
 };
 
 export type AppConfig = {

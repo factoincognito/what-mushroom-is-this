@@ -135,3 +135,59 @@ describe("the Settings screen", () => {
     expect(await screen.findByText(STRINGS.en.log.empty)).toBeOnTheScreen();
   });
 });
+
+describe("an address that matches no route", () => {
+  const UNKNOWN = "/no/such/route";
+
+  it("shows the disclaimer first, not a not-found screen, before acceptance", async () => {
+    await startApp(UNKNOWN);
+    expect(await screen.findByText(STRINGS.en.disclaimer)).toBeOnTheScreen();
+    expect(screen.queryByText(STRINGS.en.notFound.message)).not.toBeOnTheScreen();
+    expect(screen.queryByTestId("expo-router-unmatched")).not.toBeOnTheScreen();
+  });
+
+  it("shows the app's own not-found screen once the disclaimer is accepted", async () => {
+    await startApp(UNKNOWN);
+    await fireEvent.press(
+      await screen.findByRole("button", { name: STRINGS.en.firstStart.accept }),
+    );
+    expect(await screen.findByText(STRINGS.en.notFound.message)).toBeOnTheScreen();
+    expect(screen.queryByTestId("expo-router-unmatched")).not.toBeOnTheScreen();
+  });
+
+  describe("after acceptance", () => {
+    beforeEach(async () => {
+      await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    });
+
+    it.each([
+      ["sv", STRINGS.sv],
+      ["en", STRINGS.en],
+      ["it", STRINGS.it],
+    ] as const)("shows the not-found screen in the phone's language, %s", async (code, strings) => {
+      phoneIn(code);
+      await startApp(UNKNOWN);
+      expect(await screen.findByText(strings.notFound.message)).toBeOnTheScreen();
+      expect(screen.getByRole("link", { name: strings.notFound.back })).toBeOnTheScreen();
+      expect(screen.queryByTestId("expo-router-unmatched")).not.toBeOnTheScreen();
+    });
+
+    it("shows the not-found screen in the chosen language, over the phone's", async () => {
+      phoneIn("sv");
+      await startApp("/settings");
+      await fireEvent.press(await screen.findByRole("radio", { name: "Italiano" }));
+      await act(async () => {
+        router.push(UNKNOWN);
+      });
+      expect(await screen.findByText(STRINGS.it.notFound.message)).toBeOnTheScreen();
+      expect(screen.getByRole("link", { name: STRINGS.it.notFound.back })).toBeOnTheScreen();
+    });
+
+    it("links back to the Log screen", async () => {
+      const app = await startApp(UNKNOWN);
+      await fireEvent.press(await screen.findByRole("link", { name: STRINGS.en.notFound.back }));
+      expect(await screen.findByText(STRINGS.en.log.empty)).toBeOnTheScreen();
+      expect(app.pathname()).toBe("/");
+    });
+  });
+});

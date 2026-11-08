@@ -20,6 +20,11 @@ export type Strings = {
     readonly title: string;
     readonly languageHeading: string;
   };
+  readonly notFound: {
+    readonly title: string;
+    readonly message: string;
+    readonly back: string;
+  };
 };
 
 export const STRINGS: { readonly [L in Language]: Strings } = {
@@ -41,6 +46,11 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Inställningar",
       languageHeading: "Språk",
     },
+    notFound: {
+      title: "Hittades inte",
+      message: "Den här sidan finns inte.",
+      back: "Tillbaka till Fynd",
+    },
   },
   en: {
     languageName: "English",
@@ -60,6 +70,11 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Settings",
       languageHeading: "Language",
     },
+    notFound: {
+      title: "Not found",
+      message: "This page does not exist.",
+      back: "Back to Finds",
+    },
   },
   it: {
     languageName: "Italiano",
@@ -78,6 +93,11 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     settings: {
       title: "Impostazioni",
       languageHeading: "Lingua",
+    },
+    notFound: {
+      title: "Non trovata",
+      message: "Questa pagina non esiste.",
+      back: "Torna a Ritrovamenti",
     },
   },
 };
