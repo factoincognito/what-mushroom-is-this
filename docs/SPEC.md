@@ -177,8 +177,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   once: no hidden retries by a client library.
 - The request uses API version `2026-10-21` and sends the key as
   `Authorization: Bearer`; a key that, after the trim, holds anything but
-  printable ASCII (for example an invisible character or a smart quote
-  from a paste) is not sent, and is handled as 401, 403 (**[Clead]**,
+  the characters 0x21–0x7E (so also an inner space, an invisible
+  character or a smart quote from a paste) is not sent, and is handled as 401, 403 (**[Clead]**,
   PBI-1.4, #8).
 - Errors are shown in plain words, and each class has its own outcome:
 
