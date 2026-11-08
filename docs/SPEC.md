@@ -131,14 +131,23 @@ When the queue has stopped (3.3), the Log screen says why and offers
   tokens. For a 4:3 photo that is about 1270 × 952 px (1,564 tokens) and
   about 2212 × 1659 px (4,740 tokens). The limits are configuration kept
   with the model's ID. The size is computed by the resize rule of the
-  Claude docs' "Coordinates and bounding boxes" page; the module's tests
-  include that page's example (1075 × 1520 to 924 × 1307 on the standard
-  tier).
+  Claude docs' "Coordinates and bounding boxes" page, rounding the short
+  edge half to even as the page's reference code does (so 4032 × 3024 gives
+  1270 × 952, not 1269 × 952); the module's tests include that page's
+  example (1075 × 1520 to 924 × 1307 on the standard tier).
 - The photo sent carries no metadata. A plain module checks the bytes of
-  the JPEG to be sent: no application segment other than APP0 (JFIF) and
-  APP2 (the colour profile), since APP1 (EXIF, XMP) and APP13 (IPTC) can
-  carry a position. A JPEG that fails the check is not sent; the find is
-  marked failed.
+  the JPEG to be sent, through the whole file to its end, between scans
+  too (**[Clead]**: the check's detail):
+  - APP0 (JFIF) passes, and APP2 only as an ICC colour profile (identifier
+    `ICC_PROFILE`);
+  - every other application segment fails, among them APP1 (EXIF, XMP),
+    APP13 (IPTC) and an APP2 of another kind (such as a Multi-Picture
+    index), and so does a comment segment: each can carry a position or
+    text;
+  - any byte after the end of the image fails: phones can append further
+    images there, with metadata of their own;
+  - input that is not a JPEG, or is cut short or malformed, fails.
+  A JPEG that fails the check is not sent; the find is marked failed.
 - The prompt asks for one answer in a fixed JSON shape:
   - the best match: its names in Swedish, English, Latin and Italian;
   - its edibility, one of: edible, edible only after preparation, not
