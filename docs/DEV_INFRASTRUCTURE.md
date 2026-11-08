@@ -2,9 +2,9 @@
 
 How a project made with the bootstrapper is set up, built and checked: a
 new machine, CI, branch protection, commits, and the setup for each
-language pack. The rules are Process P-11 of the Rules in `rules/`
-(`rules/processes/P-11-engineering-infrastructure.md`), cited below by
-number; this file is the how-to that goes with them. The rules for code
+language pack. The rules are Process P-11 of the product office
+(`processes/P-11-engineering-infrastructure.md` in
+`factoincognito/product-office`), cited below by number; this file is the how-to that goes with them. The rules for code
 in each language live in the pack's `code-standards.md`.
 
 Part 1 applies to every project. Part 2 has one section per language

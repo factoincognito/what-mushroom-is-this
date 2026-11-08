@@ -7,13 +7,7 @@
 
 ## How to read this backlog
 
-This header is the format of this file (Process P-9 § 2).
-
-- One entry per line: `- **[MARKER] ID**`, optionally followed by notes
-  in parentheses, then ` — ` and the title. The detail is indented below
-  the entry.
-- A line inside a fenced code block is never an entry.
-- The markers are these five, and no others:
+Entry format: product-office Process P-9 § 2. The markers:
 
 | Marker | Meaning |
 |---|---|
@@ -30,23 +24,8 @@ phase one is phase 1, item 1. Numbers are never reused.
 
 ## Waiting for the product owner
 
-The one list the product owner reads (Process P-9 § 3). Every open item
-that needs their click, setting or decision is one line here, with
-Clead's recommendation and the item that holds the detail. A line is
-added when an item needs the product owner and removed when they have
-answered.
-
-### Now
-
-None.
-
-### When you have time
-
-None.
-
-### Later
-
-None.
+What needs Adam is in the product office's "Waiting for Adam" list, the
+one list he reads (product-office Process P-9 § 3 (1)), not here.
 
 ---
 

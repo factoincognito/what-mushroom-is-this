@@ -4,8 +4,11 @@ Give a forager a quick best assessment of a mushroom from a photo, and a private
 
 A project run with the Clead + Crog workflow. The product owner,
 Adam Smolowicz, decides what gets built, Clead (Claude, Tech Owner) owns
-how, and Crog (Claude Code, Senior Developer) implements. Everything
-the agents need lives in this repo: `CLAUDE.md` is the entry point.
+how, and Crog (Claude Code, Senior Developer) implements. It is bound by
+the Rules and Processes of factoincognito's product office, the private
+repository `factoincognito/product-office` (`RULES.md` L § 1).
+`CLAUDE.md` is this repository's entry point and `RULES.md` holds its
+local rules.
 
 ## Setup
 
@@ -16,22 +19,11 @@ the agents need lives in this repo: `CLAUDE.md` is the entry point.
 - A GitHub account, and git
 
 ### Working setup
-Run the Claude app next to VS Code. In the Claude app, create a Claude
-Project for this repo, add the repo to that Claude Project (give it
-access when asked), and start a chat inside the Claude Project;
-`CLAUDE.md` loads from the repo. Before the first task, ask Clead to
-summarise `memory/context.md` and `memory/project.md`: if it can
-describe the project and its goals, it is oriented. In VS Code, open
-your clone and use a Claude Code tab if you want to run Crog yourself.
-
-Keep one Claude Project per repo, so what Clead learns in one project
-never mixes with another.
-
-### Starting later sessions
-In the Claude app, start a new chat inside the project's Claude Project
-(it already has the repo). Clead follows the session startup of the
-Rules (`rules/processes/P-1-session-startup.md`), which `CLAUDE.md`
-points to. The first thing you say is the first thing that matters.
+Work on this project starts from the product office: a chat in its
+Claude Project, which attaches this repository when the work needs it
+(product-office `RULES.md` §§ 21 and 23 (5), Process P-1). In VS Code,
+open your clone and use a Claude Code tab if you want to run Crog
+yourself.
 
 ### Working from another computer
 You can work on this project from more than one computer, for example
@@ -83,7 +75,7 @@ On the other computer, once:
    `docs/DEV_INFRASTRUCTURE.md`, "New machine setup", steps 2 and 4.
 
 4. In the Claude app, sign in with the same Claude account and open
-   this project's Claude Project, as on your first computer. The Claude
+   the product office's Claude Project ("Working setup" above). The Claude
    app needs nothing else on this computer; the copy is for working in
    VS Code with Claude Code.
 
@@ -97,15 +89,8 @@ On the other computer, once:
 
 ## Workflow
 
-The product owner describes the next PBI. Clead specs it; the product
-owner confirms it captures the intent. Crog implements, test first.
-Reviews and merges are delegated: Clead reviews Crog's code, Crog
-reviews Clead's code, config and process changes, and Crog merges once
-the review passes and CI is green. After 3 review rounds without
-agreement, the product owner decides. The product owner is never used to
-pass messages between Clead and Crog. Details: the Rules in `rules/`,
-§ 10 and § 26 to § 28 of `rules/RULES.md` and Processes P-2 to P-4, and
-the project's own rules in `RULES.md`.
+How changes are specified, made, reviewed and merged is set by the
+product office's Rules and Processes and this repository's `RULES.md`.
 
 ## Working without Claude
 
@@ -140,8 +125,8 @@ With Claude, the Clead and Crog workflow comes on top of it.
 
 - Clead and Crog, and everything they do: specs, reviews, merges,
   session start and end, and pins.
-- `CLAUDE.md`, `RULES.md` and the Rules in `rules/` are written for
-  Clead and Crog, and
+- `CLAUDE.md`, `RULES.md` and the product office's Rules are written
+  for Clead and Crog, and
   `memory/context.md` is Clead's session notes. Without Claude, nobody
   reads them as instructions.
   The other files under `memory/` hold the project's own data, such as
@@ -164,8 +149,8 @@ written for Clead and Crog, as they apply to a team of people only:
   code change without a test; a change no test can check says why in a
   `Test-exempt:` trailer line.
 - Someone other than the author reviews the pull request. The review
-  standard of the Rules, Process P-3 § 3
-  (`rules/processes/P-3-review.md`), works as the review checklist.
+  standard of the product office's Process P-3 § 3 works as the review
+  checklist.
 - Merge once `build` is green and the review has passed.
 - Fill in the texts the setup left for Clead (listed above) yourself,
   and keep `STATUS.md` up to date by hand.
