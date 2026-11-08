@@ -17,6 +17,7 @@ import {
   checkFailure,
   checkId,
   checkNewFind,
+  checkPosition,
   corrupt,
   FAILURE_CAUSES,
   FIND_STATES,
@@ -47,6 +48,8 @@ import { migrate } from "./schema";
  * | `replaceAnswer` | done | done (the earlier answer is replaced) |
  * | `markFailed` | waiting, failed | failed |
  * | `markWaiting` | failed | waiting |
+ *
+ * `setPosition` changes no analysis state: it applies in any state, to a find without a position.
  */
 export interface FindStore {
   /** Saves a new find, waiting for analysis, with a copy of its photo; gives its ID. */
@@ -59,6 +62,12 @@ export interface FindStore {
   replaceAnswer(id: number, analysed: AnalysedAnswer): Promise<void>;
   markFailed(id: number, failure: FindFailure): Promise<void>;
   markWaiting(id: number): Promise<void>;
+  /**
+   * Adds the first fix that came after a find was saved without a position (docs/SPEC.md 3.6).
+   * Only a fix is added later, and only to a find that has no position; a find that has one
+   * keeps it, and the change is refused as `wrong-state`.
+   */
+  setPosition(id: number, position: Position): Promise<void>;
   /**
    * Deletes the find, then its photo. `photoRemoved` is false when the photo could not be
    * removed: the find is gone all the same, and the next opening of the store removes the photo.
@@ -88,6 +97,9 @@ const MARK_FAILED = `UPDATE finds SET state = 'failed', failure_cause = ?, failu
   WHERE id = ? AND state IN ('waiting', 'failed')`;
 const MARK_WAITING = `UPDATE finds SET state = 'waiting', failure_cause = NULL,
   failure_detail = NULL WHERE id = ? AND state = 'failed'`;
+const SET_POSITION = `UPDATE finds SET latitude = ?, longitude = ?, accuracy_m = ?,
+  position_source = ? WHERE id = ? AND position_source IS NULL`;
+const POSITION_SOURCE_OF = "SELECT position_source FROM finds WHERE id = ?";
 const STATE_OF = "SELECT state FROM finds WHERE id = ?";
 const PHOTO_OF = "SELECT photo_file FROM finds WHERE id = ?";
 const DELETE = "DELETE FROM finds WHERE id = ?";
@@ -172,6 +184,31 @@ export async function createFindStore(
     async markWaiting(id) {
       checkId(id);
       await update(id, MARK_WAITING, []);
+    },
+
+    async setPosition(id, position) {
+      checkId(id);
+      checkPosition(position);
+      if (position.source !== "fix") {
+        throw invalid("only a fix is added to a find after it is saved");
+      }
+      const { latitude, longitude, accuracyM, source } = position;
+      const { changes } = await db.runAsync(SET_POSITION, [
+        latitude,
+        longitude,
+        accuracyM,
+        source,
+        id,
+      ]);
+      if (changes > 0) {
+        return;
+      }
+      const row = await db.getFirstAsync(POSITION_SOURCE_OF, [id]);
+      if (row === null) {
+        throw new StoreError("not-found", `no find has the ID ${id}`);
+      }
+      const had = enumOf(record(row), "position_source", POSITION_SOURCES);
+      throw new StoreError("wrong-state", `find ${id} already has a position (${had})`);
     },
 
     async delete(id) {

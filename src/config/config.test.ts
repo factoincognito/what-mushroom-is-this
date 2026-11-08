@@ -18,6 +18,10 @@ describe("config", () => {
     expect(config.positionFixWaitMs).toBe(30_000);
   });
 
+  it("holds the JPEG quality of the photo for analysis, between 0 and 1 (expo-image-manipulator's compress)", () => {
+    expect(config.analysisJpegQuality).toBe(0.9);
+  });
+
   it("keeps each model's image limits in the image module's ImageLimits type", () => {
     const limits: ImageLimits = { maxEdge: 1568, maxTokens: 1568, patchSize: 28 };
     const model: ModelConfig = { id: "a-model", imageLimits: limits };

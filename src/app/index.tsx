@@ -1,11 +1,11 @@
 import { Link } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { useLanguage } from "../i18n/LanguageContext";
 
 /**
- * The Log screen, the start screen (docs/SPEC.md 3.1). For now the list of finds is empty and
- * "New find" is a disabled placeholder; later items fill both.
+ * The Log screen, the start screen (docs/SPEC.md 3.1). "New find" opens the New find screen;
+ * the list of finds comes in PBI-1.8 and is empty for now.
  */
 export default function LogScreen() {
   const { strings } = useLanguage();
@@ -14,9 +14,9 @@ export default function LogScreen() {
       <View style={styles.list}>
         <Text style={styles.empty}>{strings.log.empty}</Text>
       </View>
-      <Pressable accessibilityRole="button" disabled style={styles.button}>
-        <Text style={styles.disabledText}>{strings.log.newFind}</Text>
-      </Pressable>
+      <Link href="/new-find" accessibilityRole="link" style={styles.button}>
+        {strings.log.newFind}
+      </Link>
       <Link href="/settings" accessibilityRole="link" style={styles.link}>
         {strings.log.settings}
       </Link>
@@ -39,14 +39,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    alignItems: "center",
+    fontSize: 16,
+    textAlign: "center",
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    opacity: 0.5,
-  },
-  disabledText: {
-    fontSize: 16,
   },
   link: {
     fontSize: 16,

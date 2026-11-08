@@ -148,6 +148,9 @@ const STATE_OF = "SELECT state FROM finds WHERE id = ?";
 const PHOTO_OF = "SELECT photo_file FROM finds WHERE id = ?";
 const DELETE = "DELETE FROM finds WHERE id = ?";
 const ALL_PHOTOS = "SELECT photo_file FROM finds";
+const SET_POSITION =
+  "UPDATE finds SET latitude = ?, longitude = ?, accuracy_m = ?, position_source = ? WHERE id = ? AND position_source IS NULL";
+const POSITION_SOURCE_OF = "SELECT position_source FROM finds WHERE id = ?";
 
 const match: Match = {
   result: "match",
@@ -775,5 +778,63 @@ describe("delete", () => {
     db.reply("first", PHOTO_OF, { photo_file: null });
     await expect(store.delete(7)).rejects.toMatchObject({ code: "corrupt" });
     expect(events).not.toContainEqual(expect.objectContaining({ sql: DELETE }));
+  });
+});
+
+describe("setPosition", () => {
+  const fix = { latitude: 59.65, longitude: 17.09, accuracyM: 8, source: "fix" } as const;
+
+  it("adds the first fix to a find saved without a position", async () => {
+    await store.setPosition(7, fix);
+    expect(events).toEqual([
+      { method: "run", sql: SET_POSITION, params: [59.65, 17.09, 8, "fix", 7] },
+    ]);
+  });
+
+  it("adds a fix whose accuracy the phone did not give", async () => {
+    await store.setPosition(7, { ...fix, accuracyM: null });
+    expect(events).toEqual([
+      { method: "run", sql: SET_POSITION, params: [59.65, 17.09, null, "fix", 7] },
+    ]);
+  });
+
+  it("says the find does not exist when no row changed and none has the ID", async () => {
+    db.reply("run", SET_POSITION, { changes: 0, lastInsertRowId: 0 });
+    await expect(store.setPosition(7, fix)).rejects.toMatchObject({ code: "not-found" });
+    expect(events.at(-1)).toEqual({ method: "first", sql: POSITION_SOURCE_OF, params: [7] });
+  });
+
+  it("does not replace the position a find already has", async () => {
+    db.reply("run", SET_POSITION, { changes: 0, lastInsertRowId: 0 });
+    db.reply("first", POSITION_SOURCE_OF, { position_source: "last-known" });
+    await expect(store.setPosition(7, fix)).rejects.toMatchObject({ code: "wrong-state" });
+  });
+
+  it("refuses a stored position source it does not know", async () => {
+    db.reply("run", SET_POSITION, { changes: 0, lastInsertRowId: 0 });
+    db.reply("first", POSITION_SOURCE_OF, { position_source: "guess" });
+    await expect(store.setPosition(7, fix)).rejects.toMatchObject({ code: "corrupt" });
+  });
+
+  it.each<[string, unknown]>([
+    ["no position at all", null],
+    ["a latitude past 90", { ...fix, latitude: 91 }],
+    ["a longitude that is not a number", { ...fix, longitude: "17" }],
+    ["a negative accuracy", { ...fix, accuracyM: -2 }],
+    [
+      "the last known position, which is only ever taken at saving",
+      { ...fix, source: "last-known" },
+    ],
+    ["the photo's position, which is only ever taken at saving", { ...fix, source: "photo" }],
+  ])("refuses %s, sending nothing", async (_, position) => {
+    await expect(store.setPosition(7, wrong(position))).rejects.toMatchObject({
+      code: "invalid-input",
+    });
+    expect(events).toEqual([]);
+  });
+
+  it("refuses an ID that is not a positive whole number, sending nothing", async () => {
+    await expect(store.setPosition(0, fix)).rejects.toMatchObject({ code: "invalid-input" });
+    expect(events).toEqual([]);
   });
 });

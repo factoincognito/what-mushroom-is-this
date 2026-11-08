@@ -50,11 +50,36 @@ describe("devicePhotoFiles", () => {
   it.each([
     ["without an extension", "IMG_1"],
     ["with an extension of other characters", "IMG_1.jp-g"],
-  ])("refuses a source %s", async (_, name) => {
+    ["with an extension longer than eight characters", "IMG_1.photograph"],
+  ])("copies a source %s in under the name given alone", async (_, name) => {
     const photos = devicePhotoFiles(directoryName);
     photos.prepare();
     const source = cameraPhoto(name);
-    await expect(photos.copyIn(source.uri, "p1")).rejects.toMatchObject({ code: "invalid-input" });
+    await expect(photos.copyIn(source.uri, "p1")).resolves.toBe("p1");
+    expect(new File(photoDirectory(), "p1").bytesSync()).toEqual(
+      new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+    );
+    expect(photos.list()).toEqual(["p1"]);
+  });
+
+  it("copies a gallery photo from a content:// address, which has no extension", async () => {
+    // The in-memory file system takes any address; on Android the picker can give a content://
+    // address of the media provider, whose last part is an ID, not a file name.
+    const provider = new Directory("content://media/picker/0/media");
+    provider.create({ intermediates: true, idempotent: true });
+    const source = new File(provider, "1000000033");
+    source.write(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
+    const photos = devicePhotoFiles(directoryName);
+    photos.prepare();
+    await expect(photos.copyIn(source.uri, "p1")).resolves.toBe("p1");
+    expect(photos.uriOf("p1")).toBe(new File(photoDirectory(), "p1").uri);
+  });
+
+  it("refuses a source without an extension that does not exist", async () => {
+    const photos = devicePhotoFiles(directoryName);
+    photos.prepare();
+    const missing = new File(Paths.cache, "gone");
+    await expect(photos.copyIn(missing.uri, "p1")).rejects.toMatchObject({ code: "invalid-input" });
     expect(photos.list()).toEqual([]);
   });
 
@@ -95,7 +120,17 @@ describe("devicePhotoFiles", () => {
     expect(photos.uriOf("p1.jpg")).toBe(new File(photoDirectory(), "p1.jpg").uri);
   });
 
-  it.each(["../finds.db", "a/b.jpg", "", "p1"])(
+  it("gives the URI of, and removes, a photo stored without an extension", () => {
+    const photos = devicePhotoFiles(directoryName);
+    photos.prepare();
+    const stored = new File(photoDirectory(), "p1");
+    stored.write(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
+    expect(photos.uriOf("p1")).toBe(stored.uri);
+    photos.remove("p1");
+    expect(stored.exists).toBe(false);
+  });
+
+  it.each(["../finds.db", "a/b.jpg", "", "p1.", ".jpg", "p1.jp-g"])(
     "refuses the stored name %j for a URI or a removal",
     (name) => {
       const photos = devicePhotoFiles(directoryName);
