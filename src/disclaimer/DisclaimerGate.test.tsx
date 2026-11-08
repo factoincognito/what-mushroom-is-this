@@ -23,9 +23,10 @@ function memoryStore(initial: Record<string, string> = {}): KeyValueStore & {
   };
 }
 
+/** Renders the gate with its own store, and the language choice with a store of its own. */
 async function renderGate(store: KeyValueStore) {
   await render(
-    <LanguageProvider>
+    <LanguageProvider store={memoryStore()}>
       <DisclaimerGate store={store}>
         <Text>the app</Text>
       </DisclaimerGate>

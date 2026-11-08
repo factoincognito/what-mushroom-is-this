@@ -1,5 +1,5 @@
 import { LANGUAGES } from "./languages";
-import { STRINGS } from "./strings";
+import { NOT_CHECKED_BY_A_SPEAKER, STRINGS } from "./strings";
 
 /** The UTF-8 bytes of a string, in hex. */
 function utf8Hex(text: string): string {
@@ -46,6 +46,80 @@ describe("STRINGS", () => {
     expect(STRINGS.sv.languageName).toBe("Svenska");
     expect(STRINGS.en.languageName).toBe("English");
     expect(STRINGS.it.languageName).toBe("Italiano");
+  });
+});
+
+/** Whether an entry of NOT_CHECKED_BY_A_SPEAKER covers a key path: the path itself or a group. */
+function covers(entry: string, path: string): boolean {
+  return path === entry || path.startsWith(`${entry}.`);
+}
+
+describe("NOT_CHECKED_BY_A_SPEAKER", () => {
+  const UNCHECKED = [
+    "languageName",
+    "firstStart",
+    "log",
+    "settings.title",
+    "settings.languageHeading",
+    "settings.key",
+    "settings.model",
+    "notFound",
+  ];
+
+  it("marks the Swedish and the Italian strings of PBI-1.1 and PBI-1.2", () => {
+    expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
+  });
+
+  it.each(["sv", "it"] as const)("names in %s only strings that exist", (language) => {
+    const paths = keyPaths(STRINGS[language]);
+    for (const entry of NOT_CHECKED_BY_A_SPEAKER[language]) {
+      expect(paths.some((path) => covers(entry, path))).toBe(true);
+    }
+  });
+
+  it.each(["sv", "it"] as const)("covers every string in %s but the disclaimer", (language) => {
+    const uncovered = keyPaths(STRINGS[language]).filter(
+      (path) => !NOT_CHECKED_BY_A_SPEAKER[language].some((entry) => covers(entry, path)),
+    );
+    expect(uncovered).toEqual(["disclaimer"]);
+  });
+
+  it("does not mark the disclaimer, the approved text of SPEC 3.5, which an Italian speaker checked", () => {
+    for (const entry of [...NOT_CHECKED_BY_A_SPEAKER.sv, ...NOT_CHECKED_BY_A_SPEAKER.it]) {
+      expect(covers(entry, "disclaimer")).toBe(false);
+    }
+  });
+});
+
+describe("the strings of the key and model settings", () => {
+  it.each(LANGUAGES)("are all there in %s", (language) => {
+    const paths = keyPaths(STRINGS[language]);
+    expect(paths.filter((path) => path.startsWith("settings.key."))).toEqual([
+      "settings.key.empty",
+      "settings.key.heading",
+      "settings.key.input",
+      "settings.key.none",
+      "settings.key.notSendable",
+      "settings.key.remove",
+      "settings.key.removeFailed",
+      "settings.key.removed",
+      "settings.key.save",
+      "settings.key.saveFailed",
+      "settings.key.saved",
+      "settings.key.stored",
+      "settings.key.unreadable",
+    ]);
+    expect(paths.filter((path) => path.startsWith("settings.model."))).toEqual([
+      "settings.model.default",
+      "settings.model.empty",
+      "settings.model.heading",
+      "settings.model.inUse",
+      "settings.model.input",
+      "settings.model.invalid",
+      "settings.model.save",
+      "settings.model.saveFailed",
+      "settings.model.saved",
+    ]);
   });
 });
 

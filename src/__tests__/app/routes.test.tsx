@@ -6,14 +6,31 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getLocales } from "expo-localization";
 import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen } from "expo-router/testing-library";
+import * as SecureStore from "expo-secure-store";
 
+import { config } from "../../config/config";
+import { MODEL_SETTING_KEY } from "../../config/modelSetting";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { LANGUAGE_CHOICE_KEY } from "../../i18n/languageChoice";
 import { STRINGS } from "../../i18n/strings";
+import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
 );
 jest.mock("expo-localization", () => ({ getLocales: jest.fn() }));
+
+/** The phone's secure store, in memory. (Named `mock…` so that the hoisted factory may use it.) */
+const mockSecrets = new Map<string, string>();
+jest.mock("expo-secure-store", () => ({
+  getItemAsync: jest.fn(async (key: string) => mockSecrets.get(key) ?? null),
+  setItemAsync: jest.fn(async (key: string, value: string) => {
+    mockSecrets.set(key, value);
+  }),
+  deleteItemAsync: jest.fn(async (key: string) => {
+    mockSecrets.delete(key);
+  }),
+}));
 
 const APP_DIR = "./src/app";
 
@@ -34,6 +51,7 @@ async function startApp(initialUrl = "/"): Promise<{ pathname: () => string }> {
 
 beforeEach(async () => {
   await AsyncStorage.clear();
+  mockSecrets.clear();
   phoneIn("en");
 });
 
@@ -133,6 +151,248 @@ describe("the Settings screen", () => {
     });
     expect(app.pathname()).toBe("/");
     expect(await screen.findByText(STRINGS.en.log.empty)).toBeOnTheScreen();
+  });
+
+  it("keeps the chosen language across a restart", async () => {
+    phoneIn("sv");
+    await startApp("/settings");
+    await fireEvent.press(await screen.findByRole("radio", { name: "Italiano" }));
+    await expect(AsyncStorage.getItem(LANGUAGE_CHOICE_KEY)).resolves.toBe("it");
+    await screen.unmount();
+
+    await startApp("/settings");
+    expect(await screen.findByRole("radio", { name: "Italiano", checked: true })).toBeOnTheScreen();
+    expect(screen.getByText(STRINGS.it.settings.languageHeading)).toBeOnTheScreen();
+  });
+});
+
+describe("the Settings screen: the API key (SPEC 3.2)", () => {
+  const A_KEY = "sk-ant-api03-abcDEF_123";
+  const t = STRINGS.en.settings.key;
+
+  beforeEach(async () => {
+    await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
+  });
+
+  async function typeAndSave(raw: string): Promise<void> {
+    await fireEvent.changeText(await screen.findByLabelText(t.input), raw);
+    await fireEvent.press(screen.getByRole("button", { name: t.save }));
+  }
+
+  it("says that no key is saved, and offers no Remove", async () => {
+    await startApp("/settings");
+    expect(await screen.findByText(t.none)).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: t.remove })).not.toBeOnTheScreen();
+  });
+
+  it("saves a pasted key trimmed in the secure store, and never shows it again", async () => {
+    await startApp("/settings");
+    await typeAndSave(`  ${A_KEY}\n`);
+    expect(await screen.findByText(t.saved)).toBeOnTheScreen();
+    expect(screen.getByText(t.stored)).toBeOnTheScreen();
+    expect(mockSecrets.get(API_KEY_STORE_KEY)).toBe(A_KEY);
+    expect(screen.getByLabelText(t.input)).toHaveDisplayValue("");
+    expect(screen.queryByText(A_KEY, { exact: false })).not.toBeOnTheScreen();
+    expect(await AsyncStorage.getAllKeys()).not.toContain(API_KEY_STORE_KEY);
+  });
+
+  it("never writes the key's value to the plain store, under any name", async () => {
+    mockSecrets.set(API_KEY_STORE_KEY, "sk-ant-old-key");
+    const plain = jest.mocked(AsyncStorage);
+    for (const write of [plain.setItem, plain.mergeItem, plain.multiSet, plain.multiMerge]) {
+      write.mockClear();
+    }
+    await startApp("/settings");
+    await typeAndSave(`  ${A_KEY}\n`);
+    expect(await screen.findByText(t.saved)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: t.remove }));
+    expect(await screen.findByText(t.removed)).toBeOnTheScreen();
+
+    const written = JSON.stringify([
+      plain.setItem.mock.calls,
+      plain.mergeItem.mock.calls,
+      plain.multiSet.mock.calls,
+      plain.multiMerge.mock.calls,
+    ]);
+    const held = JSON.stringify(await AsyncStorage.multiGet(await AsyncStorage.getAllKeys()));
+    for (const text of [written, held]) {
+      expect(text).not.toContain(A_KEY);
+      expect(text).not.toContain("sk-ant-old-key");
+    }
+  });
+
+  it("hides the key as it is typed", async () => {
+    await startApp("/settings");
+    expect(await screen.findByLabelText(t.input)).toHaveProp("secureTextEntry", true);
+  });
+
+  it("does not save an empty key, and says so", async () => {
+    await startApp("/settings");
+    await typeAndSave(" \n ");
+    expect(await screen.findByText(t.empty)).toBeOnTheScreen();
+    expect(mockSecrets.has(API_KEY_STORE_KEY)).toBe(false);
+    expect(screen.getByText(t.none)).toBeOnTheScreen();
+  });
+
+  it("does not save a key the analysis module would refuse to send, and says so", async () => {
+    await startApp("/settings");
+    await typeAndSave("sk-ant-​api03");
+    expect(await screen.findByText(t.notSendable)).toBeOnTheScreen();
+    expect(mockSecrets.has(API_KEY_STORE_KEY)).toBe(false);
+  });
+
+  it("says so when the secure store cannot save the key", async () => {
+    jest.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error("keychain locked"));
+    await startApp("/settings");
+    await typeAndSave(A_KEY);
+    expect(await screen.findByText(t.saveFailed)).toBeOnTheScreen();
+    expect(screen.getByText(t.none)).toBeOnTheScreen();
+  });
+
+  it("replaces a saved key", async () => {
+    mockSecrets.set(API_KEY_STORE_KEY, "sk-ant-old");
+    await startApp("/settings");
+    expect(await screen.findByText(t.stored)).toBeOnTheScreen();
+    await typeAndSave(A_KEY);
+    expect(await screen.findByText(t.saved)).toBeOnTheScreen();
+    expect(mockSecrets.get(API_KEY_STORE_KEY)).toBe(A_KEY);
+  });
+
+  it("removes a saved key", async () => {
+    mockSecrets.set(API_KEY_STORE_KEY, A_KEY);
+    await startApp("/settings");
+    await fireEvent.press(await screen.findByRole("button", { name: t.remove }));
+    expect(await screen.findByText(t.removed)).toBeOnTheScreen();
+    expect(screen.getByText(t.none)).toBeOnTheScreen();
+    expect(mockSecrets.has(API_KEY_STORE_KEY)).toBe(false);
+  });
+
+  it("says so when the key cannot be removed", async () => {
+    mockSecrets.set(API_KEY_STORE_KEY, A_KEY);
+    jest.mocked(SecureStore.deleteItemAsync).mockRejectedValueOnce(new Error("keychain locked"));
+    await startApp("/settings");
+    await fireEvent.press(await screen.findByRole("button", { name: t.remove }));
+    expect(await screen.findByText(t.removeFailed)).toBeOnTheScreen();
+    expect(screen.getByText(t.stored)).toBeOnTheScreen();
+  });
+
+  it("says so when the secure store cannot be read", async () => {
+    jest.mocked(SecureStore.getItemAsync).mockRejectedValueOnce(new Error("keychain locked"));
+    await startApp("/settings");
+    expect(await screen.findByText(t.unreadable)).toBeOnTheScreen();
+  });
+
+  it("shows the key's texts in the chosen language", async () => {
+    phoneIn("sv");
+    await startApp("/settings");
+    expect(await screen.findByText(STRINGS.sv.settings.key.none)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("radio", { name: "Italiano" }));
+    expect(await screen.findByText(STRINGS.it.settings.key.none)).toBeOnTheScreen();
+  });
+});
+
+describe("the first start after an install (SPEC 3.2)", () => {
+  beforeEach(async () => {
+    await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+  });
+
+  it("clears a key the secure store kept from an earlier install", async () => {
+    mockSecrets.set(API_KEY_STORE_KEY, "sk-ant-from-before");
+    await startApp("/settings");
+    expect(await screen.findByText(STRINGS.en.settings.key.none)).toBeOnTheScreen();
+    expect(mockSecrets.has(API_KEY_STORE_KEY)).toBe(false);
+    await expect(AsyncStorage.getItem(INSTALL_MARKER_KEY)).resolves.toBe("installed");
+  });
+
+  it("keeps the key at the next start", async () => {
+    await startApp("/settings");
+    await fireEvent.changeText(
+      await screen.findByLabelText(STRINGS.en.settings.key.input),
+      "sk-ant-kept",
+    );
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.settings.key.save }));
+    expect(await screen.findByText(STRINGS.en.settings.key.saved)).toBeOnTheScreen();
+    await screen.unmount();
+
+    await startApp("/settings");
+    expect(await screen.findByText(STRINGS.en.settings.key.stored)).toBeOnTheScreen();
+    expect(mockSecrets.get(API_KEY_STORE_KEY)).toBe("sk-ant-kept");
+  });
+});
+
+describe("the Settings screen: the model (SPEC 3.3)", () => {
+  const t = STRINGS.en.settings.model;
+
+  beforeEach(async () => {
+    await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
+  });
+
+  it("offers the listed models, with the default in use and marked", async () => {
+    await startApp("/settings");
+    expect(
+      await screen.findByRole("radio", { name: config.defaultModelId, checked: true }),
+    ).toBeOnTheScreen();
+    for (const model of config.models) {
+      expect(screen.getByRole("radio", { name: model.id })).toBeOnTheScreen();
+    }
+    expect(screen.getByTestId("model-in-use")).toHaveTextContent(config.defaultModelId);
+    expect(screen.getByText(t.default)).toBeOnTheScreen();
+  });
+
+  it("saves a listed model when it is chosen", async () => {
+    await startApp("/settings");
+    await fireEvent.press(await screen.findByRole("radio", { name: "claude-haiku-5-5" }));
+    expect(await screen.findByText(t.saved)).toBeOnTheScreen();
+    expect(
+      screen.getByRole("radio", { name: "claude-haiku-5-5", checked: true }),
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId("model-in-use")).toHaveTextContent("claude-haiku-5-5");
+    await expect(AsyncStorage.getItem(MODEL_SETTING_KEY)).resolves.toBe("claude-haiku-5-5");
+  });
+
+  it("saves another model ID, trimmed, typed in", async () => {
+    await startApp("/settings");
+    await fireEvent.changeText(await screen.findByLabelText(t.input), " claude-future-9 ");
+    await fireEvent.press(screen.getByRole("button", { name: t.save }));
+    expect(await screen.findByText(t.saved)).toBeOnTheScreen();
+    expect(screen.getByTestId("model-in-use")).toHaveTextContent("claude-future-9");
+    expect(screen.queryByRole("radio", { name: config.defaultModelId, checked: true })).toBeNull();
+    await expect(AsyncStorage.getItem(MODEL_SETTING_KEY)).resolves.toBe("claude-future-9");
+  });
+
+  it("does not save an empty model ID, and says so", async () => {
+    await startApp("/settings");
+    await fireEvent.changeText(await screen.findByLabelText(t.input), "  ");
+    await fireEvent.press(screen.getByRole("button", { name: t.save }));
+    expect(await screen.findByText(t.empty)).toBeOnTheScreen();
+    await expect(AsyncStorage.getItem(MODEL_SETTING_KEY)).resolves.toBeNull();
+    expect(screen.getByTestId("model-in-use")).toHaveTextContent(config.defaultModelId);
+  });
+
+  it("does not save a model ID with a blank inside, and says so", async () => {
+    await startApp("/settings");
+    await fireEvent.changeText(await screen.findByLabelText(t.input), "claude opus");
+    await fireEvent.press(screen.getByRole("button", { name: t.save }));
+    expect(await screen.findByText(t.invalid)).toBeOnTheScreen();
+    await expect(AsyncStorage.getItem(MODEL_SETTING_KEY)).resolves.toBeNull();
+  });
+
+  it("says so when the model cannot be saved", async () => {
+    jest.mocked(AsyncStorage.setItem).mockRejectedValueOnce(new Error("disk full"));
+    await startApp("/settings");
+    await fireEvent.press(await screen.findByRole("radio", { name: "claude-haiku-5-5" }));
+    expect(await screen.findByText(t.saveFailed)).toBeOnTheScreen();
+    expect(screen.getByTestId("model-in-use")).toHaveTextContent(config.defaultModelId);
+  });
+
+  it("keeps the chosen model across a restart", async () => {
+    await AsyncStorage.setItem(MODEL_SETTING_KEY, "claude-sonnet-5-5");
+    await startApp("/settings");
+    expect(
+      await screen.findByRole("radio", { name: "claude-sonnet-5-5", checked: true }),
+    ).toBeOnTheScreen();
   });
 });
 

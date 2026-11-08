@@ -1,5 +1,5 @@
+import { HIGH_RESOLUTION_TIER, STANDARD_TIER } from "../config/config";
 import { countImageTokens, type ImageLimits, resizedSize, roundHalfToEven } from "./resize";
-import { HIGH_RESOLUTION_TIER, STANDARD_TIER } from "./tiers";
 
 describe("roundHalfToEven", () => {
   it.each([
