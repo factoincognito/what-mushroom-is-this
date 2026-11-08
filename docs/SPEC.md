@@ -181,6 +181,7 @@ When the queue has stopped (3.3), the Log screen says why and offers
   |---|---|---|
   | no network, time limit passed, 500, 504, 529 | not reachable, or a fault on Anthropic's side | the find stays waiting; the queue tries it again at its next run |
   | 429 | rate limit or spend limit | the queue stops until the time the answer's `retry-after` gives; without one, until the user starts it again |
+  | 400 whose message starts "You have reached your specified API usage limits" | the key owner's own spend limit, which the API reports this way (**[Clead]**, from the API's error documentation, read by Crog on 2026-11-08 for PBI-1.4) | as 429 without `retry-after` |
   | 401, 403 | the key is refused or lacks permission | the queue stops; Settings asks for a key |
   | 402 or a billing error | no credit on the key's account | the queue stops; the message says so |
   | 404 | the model is not known (for example retired) | the queue stops; Settings asks for a model |
@@ -288,3 +289,7 @@ this?" app.
    trigger needs (3.4); not in the expected list above.
 7. Whether reading a gallery photo's position on Android needs the
    `ACCESS_MEDIA_LOCATION` permission (Crog's reading, not checked).
+8. Whether a user's API key can be one that needs the
+   `anthropic-workspace-id` header, which the API documentation says a key
+   not scoped to a workspace needs (Crog's reading for PBI-1.4, not
+   checked by Clead); the app does not send it.
