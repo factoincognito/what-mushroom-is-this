@@ -197,6 +197,31 @@ describe("the Settings screen: the API key (SPEC 3.2)", () => {
     expect(await AsyncStorage.getAllKeys()).not.toContain(API_KEY_STORE_KEY);
   });
 
+  it("never writes the key's value to the plain store, under any name", async () => {
+    mockSecrets.set(API_KEY_STORE_KEY, "sk-ant-old-key");
+    const plain = jest.mocked(AsyncStorage);
+    for (const write of [plain.setItem, plain.mergeItem, plain.multiSet, plain.multiMerge]) {
+      write.mockClear();
+    }
+    await startApp("/settings");
+    await typeAndSave(`  ${A_KEY}\n`);
+    expect(await screen.findByText(t.saved)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: t.remove }));
+    expect(await screen.findByText(t.removed)).toBeOnTheScreen();
+
+    const written = JSON.stringify([
+      plain.setItem.mock.calls,
+      plain.mergeItem.mock.calls,
+      plain.multiSet.mock.calls,
+      plain.multiMerge.mock.calls,
+    ]);
+    const held = JSON.stringify(await AsyncStorage.multiGet(await AsyncStorage.getAllKeys()));
+    for (const text of [written, held]) {
+      expect(text).not.toContain(A_KEY);
+      expect(text).not.toContain("sk-ant-old-key");
+    }
+  });
+
   it("hides the key as it is typed", async () => {
     await startApp("/settings");
     expect(await screen.findByLabelText(t.input)).toHaveProp("secureTextEntry", true);

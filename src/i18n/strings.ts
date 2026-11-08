@@ -63,18 +63,40 @@ export type Strings = {
 };
 
 /**
- * The groups of strings, by key path, whose Swedish or Italian text no speaker of the language
- * has checked yet. A group is removed from here once a speaker has checked it.
+ * The strings whose Swedish or Italian text no speaker of the language has checked yet, by key
+ * path: an entry names one string ("settings.title") or a group of them ("log"). An entry is
+ * removed once a speaker has checked it. Every string is listed but the disclaimer, which is the
+ * approved text of docs/SPEC.md 3.5, its Italian checked by an Italian speaker. The two lists
+ * are kept apart, as each language is checked by its own speaker.
  */
 export const NOT_CHECKED_BY_A_SPEAKER: {
   readonly sv: readonly string[];
   readonly it: readonly string[];
 } = {
-  sv: ["settings.key", "settings.model"],
-  it: ["settings.key", "settings.model"],
+  sv: [
+    "languageName",
+    "firstStart",
+    "log",
+    "settings.title",
+    "settings.languageHeading",
+    "settings.key",
+    "settings.model",
+    "notFound",
+  ],
+  it: [
+    "languageName",
+    "firstStart",
+    "log",
+    "settings.title",
+    "settings.languageHeading",
+    "settings.key",
+    "settings.model",
+    "notFound",
+  ],
 };
 
 export const STRINGS: { readonly [L in Language]: Strings } = {
+  // Not checked by a Swedish speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
   sv: {
     languageName: "Svenska",
     disclaimer:
@@ -92,7 +114,6 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     settings: {
       title: "Inställningar",
       languageHeading: "Språk",
-      // Not checked by a Swedish speaker (NOT_CHECKED_BY_A_SPEAKER).
       key: {
         heading: "API-nyckel",
         stored: "En nyckel är sparad.",
@@ -109,7 +130,6 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         saveFailed: "Nyckeln gick inte att spara. Försök igen.",
         removeFailed: "Nyckeln gick inte att ta bort. Försök igen.",
       },
-      // Not checked by a Swedish speaker (NOT_CHECKED_BY_A_SPEAKER).
       model: {
         heading: "Modell",
         inUse: "Modell som används",
@@ -180,6 +200,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       back: "Back to Finds",
     },
   },
+  // Not checked by an Italian speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
   it: {
     languageName: "Italiano",
     disclaimer:
@@ -197,7 +218,6 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     settings: {
       title: "Impostazioni",
       languageHeading: "Lingua",
-      // Not checked by an Italian speaker (NOT_CHECKED_BY_A_SPEAKER).
       key: {
         heading: "Chiave API",
         stored: "Una chiave è salvata.",
@@ -214,7 +234,6 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         saveFailed: "Non è stato possibile salvare la chiave. Riprova.",
         removeFailed: "Non è stato possibile rimuovere la chiave. Riprova.",
       },
-      // Not checked by an Italian speaker (NOT_CHECKED_BY_A_SPEAKER).
       model: {
         heading: "Modello",
         inUse: "Modello in uso",

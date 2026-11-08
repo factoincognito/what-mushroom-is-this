@@ -49,24 +49,44 @@ describe("STRINGS", () => {
   });
 });
 
+/** Whether an entry of NOT_CHECKED_BY_A_SPEAKER covers a key path: the path itself or a group. */
+function covers(entry: string, path: string): boolean {
+  return path === entry || path.startsWith(`${entry}.`);
+}
+
 describe("NOT_CHECKED_BY_A_SPEAKER", () => {
-  it("marks the Swedish and the Italian strings of the key and model settings (PBI-1.2)", () => {
-    expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({
-      sv: ["settings.key", "settings.model"],
-      it: ["settings.key", "settings.model"],
-    });
+  const UNCHECKED = [
+    "languageName",
+    "firstStart",
+    "log",
+    "settings.title",
+    "settings.languageHeading",
+    "settings.key",
+    "settings.model",
+    "notFound",
+  ];
+
+  it("marks the Swedish and the Italian strings of PBI-1.1 and PBI-1.2", () => {
+    expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
   });
 
-  it.each(["sv", "it"] as const)("names in %s only groups of strings that exist", (language) => {
+  it.each(["sv", "it"] as const)("names in %s only strings that exist", (language) => {
     const paths = keyPaths(STRINGS[language]);
-    for (const group of NOT_CHECKED_BY_A_SPEAKER[language]) {
-      expect(paths.some((path) => path.startsWith(`${group}.`))).toBe(true);
+    for (const entry of NOT_CHECKED_BY_A_SPEAKER[language]) {
+      expect(paths.some((path) => covers(entry, path))).toBe(true);
     }
   });
 
-  it("does not mark the disclaimer, which an Italian speaker checked", () => {
-    for (const group of [...NOT_CHECKED_BY_A_SPEAKER.sv, ...NOT_CHECKED_BY_A_SPEAKER.it]) {
-      expect("disclaimer".startsWith(group)).toBe(false);
+  it.each(["sv", "it"] as const)("covers every string in %s but the disclaimer", (language) => {
+    const uncovered = keyPaths(STRINGS[language]).filter(
+      (path) => !NOT_CHECKED_BY_A_SPEAKER[language].some((entry) => covers(entry, path)),
+    );
+    expect(uncovered).toEqual(["disclaimer"]);
+  });
+
+  it("does not mark the disclaimer, the approved text of SPEC 3.5, which an Italian speaker checked", () => {
+    for (const entry of [...NOT_CHECKED_BY_A_SPEAKER.sv, ...NOT_CHECKED_BY_A_SPEAKER.it]) {
+      expect(covers(entry, "disclaimer")).toBe(false);
     }
   });
 });

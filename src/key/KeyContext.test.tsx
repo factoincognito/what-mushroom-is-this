@@ -171,6 +171,29 @@ describe("KeyProvider", () => {
     expect(screen.getByTestId("status")).toHaveTextContent("stored");
   });
 
+  it("removes a key asked for during the startup read only after the read, so it reports no key", async () => {
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: A_KEY });
+    let releaseRead: () => void = () => undefined;
+    secrets.getItemAsync = (key) => {
+      // The value as it is when the read starts, given once the read is released.
+      const value = secrets.values.get(key) ?? null;
+      return new Promise((resolve) => {
+        releaseRead = () => resolve(value);
+      });
+    };
+    await renderProvider(secrets, memoryStore(MARKED));
+    let removed: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      removed = current().remove();
+    });
+    await act(async () => {
+      releaseRead();
+      await expect(removed).resolves.toEqual({ ok: true });
+    });
+    expect(secrets.values.has(API_KEY_STORE_KEY)).toBe(false);
+    expect(screen.getByTestId("status")).toHaveTextContent("none");
+  });
+
   it("does not update after it is gone", async () => {
     let releaseMarker: (value: string | null) => void = () => undefined;
     const store: KeyValueStore = {
