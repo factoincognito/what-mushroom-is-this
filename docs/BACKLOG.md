@@ -22,7 +22,7 @@ phase one is phase 1, item 1. Numbers are never reused.
 
 ---
 
-## Waiting for the product owner
+## Waiting for Adam
 
 What needs Adam is in the product office's "Waiting for Adam" list, the
 one list he reads (product-office Process P-9 § 3 (1)), not here.
