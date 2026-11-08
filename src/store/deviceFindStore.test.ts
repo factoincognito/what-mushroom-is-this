@@ -1,11 +1,13 @@
 import { Directory, File, Paths } from "expo-file-system";
-import { requireNativeModule } from "expo-modules-core";
 import { openDatabaseAsync } from "expo-sqlite";
 
 import { openFindLog } from "./deviceFindStore";
 
-/** jest-expo backs expo-file-system's native module with an in-memory file system. */
-const nativeFileSystem = requireNativeModule<{ __resetMockFileSystem(): void }>("FileSystem");
+/*
+ * jest-expo backs expo-file-system's native module with an in-memory file system, shared by the
+ * tests of this file. Every opening removes the photos no find refers to, and the database here
+ * holds no finds, so each test starts with an empty photo directory.
+ */
 
 /** What reaches expo-sqlite: each statement and its parameters. */
 const mockSent: { sql: string; params: unknown }[] = [];
@@ -33,7 +35,6 @@ const mockDatabase = {
 jest.mock("expo-sqlite", () => ({ openDatabaseAsync: jest.fn(async () => mockDatabase) }));
 
 beforeEach(() => {
-  nativeFileSystem.__resetMockFileSystem();
   mockSent.length = 0;
 });
 
@@ -47,7 +48,7 @@ describe("openFindLog", () => {
 
   it("removes a photo in the directory that no find refers to", async () => {
     const photos = new Directory(Paths.document, "photos");
-    photos.create({ intermediates: true });
+    photos.create({ intermediates: true, idempotent: true });
     const orphan = new File(photos, "left-over.jpg");
     orphan.write(new Uint8Array([1]));
     await openFindLog();

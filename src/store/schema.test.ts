@@ -20,7 +20,10 @@ class VersionedDatabase implements FindDatabase {
     }
   }
 
-  async runAsync(_source: string, _params: SQLiteBindParams) {
+  async runAsync(
+    _source: string,
+    _params: SQLiteBindParams,
+  ): Promise<{ changes: number; lastInsertRowId: number }> {
     throw new Error("not used by migrate");
   }
 
