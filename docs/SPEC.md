@@ -153,7 +153,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   - input that is not a JPEG, or is cut short or malformed, fails.
   Not checked yet: what the phone's image encoder writes (Known unknown
   2); if it writes something this check refuses, every analysis fails,
-  so it is tried on a phone early (PBI-1.6).
+  so it is checked as early as it can be: in PBI-1.6 if the encoder can
+  be run off a phone, otherwise in Adam's test session on his phone.
   A JPEG that fails the check is not sent; the find is marked failed.
 - The prompt asks for one answer in a fixed JSON shape:
   - the best match: its names in Swedish, English, Latin and Italian;
