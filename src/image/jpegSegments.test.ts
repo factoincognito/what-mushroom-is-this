@@ -15,7 +15,14 @@ const JFIF = segment(
   0xe0,
   [0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01],
 );
-const ICC = segment(0xe2, [0x49, 0x43, 0x43, 0x5f, 0x50, 0x52, 0x4f, 0x46, 0x49, 0x4c, 0x45, 0x00]);
+/** "ICC_PROFILE\0", then the chunk number and count, then the start of a profile. */
+const ICC_ID = [0x49, 0x43, 0x43, 0x5f, 0x50, 0x52, 0x4f, 0x46, 0x49, 0x4c, 0x45, 0x00];
+const ICC = segment(0xe2, [...ICC_ID, 0x01, 0x01, 0x00, 0x00, 0x02, 0x0c]);
+/** "MPF\0", the Multi-Picture Format index that points to images appended after EOI. */
+const MPF = segment(0xe2, [0x4d, 0x50, 0x46, 0x00, 0x4d, 0x4d, 0x00, 0x2a]);
+const COM = segment(0xfe, [0x68, 0x69]);
+const DHT = segment(0xc4, [0x00, 0x01, 0x02]);
+const SOF2 = segment(0xc2, [0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00]);
 const EXIF = segment(0xe1, [0x45, 0x78, 0x69, 0x66, 0x00, 0x00]);
 const DQT = segment(0xdb, [0x00, 0x01, 0x02, 0x03]);
 const SOF0 = segment(0xc0, [0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00]);
@@ -34,21 +41,138 @@ describe("checkJpegSegments: passing input", () => {
   });
 
   it("passes a JPEG whose markers are preceded by 0xFF fill bytes", () => {
-    expect(checkJpegSegments(jpeg(SOI, [0xff, 0xff], JFIF, [0xff], DQT, SCAN))).toEqual({
+    expect(checkJpegSegments(jpeg(SOI, [0xff, 0xff], JFIF, [0xff], DQT, SCAN, EOI))).toEqual({
       ok: true,
     });
   });
 
   it("skips the standalone markers TEM and RSTn without a length", () => {
-    expect(checkJpegSegments(jpeg(SOI, [0xff, 0x01], [0xff, 0xd3], JFIF, SCAN))).toEqual({
+    expect(checkJpegSegments(jpeg(SOI, [0xff, 0x01], [0xff, 0xd3], JFIF, SCAN, EOI))).toEqual({
       ok: true,
     });
   });
 
   it("passes a Uint8Array view onto part of a larger buffer, reading only the view", () => {
-    const backing = jpeg(EXIF, SOI, JFIF, SCAN, EOI);
-    const view = new Uint8Array(backing.buffer, EXIF.length);
+    const image = jpeg(SOI, JFIF, SCAN, EOI);
+    const backing = jpeg(EXIF, Array.from(image), EXIF);
+    const view = new Uint8Array(backing.buffer, EXIF.length, image.length);
     expect(checkJpegSegments(view)).toEqual({ ok: true });
+  });
+
+  it("passes a progressive JPEG with tables and several scans before EOI", () => {
+    expect(
+      checkJpegSegments(jpeg(SOI, JFIF, ICC, DQT, SOF2, DHT, SCAN, DHT, SCAN, SCAN, EOI)),
+    ).toEqual({ ok: true });
+  });
+
+  it("reads 0xFF00 stuffing and RST0 to RST7 inside a scan as data", () => {
+    const entropy = [0x11, 0xff, 0x00, 0x22, 0xff, 0xd0, 0x33, 0xff, 0xd7, 0x44, 0xff, 0x00];
+    expect(checkJpegSegments(jpeg(SOI, JFIF, SCAN, entropy, EOI))).toEqual({ ok: true });
+  });
+
+  it("reads 0xFF fill bytes before the marker that ends a scan", () => {
+    expect(checkJpegSegments(jpeg(SOI, SCAN, [0xff, 0xff, 0xff], EOI))).toEqual({ ok: true });
+  });
+});
+
+describe("checkJpegSegments: segments between and after scans", () => {
+  it("fails APP1 between two scans", () => {
+    expect(checkJpegSegments(jpeg(SOI, JFIF, SCAN, EXIF, SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffe1,
+    });
+  });
+
+  it("fails APP13 that follows the stuffed and restart bytes of a scan", () => {
+    const entropy = [0x11, 0xff, 0x00, 0xff, 0xd3, 0x22];
+    expect(checkJpegSegments(jpeg(SOI, SCAN, entropy, segment(0xed, [0x50]), SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffed,
+    });
+  });
+
+  it("fails COM between two scans", () => {
+    expect(checkJpegSegments(jpeg(SOI, SCAN, DHT, COM, SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xfffe,
+    });
+  });
+
+  it("fails a second SOI that ends a scan", () => {
+    expect(checkJpegSegments(jpeg(SOI, SCAN, SOI, EOI))).toEqual({
+      ok: false,
+      reason: "malformed",
+      marker: 0xffd8,
+    });
+  });
+
+  it("fails a byte other than 0xFF where a marker should start after a table between scans", () => {
+    expect(checkJpegSegments(jpeg(SOI, SCAN, DHT, [0x00], SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "malformed",
+      marker: null,
+    });
+  });
+});
+
+describe("checkJpegSegments: data after EOI", () => {
+  it("fails one byte after EOI as trailing data", () => {
+    expect(checkJpegSegments(jpeg(SOI, JFIF, SCAN, EOI, [0x00]))).toEqual({
+      ok: false,
+      reason: "trailing-data",
+      marker: null,
+    });
+  });
+
+  it("fails a second image appended after EOI, as the Multi-Picture Format appends one", () => {
+    const appended = jpeg(SOI, EXIF, SCAN, EOI);
+    expect(checkJpegSegments(jpeg(SOI, JFIF, SCAN, EOI, Array.from(appended)))).toEqual({
+      ok: false,
+      reason: "trailing-data",
+      marker: null,
+    });
+  });
+});
+
+describe("checkJpegSegments: APP2 and COM", () => {
+  it("fails APP2 holding the Multi-Picture Format index (MPF)", () => {
+    expect(checkJpegSegments(jpeg(SOI, JFIF, MPF, SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffe2,
+    });
+  });
+
+  it("fails APP2 shorter than the ICC_PROFILE identifier", () => {
+    expect(checkJpegSegments(jpeg(SOI, segment(0xe2, ICC_ID.slice(0, 11)), SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffe2,
+    });
+  });
+
+  it("fails APP2 whose identifier lacks the closing NUL byte of ICC_PROFILE", () => {
+    const id = [...ICC_ID.slice(0, 11), 0x20, 0x01, 0x01];
+    expect(checkJpegSegments(jpeg(SOI, segment(0xe2, id), SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xffe2,
+    });
+  });
+
+  it("passes APP2 holding exactly the ICC_PROFILE identifier", () => {
+    expect(checkJpegSegments(jpeg(SOI, segment(0xe2, ICC_ID), SCAN, EOI))).toEqual({ ok: true });
+  });
+
+  it("fails COM before the scan", () => {
+    expect(checkJpegSegments(jpeg(SOI, JFIF, COM, SCAN, EOI))).toEqual({
+      ok: false,
+      reason: "forbidden-segment",
+      marker: 0xfffe,
+    });
   });
 });
 
@@ -196,6 +320,38 @@ describe("checkJpegSegments: truncated input", () => {
       ok: false,
       reason: "truncated",
       marker: 0xffda,
+    });
+  });
+
+  it("fails a scan that runs to the end of the bytes with no EOI", () => {
+    expect(checkJpegSegments(jpeg(SOI, JFIF, SCAN))).toEqual({
+      ok: false,
+      reason: "truncated",
+      marker: null,
+    });
+  });
+
+  it("fails a scan whose bytes end on a 0xFF with no marker after it", () => {
+    expect(checkJpegSegments(jpeg(SOI, SCAN, [0x11, 0xff]))).toEqual({
+      ok: false,
+      reason: "truncated",
+      marker: null,
+    });
+  });
+
+  it("fails a scan whose bytes end inside 0xFF fill bytes", () => {
+    expect(checkJpegSegments(jpeg(SOI, SCAN, [0xff, 0xff, 0xff]))).toEqual({
+      ok: false,
+      reason: "truncated",
+      marker: null,
+    });
+  });
+
+  it("fails a table segment after a scan that ends before the next scan or EOI", () => {
+    expect(checkJpegSegments(jpeg(SOI, SCAN, DHT))).toEqual({
+      ok: false,
+      reason: "truncated",
+      marker: null,
     });
   });
 

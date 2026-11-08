@@ -1,8 +1,13 @@
 /**
- * The check that a JPEG to be sent carries no metadata (docs/SPEC.md 3.3): every
- * application segment (APP0 to APP15) before the start of scan must be APP0 (JFIF)
- * or APP2 (the colour profile). APP1 (EXIF, XMP), APP13 (IPTC) and every other
- * APPn fail, since they can carry a position.
+ * The check that a JPEG to be sent carries no metadata (docs/SPEC.md 3.3). The whole
+ * file is parsed to EOI, scans included, and every segment found, before the first
+ * scan or between scans, is checked:
+ * - APP0 (JFIF) passes;
+ * - APP2 passes only when it is a colour profile, its identifier "ICC_PROFILE\0";
+ *   any other APP2, such as the Multi-Picture Format index "MPF\0", fails;
+ * - every other application segment (APP1 for EXIF and XMP, APP13 for IPTC, ...) and
+ *   COM (a comment, which can carry text) fail;
+ * - any byte after EOI fails, which catches images appended after the first one.
  *
  * The check never throws: bad input gives a failing result with its own reason.
  */
@@ -12,12 +17,14 @@ export type JpegSegmentFailure =
   | "invalid-input"
   /** The bytes do not start with SOI (0xFFD8). */
   | "not-jpeg"
-  /** The bytes end before the start of scan, or a segment runs past the end. */
+  /** The bytes end before EOI, or a segment runs past the end. */
   | "truncated"
-  /** The structure before the start of scan breaks the JPEG syntax. */
+  /** The marker structure breaks the JPEG syntax, or EOI comes before any scan. */
   | "malformed"
-  /** An application segment other than APP0 and APP2 comes before the start of scan. */
-  | "forbidden-segment";
+  /** A segment that can carry metadata: an APPn other than APP0 and an ICC APP2, or COM. */
+  | "forbidden-segment"
+  /** Bytes follow EOI. */
+  | "trailing-data";
 
 export type JpegSegmentCheck =
   | { ok: true }
@@ -25,15 +32,19 @@ export type JpegSegmentCheck =
   | { ok: false; reason: JpegSegmentFailure; marker: number | null };
 
 const MARKER_PREFIX = 0xff;
+const STUFFED_ZERO = 0x00;
 const SOI = 0xd8;
 const EOI = 0xd9;
 const SOS = 0xda;
+const COM = 0xfe;
 const TEM = 0x01;
 const RST0 = 0xd0;
 const RST7 = 0xd7;
 const APP0 = 0xe0;
 const APP2 = 0xe2;
 const APP15 = 0xef;
+/** "ICC_PROFILE" and its closing NUL byte. */
+const ICC_PROFILE_ID = [0x49, 0x43, 0x43, 0x5f, 0x50, 0x52, 0x4f, 0x46, 0x49, 0x4c, 0x45, 0x00];
 
 function fail(reason: JpegSegmentFailure, marker: number | null): JpegSegmentCheck {
   return { ok: false, reason, marker };
@@ -43,12 +54,66 @@ function fullMarker(markerByte: number): number {
   return (MARKER_PREFIX << 8) | markerByte;
 }
 
-function isStandalone(markerByte: number): boolean {
-  return markerByte === TEM || (markerByte >= RST0 && markerByte <= RST7);
+function isRestart(markerByte: number): boolean {
+  return markerByte >= RST0 && markerByte <= RST7;
 }
 
 function isApplicationSegment(markerByte: number): boolean {
   return markerByte >= APP0 && markerByte <= APP15;
+}
+
+/** Whether the payload starting at `start`, `length` bytes long, opens with "ICC_PROFILE\0". */
+function isIccProfile(bytes: Uint8Array, start: number, length: number): boolean {
+  return (
+    length >= ICC_PROFILE_ID.length &&
+    ICC_PROFILE_ID.every((value, index) => bytes[start + index] === value)
+  );
+}
+
+/** Whether a segment can carry metadata and so must not be sent. */
+function isForbidden(
+  markerByte: number,
+  bytes: Uint8Array,
+  start: number,
+  length: number,
+): boolean {
+  if (markerByte === COM) {
+    return true;
+  }
+  if (!isApplicationSegment(markerByte) || markerByte === APP0) {
+    return false;
+  }
+  return !(markerByte === APP2 && isIccProfile(bytes, start, length));
+}
+
+/**
+ * Skips the entropy-coded data of a scan, from `start`. 0xFF00 stuffing and RST0 to
+ * RST7 are data; 0xFF fill bytes may come before a marker; any other marker ends the
+ * scan. Gives the position of the 0xFF that starts that marker, or null when the bytes
+ * end first.
+ */
+function endOfScan(bytes: Uint8Array, start: number): number | null {
+  let position = start;
+  while (position < bytes.length) {
+    if (bytes[position] !== MARKER_PREFIX) {
+      position += 1;
+      continue;
+    }
+    let next = position + 1;
+    while (bytes[next] === MARKER_PREFIX) {
+      next += 1;
+    }
+    const markerByte = bytes[next];
+    if (markerByte === undefined) {
+      return null;
+    }
+    if (markerByte === STUFFED_ZERO || isRestart(markerByte)) {
+      position = next + 1;
+      continue;
+    }
+    return next - 1;
+  }
+  return null;
 }
 
 export function checkJpegSegments(bytes: unknown): JpegSegmentCheck {
@@ -61,6 +126,7 @@ export function checkJpegSegments(bytes: unknown): JpegSegmentCheck {
   }
 
   let position = 2;
+  let sawScan = false;
   while (position < end) {
     if (bytes[position] !== MARKER_PREFIX) {
       return fail("malformed", null);
@@ -76,10 +142,13 @@ export function checkJpegSegments(bytes: unknown): JpegSegmentCheck {
     const marker = fullMarker(markerByte);
     position += 1;
 
-    if (isStandalone(markerByte)) {
+    if (markerByte === TEM || isRestart(markerByte)) {
       continue;
     }
-    if (markerByte === 0x00 || markerByte === SOI || markerByte === EOI) {
+    if (markerByte === EOI && sawScan) {
+      return position === end ? { ok: true } : fail("trailing-data", null);
+    }
+    if (markerByte === STUFFED_ZERO || markerByte === SOI || markerByte === EOI) {
       return fail("malformed", marker);
     }
 
@@ -95,14 +164,19 @@ export function checkJpegSegments(bytes: unknown): JpegSegmentCheck {
     if (position + length > end) {
       return fail("truncated", marker);
     }
-
-    if (markerByte === SOS) {
-      return { ok: true };
-    }
-    if (isApplicationSegment(markerByte) && markerByte !== APP0 && markerByte !== APP2) {
+    if (isForbidden(markerByte, bytes, position + 2, length - 2)) {
       return fail("forbidden-segment", marker);
     }
     position += length;
+
+    if (markerByte === SOS) {
+      sawScan = true;
+      const scanEnd = endOfScan(bytes, position);
+      if (scanEnd === null) {
+        return fail("truncated", null);
+      }
+      position = scanEnd;
+    }
   }
   return fail("truncated", null);
 }
