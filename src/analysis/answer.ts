@@ -49,8 +49,11 @@ export interface Match {
 
 export type Answer = Match | { result: "no_mushroom" } | { result: "cannot_tell" };
 
-/** Why an answer was not accepted: not from the API at all, or not of the shape. */
-export type AnswerFailure = { ok: false; reason: "not-api" | "shape"; detail: string };
+/**
+ * Why an answer was not accepted: not from the API at all, not of the shape, or refused by
+ * Claude (`stop_reason` `refusal`), which is not a shape failure.
+ */
+export type AnswerFailure = { ok: false; reason: "not-api" | "shape" | "refused"; detail: string };
 export type AnswerResult = { ok: true; answer: Answer } | AnswerFailure;
 
 /** The edibility to show: "unknown" whenever the confidence is low. */
@@ -73,11 +76,12 @@ export const CUT_OFF_STOP_REASONS = ["max_tokens", "model_context_window_exceede
 export const REFUSAL_STOP_REASON = "refusal";
 
 /**
- * Reads the body of a 2xx answer of the Messages API. The answer is its one text block; the
- * thinking blocks that Claude 5 models put before it (`thinking`, `redacted_thinking`; Claude
- * docs, "Thinking", https://platform.claude.com/docs/en/build-with-claude/thinking, read
- * 2026-11-09) and any other block are skipped. A cut-off answer and a refusal each fail with
- * their own detail, whatever the text holds.
+ * Reads the body of a 2xx answer of the Messages API. The answer is the text of its text
+ * blocks, joined in their order with nothing between them; the thinking blocks that Claude 5
+ * models put before it (`thinking`, `redacted_thinking`; Claude docs, "Thinking",
+ * https://platform.claude.com/docs/en/build-with-claude/thinking, read 2026-11-09) and any other
+ * block are skipped. A cut-off answer and a refusal each fail with their own detail, whatever
+ * the text holds; a refusal fails with its own reason, `refused`.
  */
 export function readMessageBody(body: string): AnswerResult {
   const notApi: AnswerFailure = {
@@ -107,11 +111,21 @@ export function readMessageBody(body: string): AnswerResult {
     return shapeFailure(`the answer was cut off (stop_reason ${stopReason})`);
   }
   if (stopReason === REFUSAL_STOP_REASON) {
-    return shapeFailure(`the answer was refused (stop_reason ${REFUSAL_STOP_REASON})`);
+    return {
+      ok: false,
+      reason: "refused",
+      detail: `the answer was refused (stop_reason ${REFUSAL_STOP_REASON})`,
+    };
   }
-  const [text] = texts;
-  if (texts.length !== 1 || typeof text !== "string") {
-    return shapeFailure("the message has no single text block");
+  if (texts.length === 0) {
+    return shapeFailure("the message has no text block");
+  }
+  let text = "";
+  for (const part of texts) {
+    if (typeof part !== "string") {
+      return shapeFailure("a text block's text is not a string");
+    }
+    text += part;
   }
   return parseAnswerText(text);
 }

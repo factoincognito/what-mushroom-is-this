@@ -15,8 +15,9 @@ export type AnalysisError =
    */
   | { kind: "rate-limited"; retryAt: number | null }
   /**
-   * 401, 403, or (`status` null) a key that cannot be sent as a header value, refused
-   * before sending: the queue stops; Settings asks for a key.
+   * 401, 403, a 400 that says the key is not scoped to a workspace (see
+   * `NOT_SCOPED_KEY_MESSAGE`), or (`status` null) a key that cannot be sent as a header value,
+   * refused before sending: the queue stops; Settings asks for a key.
    */
   | { kind: "key-refused"; status: number | null }
   /** 402, or a 400 whose error type is `billing_error`: the queue stops. */
@@ -30,6 +31,17 @@ export type AnalysisError =
   | {
       kind: "find-failed";
       reason: "request-wrong" | "request-too-large";
+      status: number;
+      queue: "goes-on";
+    }
+  /**
+   * A 2xx answer that Claude refused (`stop_reason` `refusal`): the find is marked failed; the
+   * queue goes on with the next, as for a 400 (Clead's decision for PBI-1.13).
+   */
+  | {
+      kind: "find-failed";
+      reason: "refused";
+      detail: string;
       status: number;
       queue: "goes-on";
     }
@@ -69,8 +81,17 @@ export function classifyOutcome(
   const { status, body } = outcome;
   if (status >= 200 && status <= 299) {
     const read = readMessageBody(body);
-    return read.ok
-      ? read
+    if (read.ok) {
+      return read;
+    }
+    return read.reason === "refused"
+      ? failure({
+          kind: "find-failed",
+          reason: read.reason,
+          detail: read.detail,
+          status,
+          queue: "goes-on",
+        })
       : failure({
           kind: "find-failed",
           reason: read.reason,
@@ -124,7 +145,19 @@ export const SPEND_LIMIT_MESSAGES = [
   "You have reached your specified workspace API usage limits",
 ];
 
-/** A 400: no credit, a spend limit the user set, or else the request was wrong. */
+/**
+ * How the message of a 400 `invalid_request_error` starts when the key is not scoped to a
+ * workspace and the request has no `anthropic-workspace-id` header (Claude API docs,
+ * "Authentication", https://platform.claude.com/docs/manage-claude/authentication, section
+ * "Select a workspace", read 2026-11-09). The app does not send that header (docs/SPEC.md 3.3,
+ * Known unknown 8), so the key is handled as refused, as 401, 403.
+ */
+export const NOT_SCOPED_KEY_MESSAGE = "This API key is not scoped to a workspace";
+
+/**
+ * A 400: no credit, a spend limit the user set, a key not scoped to a workspace, or else the
+ * request was wrong.
+ */
 function classifyBadRequest(body: string): AnalysisResult {
   const error = apiError(body);
   if (error?.type === "billing_error") {
@@ -135,6 +168,12 @@ function classifyBadRequest(body: string): AnalysisResult {
     SPEND_LIMIT_MESSAGES.some((start) => error.message?.startsWith(start))
   ) {
     return failure({ kind: "rate-limited", retryAt: null });
+  }
+  if (
+    error?.type === "invalid_request_error" &&
+    error.message?.startsWith(NOT_SCOPED_KEY_MESSAGE)
+  ) {
+    return failure({ kind: "key-refused", status: 400 });
   }
   return failure({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" });
 }

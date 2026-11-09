@@ -119,6 +119,23 @@ describe("classifyOutcome, the queue stops for a setting", () => {
     });
   });
 
+  it("asks for a key on a 400 that says the key is not scoped to a workspace", () => {
+    // The message as the API's "Authentication" page gives it.
+    const message =
+      "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use. Add the header, or use an API key that is scoped to a workspace.";
+    expect(
+      classifyOutcome(http(400, apiError("invalid_request_error", message)), receivedAt),
+    ).toEqual({ ok: false, error: { kind: "key-refused", status: 400 } });
+  });
+
+  it("asks for a key on a 400 whose message only starts with the workspace text", () => {
+    const body = apiError("invalid_request_error", "This API key is not scoped to a workspace");
+    expect(classifyOutcome(http(400, body), receivedAt)).toEqual({
+      ok: false,
+      error: { kind: "key-refused", status: 400 },
+    });
+  });
+
   it("says there is no credit on 402", () => {
     expect(classifyOutcome(http(402, apiError("billing_error")), receivedAt)).toEqual({
       ok: false,
@@ -162,6 +179,18 @@ describe("classifyOutcome, the find fails and the queue goes on", () => {
     [
       "the spend-limit text in another case",
       apiError("invalid_request_error", "you have reached your specified API usage limits"),
+    ],
+    [
+      "the workspace text not at the start of the message",
+      apiError("invalid_request_error", "Note: This API key is not scoped to a workspace"),
+    ],
+    [
+      "the workspace text under another error type",
+      apiError("authentication_error", "This API key is not scoped to a workspace"),
+    ],
+    [
+      "the workspace text in another case",
+      apiError("invalid_request_error", "this API key is not scoped to a workspace"),
     ],
     [
       "a message that is not a string",
@@ -229,7 +258,7 @@ describe("classifyOutcome, a success answer", () => {
     });
   });
 
-  it("fails the find and stops the queue on a refusal, saying it was refused", () => {
+  it("fails the find and lets the queue go on after a refusal, saying it was refused", () => {
     const body = JSON.stringify({
       type: "message",
       role: "assistant",
@@ -241,11 +270,27 @@ describe("classifyOutcome, a success answer", () => {
       ok: false,
       error: {
         kind: "find-failed",
-        reason: "shape",
+        reason: "refused",
         detail: "the answer was refused (stop_reason refusal)",
         status: 200,
-        queue: "stops",
+        queue: "goes-on",
       },
+    });
+  });
+
+  it("reads an answer split over several text blocks", () => {
+    const body = JSON.stringify({
+      type: "message",
+      role: "assistant",
+      content: [
+        { type: "text", text: '{"result":' },
+        { type: "text", text: '"no_mushroom"}' },
+      ],
+      stop_reason: "end_turn",
+    });
+    expect(classifyOutcome(http(200, body), receivedAt)).toEqual({
+      ok: true,
+      answer: { result: "no_mushroom" },
     });
   });
 
