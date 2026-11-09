@@ -7,7 +7,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "android": {
-      "allowBackup": false
+      "package": "com.factoincognito.mushroomlog",
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "ios": {
       "infoPlist": {

@@ -80,10 +80,25 @@ function readOptions(options) {
   });
 }
 
+/** The namespace of `tools:ignore` ("Improve your code with lint checks", developer.android.com). */
+const TOOLS_NAMESPACE = 'xmlns:tools="http://schemas.android.com/tools"';
+
+/**
+ * Android lint's `FullBackupContent` check, of severity Fatal, runs in release builds and stops
+ * them, and reports an exclude that is not under an include of its domain ("FullBackupContent:
+ * Valid Full Backup Content File", the Lint Issue Index; "Lint Gradle Plugin DSL",
+ * `checkReleaseBuilds`). The excludes of the files and the databases are under no include, and
+ * whether the check takes the include path "." as a prefix of "SecureStore" is not documented.
+ * The excludes are kept, as they guard the log if an include is ever widened, and the check is
+ * turned off for the excludes only (PBI-1.10).
+ */
+const IGNORE_LINT = 'tools:ignore="FullBackupContent"';
+
 function ruleLines(rules, indent) {
-  return rules.map(
-    (rule) => `${indent}<${rule.kind} domain="${rule.domain}" path="${rule.path}"/>`,
-  );
+  return rules.map((rule) => {
+    const ignore = rule.kind === "exclude" ? ` ${IGNORE_LINT}` : "";
+    return `${indent}<${rule.kind} domain="${rule.domain}" path="${rule.path}"${ignore}/>`;
+  });
 }
 
 /** The rules for Android 11 and lower. */
@@ -91,7 +106,7 @@ function backupRulesXml(rules) {
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
     "<!-- Written by plugins/withBackupRules.js; Auto Backup rules for Android 11 and lower. -->",
-    "<full-backup-content>",
+    `<full-backup-content ${TOOLS_NAMESPACE}>`,
     ...ruleLines(rules, "  "),
     "</full-backup-content>",
     "",
@@ -103,7 +118,7 @@ function dataExtractionRulesXml(rules) {
   return [
     '<?xml version="1.0" encoding="utf-8"?>',
     "<!-- Written by plugins/withBackupRules.js; data extraction rules for Android 12 and higher. -->",
-    "<data-extraction-rules>",
+    `<data-extraction-rules ${TOOLS_NAMESPACE}>`,
     "  <cloud-backup>",
     ...ruleLines(rules, "    "),
     "  </cloud-backup>",
