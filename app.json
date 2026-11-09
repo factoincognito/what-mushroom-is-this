@@ -7,11 +7,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "android": {
-      "allowBackup": false,
-      "permissions": [
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
-      ]
+      "allowBackup": false
     },
     "ios": {
       "infoPlist": {
@@ -25,21 +21,10 @@
       "it": "./locales/it.json"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "sitemap": false
-        }
-      ],
+      ["expo-router", { "sitemap": false }],
       "expo-localization",
       "expo-sqlite",
-      [
-        "expo-secure-store",
-        {
-          "faceIDPermission": false,
-          "configureAndroidBackup": false
-        }
-      ],
+      ["expo-secure-store", { "faceIDPermission": false, "configureAndroidBackup": false }],
       [
         "expo-image-picker",
         {
@@ -61,26 +46,14 @@
         "./plugins/withBackupRules",
         {
           "exclude": [
-            {
-              "domain": "file",
-              "path": "SQLite"
-            },
-            {
-              "domain": "file",
-              "path": "photos"
-            },
-            {
-              "domain": "database",
-              "path": "."
-            }
+            { "domain": "file", "path": "SQLite" },
+            { "domain": "file", "path": "photos" },
+            { "domain": "database", "path": "." }
           ]
         }
       ]
     ],
     "extra": {
-      "router": {
-        "sitemap": false
-      },
       "eas": {
         "projectId": "b6ce1397-9629-47c4-a3c6-84c43913c0f7"
       }
