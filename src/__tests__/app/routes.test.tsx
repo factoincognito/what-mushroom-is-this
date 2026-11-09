@@ -19,6 +19,12 @@ jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
 );
 jest.mock("expo-localization", () => ({ getLocales: jest.fn() }));
+/*
+ * The layout gives the screens the find log, which opens through expo-sqlite. expo-sqlite imports
+ * expo-asset, which npm keeps under expo/node_modules: Metro finds it there (checked with
+ * `npx expo export --platform android`), Jest does not. These tests open no find log.
+ */
+jest.mock("../../store/deviceFindStore", () => ({ openFindLog: jest.fn() }));
 
 /** The phone's secure store, in memory. (Named `mock…` so that the hoisted factory may use it.) */
 const mockSecrets = new Map<string, string>();
@@ -97,12 +103,11 @@ describe("the Log screen", () => {
     expect(await screen.findByText(STRINGS.sv.log.empty)).toBeOnTheScreen();
   });
 
-  it("has a New find placeholder that is disabled and goes nowhere", async () => {
-    const app = await startApp();
-    const newFind = await screen.findByRole("button", { name: STRINGS.en.log.newFind });
-    expect(newFind).toBeDisabled();
-    await fireEvent.press(newFind);
-    expect(app.pathname()).toBe("/");
+  it("has New find as an enabled link (where it leads: newFind.test.tsx)", async () => {
+    await startApp();
+    const newFind = await screen.findByRole("link", { name: STRINGS.en.log.newFind });
+    expect(newFind).toBeEnabled();
+    expect(screen.queryByRole("button", { name: STRINGS.en.log.newFind })).not.toBeOnTheScreen();
   });
 
   it("links to the Settings screen", async () => {

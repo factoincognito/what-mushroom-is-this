@@ -64,9 +64,10 @@ describe("NOT_CHECKED_BY_A_SPEAKER", () => {
     "settings.key",
     "settings.model",
     "notFound",
+    "newFind",
   ];
 
-  it("marks the Swedish and the Italian strings of PBI-1.1 and PBI-1.2", () => {
+  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2 and PBI-1.6", () => {
     expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
   });
 
@@ -119,6 +120,27 @@ describe("the strings of the key and model settings", () => {
       "settings.model.save",
       "settings.model.saveFailed",
       "settings.model.saved",
+    ]);
+  });
+});
+
+describe("the strings of the new find", () => {
+  it.each(LANGUAGES)("are all there in %s", (language) => {
+    expect(keyPaths(STRINGS[language]).filter((path) => path.startsWith("newFind."))).toEqual([
+      "newFind.asking",
+      "newFind.back",
+      "newFind.cameraBlocked",
+      "newFind.cameraDenied",
+      "newFind.discardPhoto",
+      "newFind.openSettings",
+      "newFind.pickFailed",
+      "newFind.pickFromGallery",
+      "newFind.retrySave",
+      "newFind.saveFailed",
+      "newFind.saved",
+      "newFind.saving",
+      "newFind.takePhoto",
+      "newFind.title",
     ]);
   });
 });

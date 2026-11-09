@@ -146,7 +146,10 @@ function checkTime(time: FindTime): void {
   }
 }
 
-function checkPosition(position: Position): void {
+export function checkPosition(position: Position | null): void {
+  if (position === null || typeof position !== "object") {
+    throw invalid("there is no position");
+  }
   if (!isInRange(position.latitude, 90)) {
     throw invalid("the latitude is not a number from -90 to 90");
   }

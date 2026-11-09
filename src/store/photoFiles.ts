@@ -10,7 +10,11 @@ import { corrupt, invalid } from "./find";
 export interface PhotoFiles {
   /** Makes the directory if it is not there. */
   prepare(): void;
-  /** Copies the photo at `sourceUri` in as `baseName` plus the source's extension; gives the name. */
+  /**
+   * Copies the photo at `sourceUri` in as `baseName` plus the source's extension, or as
+   * `baseName` alone when the source has no extension of letters and digits (a gallery photo
+   * from an Android content:// address, for example); gives the name.
+   */
   copyIn(sourceUri: string, baseName: string): Promise<string>;
   /** Removes a photo; one that is not there is no error. */
   remove(name: string): void;
@@ -21,7 +25,8 @@ export interface PhotoFiles {
 
 const BASE_NAME = /^[A-Za-z0-9-]+$/;
 const EXTENSION = /^\.[A-Za-z0-9]{1,8}$/;
-const PHOTO_NAME = /^[A-Za-z0-9-]+\.[A-Za-z0-9]{1,8}$/;
+/** A name the store writes: a base name, and the source's extension when it had one. */
+const PHOTO_NAME = /^[A-Za-z0-9-]+(\.[A-Za-z0-9]{1,8})?$/;
 
 /** The photo directory `directoryName` in the app's document directory. */
 export function devicePhotoFiles(directoryName: string): PhotoFiles {
@@ -43,14 +48,11 @@ export function devicePhotoFiles(directoryName: string): PhotoFiles {
         throw invalid(`"${baseName}" is not a plain file name`);
       }
       const source = new File(sourceUri);
-      const extension = source.extension;
-      if (!EXTENSION.test(extension)) {
-        throw invalid("the photo's file name has no extension of letters and digits");
-      }
       if (!source.exists) {
         throw invalid("the photo's file does not exist");
       }
-      const name = `${baseName}${extension}`;
+      const extension = source.extension;
+      const name = EXTENSION.test(extension) ? `${baseName}${extension}` : baseName;
       await source.copy(new File(directory(), name));
       return name;
     },

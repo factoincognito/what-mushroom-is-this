@@ -60,6 +60,29 @@ export type Strings = {
     readonly message: string;
     readonly back: string;
   };
+  /** The New find screen (docs/SPEC.md 3.1, 3.6). */
+  readonly newFind: {
+    readonly title: string;
+    /** Shown while the app asks for the camera, saying what it is for. */
+    readonly asking: string;
+    readonly takePhoto: string;
+    readonly pickFromGallery: string;
+    readonly saving: string;
+    readonly saved: string;
+    /** The way back to the Log screen once the find is saved. */
+    readonly back: string;
+    readonly saveFailed: string;
+    readonly retrySave: string;
+    /** Drops the photo whose save failed, so that a new one can be taken. */
+    readonly discardPhoto: string;
+    /** The camera or the gallery failed to give a photo. */
+    readonly pickFailed: string;
+    /** The camera permission was refused; the app may ask again. */
+    readonly cameraDenied: string;
+    /** The camera permission was refused and the phone lets the app ask no more. */
+    readonly cameraBlocked: string;
+    readonly openSettings: string;
+  };
 };
 
 /**
@@ -82,6 +105,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "settings.key",
     "settings.model",
     "notFound",
+    "newFind",
   ],
   it: [
     "languageName",
@@ -92,6 +116,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "settings.key",
     "settings.model",
     "notFound",
+    "newFind",
   ],
 };
 
@@ -148,6 +173,24 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       message: "Den här sidan finns inte.",
       back: "Tillbaka till Fynd",
     },
+    newFind: {
+      title: "Nytt fynd",
+      asking: "Appen ber om att få använda kameran, för att ta fotot.",
+      takePhoto: "Ta ett foto",
+      pickFromGallery: "Välj ett foto i galleriet",
+      saving: "Sparar fyndet …",
+      saved: "Fyndet är sparat. Det väntar på analys.",
+      back: "Tillbaka till Fynd",
+      saveFailed: "Fyndet gick inte att spara. Försök igen.",
+      retrySave: "Spara igen",
+      discardPhoto: "Släng fotot",
+      pickFailed: "Fotot gick inte att ta eller välja. Försök igen.",
+      cameraDenied:
+        "Appen får inte använda kameran, så den kan inte ta något foto. Du kan välja ett foto i galleriet i stället.",
+      cameraBlocked:
+        "Appen får inte använda kameran. Du kan tillåta det i telefonens inställningar eller välja ett foto i galleriet.",
+      openSettings: "Öppna telefonens inställningar",
+    },
   },
   en: {
     languageName: "English",
@@ -198,6 +241,24 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Not found",
       message: "This page does not exist.",
       back: "Back to Finds",
+    },
+    newFind: {
+      title: "New find",
+      asking: "The app asks to use the camera, to take the photo.",
+      takePhoto: "Take a photo",
+      pickFromGallery: "Pick a photo from the gallery",
+      saving: "Saving the find…",
+      saved: "The find is saved. It waits for analysis.",
+      back: "Back to Finds",
+      saveFailed: "The find could not be saved. Try again.",
+      retrySave: "Save again",
+      discardPhoto: "Discard the photo",
+      pickFailed: "The photo could not be taken or picked. Try again.",
+      cameraDenied:
+        "The app may not use the camera, so it cannot take a photo. You can pick a photo from the gallery instead.",
+      cameraBlocked:
+        "The app may not use the camera. You can allow it in the phone's settings, or pick a photo from the gallery.",
+      openSettings: "Open the phone's settings",
     },
   },
   // Not checked by an Italian speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
@@ -251,6 +312,24 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Non trovata",
       message: "Questa pagina non esiste.",
       back: "Torna a Ritrovamenti",
+    },
+    newFind: {
+      title: "Nuovo ritrovamento",
+      asking: "L'app chiede di usare la fotocamera, per scattare la foto.",
+      takePhoto: "Scatta una foto",
+      pickFromGallery: "Scegli una foto dalla galleria",
+      saving: "Salvataggio del ritrovamento…",
+      saved: "Il ritrovamento è salvato. È in attesa di analisi.",
+      back: "Torna a Ritrovamenti",
+      saveFailed: "Non è stato possibile salvare il ritrovamento. Riprova.",
+      retrySave: "Salva di nuovo",
+      discardPhoto: "Scarta la foto",
+      pickFailed: "Non è stato possibile scattare o scegliere la foto. Riprova.",
+      cameraDenied:
+        "L'app non può usare la fotocamera, quindi non può scattare foto. Puoi invece scegliere una foto dalla galleria.",
+      cameraBlocked:
+        "L'app non può usare la fotocamera. Puoi consentirlo nelle impostazioni del telefono, oppure scegliere una foto dalla galleria.",
+      openSettings: "Apri le impostazioni del telefono",
     },
   },
 };

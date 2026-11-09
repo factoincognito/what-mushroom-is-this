@@ -10,7 +10,15 @@
       ["expo-router", { "sitemap": false }],
       "expo-localization",
       "expo-sqlite",
-      ["expo-secure-store", { "faceIDPermission": false }]
+      ["expo-secure-store", { "faceIDPermission": false }],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "The camera takes the photo of a mushroom for your find log.",
+          "photosPermission": "A photo you pick from your library is saved as a find in your log.",
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }

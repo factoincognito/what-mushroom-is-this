@@ -21,6 +21,11 @@ export type AppConfig = {
   readonly lastKnownPositionMaxAgeMs: number;
   /** How long the app goes on asking for a first position fix after the photo, in milliseconds. */
   readonly positionFixWaitMs: number;
+  /**
+   * The JPEG quality of the photo re-encoded for analysis, above 0 and at most 1: the `compress`
+   * of expo-image-manipulator's `saveAsync`, where 1 is the highest quality.
+   */
+  readonly analysisJpegQuality: number;
   /** The models the app offers, each with its image limits. */
   readonly models: readonly ModelConfig[];
   /** The model used until the user chooses another; one of `models`. */
@@ -59,6 +64,8 @@ export const config: AppConfig = Object.freeze({
   requestTimeoutMs: 60_000,
   lastKnownPositionMaxAgeMs: 2 * 60_000,
   positionFixWaitMs: 30_000,
+  // Proposed by Crog in PBI-1.6: the docs give no value; 0.9 keeps the detail a species is told by.
+  analysisJpegQuality: 0.9,
   // The current models, in the order of the Claude docs page "Models overview",
   // https://platform.claude.com/docs/en/about-claude/models/overview, read 2026-11-08. All four
   // are Claude 5 models, so later than Claude 4.7: the high-resolution tier of the "Vision" page.
