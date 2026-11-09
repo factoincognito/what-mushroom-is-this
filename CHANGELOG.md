@@ -34,6 +34,8 @@ All notable changes to What mushroom is this? are documented here.
 - The queue fails a find only when its photo cannot be read, and stops
   on other errors; a refused answer and a key in no workspace get their
   own messages (#23).
+- The phone's position for a new find, with the first fix within 30
+  seconds for a find saved without one (#16).
 - Two failed photo loads in a row stop the queue (#27).
 - Test gaps closed (#28).
 - The key: kept after a failed first-start clearing, and Remove offered
