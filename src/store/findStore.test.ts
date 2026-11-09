@@ -167,7 +167,11 @@ const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, resul
 const UNREADABLE_ID = "(id < 1 OR id > 9007199254740991)";
 const FILES_OF_STORED = `SELECT photos, picture_file FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
 const DELETE_STORED = `DELETE FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
-const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL, answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?, name_it = ?, edibility = ?, confidence = ?, added_photos = 'analysed', picture_file = NULL, picture_author = NULL, picture_licence = NULL, picture_page = NULL, self_check = CASE WHEN ? = 'match' AND text IS NOT NULL AND ${PHOTO_COUNT} = 0 THEN 'waiting' END, check_name_sv = NULL, check_name_en = NULL, check_name_la = NULL, check_name_it = NULL`;
+/**
+ * An answer's columns (review of #49, fix 1): the photos added since are waiting when the find now
+ * holds one the analysis did not send; the self-check waits only for a match from no photo.
+ */
+const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL, answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?, name_it = ?, edibility = ?, confidence = ?, added_photos = CASE WHEN EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(finds.photos) THEN finds.photos ELSE '[]' END) WHERE json_extract(value, '$.file') NOT IN (SELECT value FROM json_each(?))) THEN 'waiting' ELSE 'analysed' END, picture_file = NULL, picture_author = NULL, picture_licence = NULL, picture_page = NULL, self_check = CASE WHEN ? = 0 AND ? = 'match' AND text IS NOT NULL THEN 'waiting' END, check_name_sv = NULL, check_name_en = NULL, check_name_la = NULL, check_name_it = NULL`;
 const SET_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state IN ('waiting', 'failed')`;
 const REPLACE_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state = 'done'`;
 const MARK_FAILED =
@@ -1574,10 +1578,20 @@ describe("oldestWaiting (PBI-1.7, PBI-1.16)", () => {
   });
 });
 
+/** The find's photos as the answer write reads them, to name the photos the analysis sent. */
+const ONE_PHOTO_ROW = { text: null, photos: '[{"file":"p7.jpg","batch":1}]', batches: 1 };
+/** The analysis sent the find's one photo, by the URI the store gives it. */
+const SENT_P7 = { photoUris: ["file:///doc/photos/p7.jpg"] };
+
 describe("setAnswer", () => {
-  it("saves the answer as JSON with the Log's fields, for a waiting or failed find, and its result once more for the self-check", async () => {
-    await store.setAnswer(7, analysed);
+  beforeEach(() => {
+    db.reply("first", PHOTOS_OF, ONE_PHOTO_ROW);
+  });
+
+  it("reads the find's photos, then saves the answer as JSON with the Log's fields, the names of the photos sent, their number and the result once more, for a waiting or failed find", async () => {
+    await store.setAnswer(7, analysed, SENT_P7);
     expect(events).toEqual([
+      { method: "first", sql: PHOTOS_OF, params: [7] },
       {
         method: "run",
         sql: SET_ANSWER,
@@ -1591,6 +1605,8 @@ describe("setAnswer", () => {
           "Gallinaccio",
           "edible",
           "high",
+          '["p7.jpg"]',
+          1,
           "match",
           7,
         ],
@@ -1598,10 +1614,34 @@ describe("setAnswer", () => {
     ]);
   });
 
+  it("names no photo, and counts none, for an analysis of the text alone (review of #49, fix 1)", async () => {
+    db.reply("first", PHOTOS_OF, { text: "A yellow funnel.", photos: "[]", batches: 0 });
+    await store.setAnswer(7, analysed, { photoUris: [] });
+    expect(events.at(-1)).toMatchObject({ params: expect.arrayContaining(["[]", 0, "match", 7]) });
+  });
+
+  it("names, in the order sent, the photos the find holds, and counts every photo sent, also one removed since (review of #49, fix 1)", async () => {
+    db.reply("first", PHOTOS_OF, {
+      text: null,
+      photos: '[{"file":"p7.jpg","batch":1},{"file":"p8.jpg","batch":2}]',
+      batches: 2,
+    });
+    await store.setAnswer(7, analysed, {
+      photoUris: [
+        "file:///doc/photos/p8.jpg",
+        "file:///doc/photos/gone.jpg",
+        "file:///doc/photos/p7.jpg",
+      ],
+    });
+    expect(events.at(-1)).toMatchObject({
+      params: expect.arrayContaining(['["p8.jpg","p7.jpg"]', 3, "match", 7]),
+    });
+  });
+
   it("keeps the edibility Claude gave even at low confidence", async () => {
     const low: Match = { ...match, edibility: "deadly_poisonous", confidence: "low" };
-    await store.setAnswer(7, { ...analysed, answer: low });
-    expect(events[0]).toMatchObject({
+    await store.setAnswer(7, { ...analysed, answer: low }, SENT_P7);
+    expect(events.at(-1)).toMatchObject({
       params: expect.arrayContaining(["deadly_poisonous", "low"]),
     });
   });
@@ -1610,8 +1650,8 @@ describe("setAnswer", () => {
     ["no mushroom", { result: "no_mushroom" }],
     ["cannot tell", { result: "cannot_tell" }],
   ])("saves a '%s' answer with no names, edibility or confidence", async (_, answer) => {
-    await store.setAnswer(7, { ...analysed, answer });
-    expect(events[0]).toMatchObject({
+    await store.setAnswer(7, { ...analysed, answer }, SENT_P7);
+    expect(events.at(-1)).toMatchObject({
       params: [
         answerToJson(answer),
         "claude-model-x",
@@ -1622,6 +1662,8 @@ describe("setAnswer", () => {
         null,
         null,
         null,
+        '["p7.jpg"]',
+        1,
         answer.result,
         7,
       ],
@@ -1630,9 +1672,9 @@ describe("setAnswer", () => {
 
   it("refuses an answer that does not fit the shape, sending nothing", async () => {
     const empty: Match = { ...match, names: { ...match.names, sv: "" } };
-    await expect(store.setAnswer(7, { ...analysed, answer: empty })).rejects.toMatchObject({
-      code: "invalid-input",
-    });
+    await expect(store.setAnswer(7, { ...analysed, answer: empty }, SENT_P7)).rejects.toMatchObject(
+      { code: "invalid-input" },
+    );
     expect(events).toEqual([]);
   });
 
@@ -1641,39 +1683,97 @@ describe("setAnswer", () => {
     ["a model that is not a string", { ...analysed, model: wrong(4) }],
     ["an analysis time that is not whole", { ...analysed, analysedAtMs: 0.5 }],
   ])("refuses %s, sending nothing", async (_, given) => {
-    await expect(store.setAnswer(7, given)).rejects.toMatchObject({ code: "invalid-input" });
+    await expect(store.setAnswer(7, given, SENT_P7)).rejects.toMatchObject({
+      code: "invalid-input",
+    });
     expect(events).toEqual([]);
   });
 
-  it("says the find does not exist when no row changed and none has the ID", async () => {
+  it.each<[string, unknown]>([
+    ["no account of what was sent", undefined],
+    ["photos sent that are not a list", { photoUris: "file:///doc/photos/p7.jpg" }],
+    ["a photo sent that is an empty URI", { photoUris: [" "] }],
+    ["a photo sent that is not a string", { photoUris: [7] }],
+  ])("refuses %s, sending nothing (review of #49, fix 1)", async (_, sent) => {
+    await expect(store.setAnswer(7, analysed, wrong(sent))).rejects.toMatchObject({
+      code: "invalid-input",
+    });
+    expect(events).toEqual([]);
+  });
+
+  it("says the find does not exist when none has the ID, and stores nothing", async () => {
+    db.reply("first", PHOTOS_OF, null);
+    await expect(store.setAnswer(7, analysed, SENT_P7)).rejects.toMatchObject({
+      code: "not-found",
+    });
+    expect(events).toEqual([{ method: "first", sql: PHOTOS_OF, params: [7] }]);
+  });
+
+  it("refuses, as corrupt, a find whose photos it cannot read, and stores nothing", async () => {
+    db.reply("first", PHOTOS_OF, { ...ONE_PHOTO_ROW, photos: "[" });
+    await expect(store.setAnswer(7, analysed, SENT_P7)).rejects.toMatchObject({
+      code: "corrupt",
+    });
+    expect(events).not.toContainEqual(expect.objectContaining({ sql: SET_ANSWER }));
+  });
+
+  it("says the find does not exist when it went between the read and the change", async () => {
     db.reply("run", SET_ANSWER, { changes: 0, lastInsertRowId: 0 });
-    await expect(store.setAnswer(7, analysed)).rejects.toMatchObject({ code: "not-found" });
+    await expect(store.setAnswer(7, analysed, SENT_P7)).rejects.toMatchObject({
+      code: "not-found",
+    });
     expect(events.at(-1)).toEqual({ method: "first", sql: STATE_OF, params: [7] });
   });
 
   it("says the find is in the wrong state when it is already done", async () => {
     db.reply("run", SET_ANSWER, { changes: 0, lastInsertRowId: 0 });
     db.reply("first", STATE_OF, { state: "done" });
-    await expect(store.setAnswer(7, analysed)).rejects.toMatchObject({ code: "wrong-state" });
+    await expect(store.setAnswer(7, analysed, SENT_P7)).rejects.toMatchObject({
+      code: "wrong-state",
+    });
   });
 });
 
 describe("replaceAnswer", () => {
-  it("replaces the answer of a done find only", async () => {
-    await store.replaceAnswer(7, analysed);
-    expect(events).toEqual([expect.objectContaining({ method: "run", sql: REPLACE_ANSWER })]);
+  beforeEach(() => {
+    db.reply("first", PHOTOS_OF, ONE_PHOTO_ROW);
+  });
+
+  it("replaces the answer of a done find only, with what the analysis sent", async () => {
+    await store.replaceAnswer(7, analysed, SENT_P7);
+    expect(events).toEqual([
+      { method: "first", sql: PHOTOS_OF, params: [7] },
+      expect.objectContaining({
+        method: "run",
+        sql: REPLACE_ANSWER,
+        params: expect.arrayContaining(['["p7.jpg"]', 1, "match", 7]),
+      }),
+    ]);
   });
 
   it("says the find is in the wrong state when it has no answer yet", async () => {
     db.reply("run", REPLACE_ANSWER, { changes: 0, lastInsertRowId: 0 });
     db.reply("first", STATE_OF, { state: "waiting" });
-    await expect(store.replaceAnswer(7, analysed)).rejects.toMatchObject({ code: "wrong-state" });
+    await expect(store.replaceAnswer(7, analysed, SENT_P7)).rejects.toMatchObject({
+      code: "wrong-state",
+    });
   });
 
   it("refuses an answer that does not fit the shape, sending nothing", async () => {
     await expect(
-      store.replaceAnswer(7, { ...analysed, answer: { ...match, lookAlikes: wrong("none") } }),
+      store.replaceAnswer(
+        7,
+        { ...analysed, answer: { ...match, lookAlikes: wrong("none") } },
+        SENT_P7,
+      ),
     ).rejects.toMatchObject({ code: "invalid-input" });
+    expect(events).toEqual([]);
+  });
+
+  it("refuses photos sent that are not a list, sending nothing", async () => {
+    await expect(store.replaceAnswer(7, analysed, wrong({}))).rejects.toMatchObject({
+      code: "invalid-input",
+    });
     expect(events).toEqual([]);
   });
 });
@@ -1830,13 +1930,30 @@ describe("delete", () => {
     ["a photo whose name is not text", { photos: '[{"file":null,"batch":1}]', picture_file: null }],
     ["a picture name that is not text", { photos: "[]", picture_file: 3 }],
   ])(
-    "deletes a find whose files it cannot all name, %s, removes those it can name, and says a file was left (PBI-2.2)",
+    "deletes a find whose files it cannot all name, %s, and says a file was left (PBI-2.2)",
     async (_, stored) => {
       db.reply("first", FILES_OF, stored);
       await expect(store.delete(7)).resolves.toEqual({ photoRemoved: false });
       expect(events).toContainEqual({ method: "run", sql: DELETE, params: [7] });
     },
   );
+
+  it("removes no file of a find whose files it cannot all name, since a damaged list may name another find's; the next opening removes its own (review of #49, note 1)", async () => {
+    for (const name of ["p7.jpg", "w1.jpg"]) {
+      photos.files.add(name);
+    }
+    db.reply("first", FILES_OF, {
+      photos: '[{"file":"p7.jpg","batch":1},{"file":null,"batch":1}]',
+      picture_file: "w1.jpg",
+    });
+    await expect(store.delete(7)).resolves.toEqual({ photoRemoved: false });
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ photo: expect.stringMatching(/^remove/) }),
+    );
+    db.reply("all", ALL_FILES, []);
+    await open();
+    expect(photos.files.size).toBe(0);
+  });
 
   it("refuses a stored row that is not an object, deleting nothing", async () => {
     db.reply("first", FILES_OF, "a row");

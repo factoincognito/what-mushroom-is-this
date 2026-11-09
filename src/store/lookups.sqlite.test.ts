@@ -81,12 +81,118 @@ async function photosOf(id: number): Promise<[string, number][]> {
   ]);
 }
 
+/** What an analysis sends of a find's photos: here all it holds now, in order (PBI-2.2). */
+async function sentAll(id: number): Promise<{ photoUris: string[] }> {
+  const stored = await store.getStored(id);
+  return { photoUris: (stored?.photos ?? []).map((photo) => photo.uri) };
+}
+
+/** What an analysis of the text alone sends: no photo. */
+const TEXT_ONLY = { photoUris: [] };
+
 /** A text find whose answer from its text alone names a species: its self-check waits. */
 async function answeredTextFind(): Promise<number> {
   const id = await store.addText(textFind);
-  await store.setAnswer(id, analysed);
+  await store.setAnswer(id, analysed, await sentAll(id));
   return id;
 }
+
+describe("an answer stored after the find changed while it was analysed (PBI-2.2, review of #49)", () => {
+  it("(A) keeps a text-only answer's self-check, and the photo added while it was analysed waits, its batch still open", async () => {
+    const id = await store.addText(textFind);
+    const sent = await sentAll(id);
+    expect(sent).toEqual(TEXT_ONLY);
+    // In flight: the user adds a photo from the find's screen.
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.setAnswer(id, analysed, sent);
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      analysis: { state: "done", answer: match },
+      batchOpen: true,
+      selfCheck: { state: "waiting" },
+      addedPhotos: "waiting",
+    });
+  });
+
+  it("(B) as (A) with the batch complete before the answer: the self-check waits, and so does the photo, for the queue", async () => {
+    const id = await store.addText(textFind);
+    const sent = await sentAll(id);
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.completeBatch(id);
+    await store.setAnswer(id, analysed, sent);
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      analysis: { state: "done", answer: match },
+      batchOpen: false,
+      selfCheck: { state: "waiting" },
+      addedPhotos: "waiting",
+    });
+  });
+
+  it("(C) keeps a batch added to a photo find during a re-analysis waiting for the queue", async () => {
+    const id = await store.add(photoFind());
+    await store.setAnswer(id, analysed, await sentAll(id));
+    const sent = await sentAll(id);
+    // In flight: "analyse again" with photo 1; meanwhile a batch is added and completed.
+    await store.addPhoto(id, "file:///cache/b.jpg");
+    await store.completeBatch(id);
+    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 }, sent);
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      analysis: { state: "done", analysedAtMs: 6_000 },
+      addedPhotos: "waiting",
+      selfCheck: null,
+    });
+  });
+
+  it("marks the photos analysed when the answer covered every photo the find holds", async () => {
+    const id = await store.add(photoFind());
+    await store.addPhoto(id, "file:///cache/b.jpg");
+    await store.completeBatch(id);
+    await store.setAnswer(id, analysed, await sentAll(id));
+    await expect(store.getStored(id)).resolves.toMatchObject({ addedPhotos: "analysed" });
+  });
+
+  it("marks the photos analysed when a photo the answer covered was removed meanwhile", async () => {
+    const id = await store.add(photoFind());
+    await store.addPhoto(id, "file:///cache/b.jpg");
+    await store.completeBatch(id);
+    const sent = await sentAll(id);
+    await store.removePhoto(id, 2);
+    await store.setAnswer(id, analysed, sent);
+    await expect(store.getStored(id)).resolves.toMatchObject({ addedPhotos: "analysed" });
+  });
+
+  it("gives an answer from photos and text no self-check, though the find has text", async () => {
+    const id = await store.addText(textFind);
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.completeBatch(id);
+    const sent = await sentAll(id);
+    await store.addPhoto(id, "file:///cache/b.jpg");
+    await store.setAnswer(id, analysed, sent);
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      selfCheck: null,
+      addedPhotos: "waiting",
+    });
+  });
+
+  it("starts a new check for a new text-only answer while a photo is added, and ends the check with an answer from the photos", async () => {
+    const id = await answeredTextFind();
+    await store.setPicture(id, newPicture);
+    await store.setSelfCheck(id, { state: "agreed" });
+    // A re-analysis of the text alone, while a photo is added: it starts a new check.
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 }, TEXT_ONLY);
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      picture: null,
+      selfCheck: { state: "waiting" },
+      addedPhotos: "waiting",
+    });
+    await store.completeBatch(id);
+    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 7_000 }, await sentAll(id));
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      selfCheck: null,
+      addedPhotos: "analysed",
+    });
+  });
+});
 
 describe("a text find (PBI-2.2)", () => {
   it("is saved waiting, with its text, its time and position, no photo and no open batch", async () => {
@@ -260,7 +366,7 @@ describe("completing a batch on a find in each analysis state (PBI-2.2)", () => 
 
   it("keeps a done find's answer, and its new photos wait", async () => {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await store.addPhoto(id, "file:///cache/b.jpg");
     await expect(store.getStored(id)).resolves.toMatchObject({ addedPhotos: "analysed" });
     await store.completeBatch(id);
@@ -277,7 +383,7 @@ describe("completing a batch on a find in each analysis state (PBI-2.2)", () => 
 describe("the state of the photos added since the answer (PBI-2.2)", () => {
   async function doneWithWaitingPhotos(): Promise<number> {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await store.addPhoto(id, "file:///cache/b.jpg");
     await store.completeBatch(id);
     return id;
@@ -286,7 +392,7 @@ describe("the state of the photos added since the answer (PBI-2.2)", () => {
   it("is none on a find without an answer, and analysed once an answer is stored", async () => {
     const id = await store.add(photoFind());
     await expect(store.getStored(id)).resolves.toMatchObject({ addedPhotos: null });
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await expect(store.getStored(id)).resolves.toMatchObject({ addedPhotos: "analysed" });
   });
 
@@ -303,13 +409,13 @@ describe("the state of the photos added since the answer (PBI-2.2)", () => {
 
   it("is analysed again once a new answer replaces the earlier one", async () => {
     const id = await doneWithWaitingPhotos();
-    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 });
+    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 }, await sentAll(id));
     await expect(store.getStored(id)).resolves.toMatchObject({ addedPhotos: "analysed" });
   });
 
   it("refuses a change from analysed, as wrong-state", async () => {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await expect(store.setAddedPhotos(id, "not-analysed")).rejects.toMatchObject({
       code: "wrong-state",
     });
@@ -349,7 +455,7 @@ describe("removing a photo (PBI-2.2)", () => {
 
   it("keeps the find's time, position and answer when its first photo is removed", async () => {
     const id = await store.add({ ...photoFind(), position });
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await store.addPhoto(id, "file:///cache/b.jpg");
     await store.completeBatch(id);
     const before = await store.getStored(id);
@@ -386,7 +492,7 @@ describe("removing a photo (PBI-2.2)", () => {
 
   it("leaves the photos added since the answer waiting for the queue, which then analyses those left", async () => {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await store.addPhoto(id, "file:///cache/b.jpg");
     await store.addPhoto(id, "file:///cache/c.jpg");
     await store.completeBatch(id);
@@ -421,13 +527,13 @@ describe("the self-check of a text find (PBI-2.2)", () => {
     ["cannot tell", { result: "cannot_tell" as const }],
   ])("is none when the text answer is %s, which names no species", async (_, answer) => {
     const id = await store.addText(textFind);
-    await store.setAnswer(id, { ...analysed, answer });
+    await store.setAnswer(id, { ...analysed, answer }, TEXT_ONLY);
     await expect(store.getStored(id)).resolves.toMatchObject({ selfCheck: null });
   });
 
   it("is none for an answer to a photo find", async () => {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await expect(store.getStored(id)).resolves.toMatchObject({ selfCheck: null, picture: null });
   });
 
@@ -435,7 +541,7 @@ describe("the self-check of a text find (PBI-2.2)", () => {
     const id = await store.addText(textFind);
     await store.addPhoto(id, "file:///cache/a.jpg");
     await store.completeBatch(id);
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await expect(store.getStored(id)).resolves.toMatchObject({ selfCheck: null });
   });
 
@@ -518,7 +624,7 @@ describe("the self-check of a text find (PBI-2.2)", () => {
 
   it("refuses a check on a find that has none, as wrong-state", async () => {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await expect(store.setSelfCheck(id, { state: "no-picture" })).rejects.toMatchObject({
       code: "wrong-state",
     });
@@ -526,7 +632,7 @@ describe("the self-check of a text find (PBI-2.2)", () => {
 
   it("refuses a picture for a find whose check does not wait, as wrong-state, removing its copy", async () => {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     await expect(store.setPicture(id, newPicture)).rejects.toMatchObject({ code: "wrong-state" });
     expect([...photos.files]).toEqual(["p1.jpg"]);
   });
@@ -569,7 +675,7 @@ describe("the self-check of a text find (PBI-2.2)", () => {
     await store.setSelfCheck(id, { state: "agreed" });
     await store.addPhoto(id, "file:///cache/a.jpg");
     await store.completeBatch(id);
-    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 });
+    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 }, await sentAll(id));
     await expect(store.getStored(id)).resolves.toMatchObject({
       picture: null,
       selfCheck: null,
@@ -584,7 +690,7 @@ describe("the self-check of a text find (PBI-2.2)", () => {
     const id = await answeredTextFind();
     await store.setPicture(id, newPicture);
     await store.setSelfCheck(id, { state: "disagreed", names: falseChanterelle });
-    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 });
+    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 }, await sentAll(id));
     await expect(store.getStored(id)).resolves.toMatchObject({
       picture: null,
       selfCheck: { state: "waiting" },
@@ -628,19 +734,23 @@ describe("the constraints of schema version 2 on a real SQLite (PBI-2.2)", () =>
     ["no confidence at all", "confidence = NULL"],
   ])("refuses a done match with %s", async (_, set) => {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     expect(() => update(id, set)).toThrow(/CHECK constraint failed/);
   });
 
   it.each([1, 100])("accepts a confidence as the number %s, in place of a level", async (score) => {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentAll(id));
     expect(() => update(id, "confidence = NULL, confidence_score = ?", score)).not.toThrow();
   });
 
   it("refuses a confidence as a number on an answer that is not a match", async () => {
     const id = await store.add(photoFind());
-    await store.setAnswer(id, { ...analysed, answer: { result: "cannot_tell" } });
+    await store.setAnswer(
+      id,
+      { ...analysed, answer: { result: "cannot_tell" } },
+      await sentAll(id),
+    );
     expect(() => update(id, "confidence_score = 50")).toThrow(/CHECK constraint failed/);
   });
 
@@ -674,7 +784,7 @@ describe("the constraints of schema version 2 on a real SQLite (PBI-2.2)", () =>
 
   it("refuses a self-check on a text find whose answer is not a match", async () => {
     const id = await store.addText(textFind);
-    await store.setAnswer(id, { ...analysed, answer: { result: "no_mushroom" } });
+    await store.setAnswer(id, { ...analysed, answer: { result: "no_mushroom" } }, TEXT_ONLY);
     expect(() => update(id, "self_check = 'waiting'")).toThrow(/CHECK constraint failed/);
   });
 

@@ -4,7 +4,7 @@ import type { Answer } from "../analysis/answer";
 import type { AnalysisError } from "../analysis/errors";
 import { PhotoPreparationError, type PreparedPhoto } from "../image/prepareForAnalysis";
 import type { ReadKeyResult } from "../key/apiKey";
-import type { AnalysedAnswer, Analysis, Find, FindFailure } from "../store/find";
+import type { AnalysedAnswer, Analysis, AnalysisSent, Find, FindFailure } from "../store/find";
 import { StoreError } from "../store/find";
 import { AnalysisQueue, type QueueDeps, type QueueLog, type QueueState } from "./queue";
 
@@ -25,6 +25,8 @@ const SETTINGS = { apiAddress: "https://api.anthropic.com", timeLimitMs: 60_000 
 class FakeLog implements QueueLog {
   readonly finds = new Map<number, Find>();
   readonly changes: string[] = [];
+  /** What each stored answer's analysis sent, as the queue told the store (PBI-2.2). */
+  readonly sent: { id: number; photoUris: string[] }[] = [];
   failOn: string | null = null;
 
   addFind(id: number, analysis: Analysis = { state: "waiting" }): void {
@@ -55,15 +57,17 @@ class FakeLog implements QueueLog {
     return this.finds.get(id) ?? null;
   }
 
-  async setAnswer(id: number, analysed: AnalysedAnswer): Promise<void> {
+  async setAnswer(id: number, analysed: AnalysedAnswer, sent: AnalysisSent): Promise<void> {
     this.check("setAnswer");
     this.changes.push(`setAnswer ${id}`);
+    this.sent.push({ id, photoUris: [...sent.photoUris] });
     this.put(id, { state: "done", ...analysed });
   }
 
-  async replaceAnswer(id: number, analysed: AnalysedAnswer): Promise<void> {
+  async replaceAnswer(id: number, analysed: AnalysedAnswer, sent: AnalysisSent): Promise<void> {
     this.check("replaceAnswer");
     this.changes.push(`replaceAnswer ${id}`);
+    this.sent.push({ id, photoUris: [...sent.photoUris] });
     this.put(id, { state: "done", ...analysed });
   }
 
@@ -203,6 +207,17 @@ describe("the run (SPEC 3.4)", () => {
     t.log.addFind(2);
     await t.queue.trigger();
     expect(t.log.changes).toEqual(["setAnswer 1", "setAnswer 2", "setAnswer 3"]);
+  });
+
+  it("tells the store, with each answer, the photo it sent (PBI-2.2)", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.log.addFind(2);
+    await t.queue.trigger();
+    expect(t.log.sent).toEqual([
+      { id: 1, photoUris: ["file:///photos/1.jpg"] },
+      { id: 2, photoUris: ["file:///photos/2.jpg"] },
+    ]);
   });
 
   it("stores each answer with the model that gave it and when", async () => {
@@ -1070,6 +1085,18 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
     t.log.addFind(1, { state: "failed", failure: { cause: "request", detail: "x" } });
     await expect(t.queue.analyseFind(1)).resolves.toEqual({ ok: true });
     expect(t.log.changes).toEqual(["setAnswer 1"]);
+  });
+
+  it("tells the store the photo it sent, for a find analysed from its screen (PBI-2.2)", async () => {
+    const t = setup();
+    t.log.addFind(1, { state: "failed", failure: { cause: "request", detail: "x" } });
+    t.log.addFind(2, { state: "done", answer: OTHER_ANSWER, model: "old", analysedAtMs: 1 });
+    await t.queue.analyseFind(1);
+    await t.queue.analyseFind(2);
+    expect(t.log.sent).toEqual([
+      { id: 1, photoUris: ["file:///photos/1.jpg"] },
+      { id: 2, photoUris: ["file:///photos/2.jpg"] },
+    ]);
   });
 
   it("replaces the answer of an analysed find", async () => {

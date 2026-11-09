@@ -472,16 +472,25 @@ describe("the migration to schema version 2, on a version 1 database (PBI-2.2)",
     ).toEqual({ tbl_name: "finds" });
   });
 
-  it("changes nothing when it fails part-way: the database stays at version 1 with every find", async () => {
+  it("changes nothing when it fails after the version 1 table is dropped: the database stays at version 1 with every find (review of #49, fix 2)", async () => {
     await versionOne();
     phaseOneFinds();
+    const deleted = insertV1(base("z.jpg", 15_000));
+    sqlite.prepare("DELETE FROM finds WHERE id = ?").run(deleted);
     const before = sqlite.prepare("SELECT * FROM finds ORDER BY id").all();
-    // A table of the name the migration builds makes it fail after it has begun.
-    sqlite.exec("CREATE TABLE finds_v2 (x INTEGER)");
-    await expect(open()).rejects.toThrow(/finds_v2/);
+    const sequence = sqlite.prepare("SELECT name, seq FROM sqlite_sequence ORDER BY name").all();
+    // A view on the version 1 column survives `DROP TABLE finds`, then makes the RENAME fail.
+    sqlite.exec("CREATE VIEW blocker AS SELECT photo_file FROM finds");
+    await expect(open()).rejects.toThrow(/blocker/);
     sqlite.exec("PRAGMA ignore_check_constraints = OFF");
     expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({ user_version: 1 });
     expect(sqlite.prepare("SELECT * FROM finds ORDER BY id").all()).toEqual(before);
+    expect(sqlite.prepare("SELECT name, seq FROM sqlite_sequence ORDER BY name").all()).toEqual(
+      sequence,
+    );
+    expect(sqlite.prepare("SELECT name FROM sqlite_schema WHERE name = 'finds_v2'").all()).toEqual(
+      [],
+    );
     expect(photos.files.size).toBe(9);
   });
 
