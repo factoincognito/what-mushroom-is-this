@@ -107,6 +107,15 @@ describe("parseNotices", () => {
   ])("refuses %s", (_name, input) => {
     expect(() => parseNotices(input)).toThrow(NoticesError);
   });
+
+  it("refuses an http:// address as not https, for a library's source and for the app's licence (PBI-1.22)", () => {
+    const source = broken((n) => (firstLibrary(n).source = "http://example.org/a"));
+    expect(() => parseNotices(source)).toThrow(
+      "notices.json: libraries[0].source is not an https address",
+    );
+    const url = broken((n) => ((n.app as Record<string, unknown>).url = "http://example.org/l"));
+    expect(() => parseNotices(url)).toThrow("notices.json: app.url is not an https address");
+  });
 });
 
 /** The rows of the tables under a heading of THIRD-PARTY-NOTICES.md, up to the next `## `. */

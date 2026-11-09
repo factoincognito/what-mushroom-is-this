@@ -170,6 +170,30 @@ function setup() {
 
 const fail = (error: AnalysisError): AnalysisCallResult => ({ ok: false, error });
 
+/** A photo the encoder could not load. */
+const loadFailed = (detail: string): PreparedPhoto => ({
+  ok: false,
+  loaded: false,
+  failure: { cause: "photo", detail },
+});
+
+/** A photo that loaded, but whose decoded size cannot be used. */
+const badSize = (detail: string): PreparedPhoto => ({
+  ok: false,
+  loaded: true,
+  failure: { cause: "photo", detail },
+});
+
+const LOADED: PreparedPhoto = { ok: true, imageBase64: "BBBB", width: 1, height: 1 };
+
+/** Prepares each find's photo as `outcomes` gives it by the find's ID; a find not named loads. */
+function photosById(outcomes: Record<number, PreparedPhoto>) {
+  return async (uri: string): Promise<PreparedPhoto> => {
+    const id = Number(/\/(\d+)\.jpg$/.exec(uri)?.[1]);
+    return outcomes[id] ?? LOADED;
+  };
+}
+
 describe("the run (SPEC 3.4)", () => {
   it("takes the waiting finds one at a time, oldest first by the find's ID, not by the time taken", async () => {
     const t = setup();
@@ -587,7 +611,11 @@ describe("the photo for analysis (SPEC 3.3)", () => {
     t.log.addFind(2);
     t.setPreparation(async (uri) =>
       uri.endsWith("/1.jpg")
-        ? { ok: false, failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" } }
+        ? {
+            ok: false,
+            loaded: true,
+            failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+          }
         : { ok: true, imageBase64: "BBBB", width: 1, height: 1 },
     );
     await t.queue.trigger();
@@ -606,6 +634,7 @@ describe("the photo for analysis (SPEC 3.3)", () => {
       uri.endsWith("/1.jpg")
         ? {
             ok: false,
+            loaded: false,
             failure: { cause: "photo", detail: "load-failed: unsupported image format" },
           }
         : { ok: true, imageBase64: "BBBB", width: 1, height: 1 },
@@ -622,7 +651,7 @@ describe("the photo for analysis (SPEC 3.3)", () => {
   it("an unreadable photo is not tried again by the queue", async () => {
     const t = setup();
     t.log.addFind(1);
-    t.setPreparation(async () => ({ ok: false, failure: { cause: "photo", detail: "gone" } }));
+    t.setPreparation(async () => loadFailed("gone"));
     await t.queue.trigger();
     await t.queue.trigger();
     expect(t.log.changes).toEqual(["markFailed 1 photo: gone"]);
@@ -664,6 +693,168 @@ describe("the photo for analysis (SPEC 3.3)", () => {
       expect(t.queue.getState().running).toBe(false);
     },
   );
+});
+
+describe("two failed photo loads in a row in one run (PBI-1.25)", () => {
+  it("the second does not fail its find: the run stops with internal-error, that find and every find after it stay waiting, and the first stays failed (photo)", async () => {
+    const t = setup();
+    for (const id of [1, 2, 3, 4]) {
+      t.log.addFind(id);
+    }
+    t.setPreparation(
+      photosById({ 1: loadFailed("load-failed: first"), 2: loadFailed("load-failed: second") }),
+    );
+    await expect(t.queue.trigger()).resolves.toBeUndefined();
+    expect(t.log.changes).toEqual(["markFailed 1 photo: load-failed: first"]);
+    expect(t.log.state(2)).toEqual({ state: "waiting" });
+    expect(t.log.state(3)).toEqual({ state: "waiting" });
+    expect(t.log.state(4)).toEqual({ state: "waiting" });
+    expect(t.prepared.map((p) => p.uri)).toEqual(["file:///photos/1.jpg", "file:///photos/2.jpg"]);
+    expect(t.calls).toEqual([]);
+    expect(t.queue.getState()).toEqual({
+      running: false,
+      stop: { reason: "internal-error" },
+      pause: null,
+    });
+  });
+
+  it.each([
+    ["the photo loads and the find is analysed", LOADED, null, "setAnswer 2"],
+    [
+      "the photo loads and then fails the segment check",
+      {
+        ok: false,
+        loaded: true,
+        failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+      },
+      null,
+      "markFailed 2 segment-check: forbidden-segment 0xFFE1",
+    ],
+    [
+      "the photo loads and its decoded size cannot be used",
+      badSize("invalid-size: 0 x 0"),
+      null,
+      "markFailed 2 photo: invalid-size: 0 x 0",
+    ],
+    [
+      "the photo loads and the request is refused (400)",
+      LOADED,
+      fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+      "markFailed 2 request: request-wrong (status 400)",
+    ],
+  ] as const)(
+    "a photo that loads ends the count, whatever comes of its find: %s",
+    async (_name, second, reply, secondChange) => {
+      const t = setup();
+      for (const id of [1, 2, 3, 4]) {
+        t.log.addFind(id);
+      }
+      t.setPreparation(
+        photosById({ 1: loadFailed("load-failed: a"), 2: second, 3: loadFailed("load-failed: c") }),
+      );
+      if (reply !== null) {
+        t.replies.push(reply);
+      }
+      await t.queue.trigger();
+      expect(t.log.changes).toEqual([
+        "markFailed 1 photo: load-failed: a",
+        secondChange,
+        "markFailed 3 photo: load-failed: c",
+        "setAnswer 4",
+      ]);
+      expect(t.queue.getState().stop).toBeNull();
+    },
+  );
+
+  it("only a failed load counts: two photos in a row whose decoded size cannot be used both fail, and the queue goes on", async () => {
+    const t = setup();
+    for (const id of [1, 2, 3]) {
+      t.log.addFind(id);
+    }
+    t.setPreparation(photosById({ 1: badSize("invalid-size: a"), 2: badSize("invalid-size: b") }));
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual([
+      "markFailed 1 photo: invalid-size: a",
+      "markFailed 2 photo: invalid-size: b",
+      "setAnswer 3",
+    ]);
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it("each run counts afresh: a failed load at the end of one run and one at the start of the next each fail their find", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.setPreparation(
+      photosById({ 1: loadFailed("load-failed: a"), 2: loadFailed("load-failed: b") }),
+    );
+    await t.queue.trigger();
+    t.log.addFind(2);
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual([
+      "markFailed 1 photo: load-failed: a",
+      "markFailed 2 photo: load-failed: b",
+    ]);
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it("analyse now starts a new run, so a new count: its first failed load fails its find, and a second one stops the queue again", async () => {
+    const t = setup();
+    for (const id of [1, 2, 3, 4]) {
+      t.log.addFind(id);
+    }
+    t.setPreparation(
+      photosById({
+        1: loadFailed("load-failed: a"),
+        2: loadFailed("load-failed: b"),
+        3: loadFailed("load-failed: c"),
+      }),
+    );
+    await t.queue.trigger();
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+    await t.queue.analyseNow();
+    expect(t.log.changes).toEqual([
+      "markFailed 1 photo: load-failed: a",
+      "markFailed 2 photo: load-failed: b",
+    ]);
+    expect(t.log.state(3)).toEqual({ state: "waiting" });
+    expect(t.log.state(4)).toEqual({ state: "waiting" });
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+  });
+
+  it("a trigger during the run starts no new count: a find saved then, whose photo does not load either, stops the run", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.setPreparation(async (uri) => {
+      if (uri.endsWith("/1.jpg")) {
+        t.log.addFind(2);
+        void t.queue.trigger();
+      }
+      return loadFailed("load-failed");
+    });
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["markFailed 1 photo: load-failed"]);
+    expect(t.log.state(2)).toEqual({ state: "waiting" });
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+  });
+
+  it("a find analysed from its screen is not in a run, so not counted: two failed loads there each fail their find, and the queue does not stop", async () => {
+    const t = setup();
+    t.log.addFind(1, { state: "failed", failure: { cause: "photo", detail: "x" } });
+    t.log.addFind(2, { state: "failed", failure: { cause: "photo", detail: "x" } });
+    t.setPreparation(async () => loadFailed("load-failed"));
+    for (const id of [1, 2]) {
+      await expect(t.queue.analyseFind(id)).resolves.toEqual({
+        ok: false,
+        notice: { kind: "find-failed", failure: { cause: "photo", detail: "load-failed" } },
+        answerKept: false,
+      });
+    }
+    expect(t.log.changes).toEqual([
+      "markFailed 1 photo: load-failed",
+      "markFailed 2 photo: load-failed",
+    ]);
+    expect(t.queue.getState().stop).toBeNull();
+  });
 });
 
 describe("programming errors", () => {
@@ -1024,7 +1215,7 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
     it("a photo that cannot be loaded: the answer is kept", async () => {
       const t = setup();
       t.log.addFind(1, analysed);
-      t.setPreparation(async () => ({ ok: false, failure: { cause: "photo", detail: "gone" } }));
+      t.setPreparation(async () => loadFailed("gone"));
       await expect(t.queue.analyseFind(1)).resolves.toEqual({
         ok: false,
         notice: { kind: "find-failed", failure: { cause: "photo", detail: "gone" } },
@@ -1050,6 +1241,7 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
       t.log.addFind(1, analysed);
       t.setPreparation(async () => ({
         ok: false,
+        loaded: true,
         failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
       }));
       await expect(t.queue.analyseFind(1)).resolves.toEqual({

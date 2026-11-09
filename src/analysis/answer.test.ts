@@ -524,9 +524,10 @@ describe("readMessageBody", () => {
   });
 
   it("joins two text blocks in order, with nothing between them, before parsing", () => {
+    // Split inside a JSON string, so that any separator changes the value or breaks the JSON.
     const body = messageBody([
-      { type: "text", text: "{" },
-      { type: "text", text: '"result":"no_mushroom"}' },
+      { type: "text", text: '{"result":"no_' },
+      { type: "text", text: 'mushroom"}' },
     ]);
     expect(readMessageBody(body)).toEqual({ ok: true, answer: { result: "no_mushroom" } });
   });

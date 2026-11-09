@@ -56,56 +56,74 @@ type KeyProviderProps = {
  * Runs the first-start-after-install clearing once, at the app's start, then reports whether a
  * key is saved. A save or remove made before that is done waits for it, so the clearing never
  * deletes a key the user has just saved, and the first report never overwrites a later one.
+ *
+ * When the clearing fails (the marker cannot be read or written, or the key left from an earlier
+ * install cannot be removed), what the key store holds cannot be trusted (PBI-1.17): the status is
+ * "unreadable", no key is given for analysis, and a save first runs the clearing again, saving
+ * only once the marker is set, so the next start cannot delete the key it saves. Remove works as
+ * always. A clearing that succeeds, at the start or before a save, settles this for the session.
  */
 export function KeyProvider({ secrets, store, children }: KeyProviderProps) {
   const [status, setStatus] = useState<KeyStatus>("loading");
   const mounted = useRef(true);
-  const started = useRef<Promise<unknown> | null>(null);
-  // Made at the first render, before any effect runs: a child's mount effect runs before this
-  // provider's, so a promise made in the effect would not yet be there for it to wait on.
+  // Both made at the first render, before any effect runs: a child's mount effect runs before
+  // this provider's, so a promise made in the effect would not yet be there for it to wait on.
+  /** Resolves once the clearing has run. */
   const [cleared] = useState(deferred);
+  /** Resolves once the startup, the clearing and the read, has reported. */
+  const [started] = useState(deferred);
+  /** Whether the marker is known to be set: a clearing has given "cleared" or "kept". */
+  const settled = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
     // The read is part of the startup, so a save or remove that waits for it reports last.
-    started.current = clearKeyOnFirstStartAfterInstall(secrets, store)
-      .then(() => cleared.resolve())
-      .then(() => readKey(secrets))
-      .then((result) => {
+    clearKeyOnFirstStartAfterInstall(secrets, store)
+      .then(async (outcome) => {
+        settled.current = outcome !== "failed";
+        cleared.resolve();
+        const result: ReadKeyResult = settled.current ? await readKey(secrets) : { ok: false };
         if (mounted.current) {
           setStatus(!result.ok ? "unreadable" : result.key === null ? "none" : "stored");
         }
-      });
+      })
+      .finally(() => started.resolve());
     return () => {
       mounted.current = false;
     };
-  }, [secrets, store, cleared]);
+  }, [secrets, store, cleared, started]);
 
   const readForAnalysis = useCallback(async (): Promise<ReadKeyResult> => {
     await cleared.promise;
-    return readKey(secrets);
+    return settled.current ? readKey(secrets) : { ok: false };
   }, [secrets, cleared]);
 
   const save = useCallback(
     async (raw: string): Promise<SaveKeyResult> => {
-      await started.current;
+      await started.promise;
+      if (!settled.current) {
+        if ((await clearKeyOnFirstStartAfterInstall(secrets, store)) === "failed") {
+          return { ok: false, reason: "store-failed" };
+        }
+        settled.current = true;
+      }
       const result = await saveKey(secrets, raw);
       if (result.ok && mounted.current) {
         setStatus("stored");
       }
       return result;
     },
-    [secrets],
+    [secrets, store, started],
   );
 
   const remove = useCallback(async (): Promise<{ readonly ok: boolean }> => {
-    await started.current;
+    await started.promise;
     const result = await removeKey(secrets);
     if (result.ok && mounted.current) {
       setStatus("none");
     }
     return result;
-  }, [secrets]);
+  }, [secrets, started]);
 
   const state = useMemo<KeyState>(
     () => ({ status, save, remove, readForAnalysis }),

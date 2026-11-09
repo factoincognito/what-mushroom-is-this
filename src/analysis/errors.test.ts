@@ -193,6 +193,14 @@ describe("classifyOutcome, the find fails and the queue goes on", () => {
       apiError("invalid_request_error", "this API key is not scoped to a workspace"),
     ],
     [
+      "a message that shares only a shorter start with the workspace text (PBI-1.22)",
+      apiError("invalid_request_error", "This API key is invalid"),
+    ],
+    [
+      "the workspace text without its last letter (PBI-1.22: the whole text must match)",
+      apiError("invalid_request_error", "This API key is not scoped to a workspac"),
+    ],
+    [
       "a message that is not a string",
       '{"type":"error","error":{"type":"invalid_request_error","message":5}}',
     ],
