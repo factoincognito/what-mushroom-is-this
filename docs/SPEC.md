@@ -47,8 +47,9 @@ Testing Library, the 80% line coverage gate. Libraries are added with
 `npx expo install`, and each is recorded under the third-party code and IP
 policy when it is added. Expected: `expo-image-picker`,
 `expo-image-manipulator`, `expo-location`, `expo-sqlite`,
-`expo-file-system`, `expo-secure-store`, `expo-localization`, `expo-network`
-(Known unknown 6), `expo-router` (its routes under `src/app/`, so they count as code for the test-change
+`expo-file-system`, `expo-secure-store`, `expo-localization`,
+`expo-network` (Known unknown 6), `expo-router` (its routes under
+`src/app/`, so they count as code for the test-change
 check and the coverage gate). Not checked yet: an SDK 57 version of each
 (`npx expo install --check` settles it).
 
@@ -195,7 +196,7 @@ When the queue has stopped (3.3), the Log screen says why and offers
   | an answer whose `stop_reason` is `refusal` | Claude declined to answer (**[Clead]**, PBI-1.13) | that find is marked failed; the queue goes on with the next |
   | an answer that does not fit the shape, is cut off (`stop_reason` `max_tokens` or `model_context_window_exceeded`), or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops |
   | any other status | | the queue stops; the message gives the status |
-  | the find's photo cannot be loaded, decoded or sized | the photo itself is the problem (**[Clead]**, #17, PBI-1.21; until PBI-1.21 is merged, any error while the photo is prepared fails the find) | that find is marked failed; the queue goes on with the next |
+  | the find's photo cannot be loaded, decoded or sized | the photo itself is the problem (**[Clead]**, #17, PBI-1.21; until PBI-1.21 is merged, any error while the photo is prepared, except a configuration error, fails the find) | that find is marked failed; the queue goes on with the next |
   | any other error in the app while the queue runs (for example, full storage) | (**[Clead]**, #17, PBI-1.21) | the find stays waiting; the queue stops and the Log screen says so, without the error's text; "analyse now" starts it again |
 
   **[Clead]**, both: a billing error is told apart from other 400 answers
@@ -273,13 +274,16 @@ When the queue has stopped (3.3), the Log screen says why and offers
   find has no position; nothing blocks the photo.
 - Deleting a find deletes its photo too.
 - The log is kept out of the phone's backups (Adam's decision). How
-  (**[Clead]**, **[not checked]**, checked against Expo's and the
-  platforms' documentation first when it is built): on Android,
-  `android.allowBackup` is off, and the data extraction rules also exclude
-  the database and the photos from device-to-device transfer, which
-  `allowBackup` alone may not stop on some phones for apps that target
-  API level 31 or later; on iOS the database and the photos are excluded
-  from backup.
+  (**[Clead]**, checked against Expo's and the platforms' documentation
+  for PBI-1.9, #21): on Android, `android.allowBackup` is off, and the
+  app's own backup and data extraction rules also exclude the database,
+  the photos and the key-value store from backup and device-to-device
+  transfer, which `allowBackup` alone may not stop on some phones for
+  apps that target API level 31 or later; the secure store's own rules
+  are kept. On iOS the key-value store is excluded; the database and the
+  photos must be excluded at run time per file, which Expo offers no
+  supported means for, so this is done before any iOS build (PBI-1.23).
+  This version is built for Android only (3.8).
 - Uninstalling the app deletes the log. No export or sync in this version.
 
 ### 3.7 Not in this version
@@ -306,13 +310,16 @@ this?" app.
    writes the JPEG, so this can be checked only on a phone, in Adam's test
    session (Crog, #14).
 3. How the database and photos are excluded from iOS backups under Expo,
-   and the Android data extraction rules (3.6).
+   and the Android data extraction rules (3.6). Android settled in #21;
+   iOS needs native code (PBI-1.23). Whether Android lint's
+   `FullBackupContent` check stops a release build over excludes outside
+   every include is checked at the first release build (PBI-1.10).
 4. The default model, chosen at the build.
 5. EAS Build's setup for this project (its project ID and build profile),
    which needs Adam's Expo account: `eas init` signed in to that account
    links the project.
 6. A library for the network state, which the queue's "network is back"
-   trigger needs (3.4); not in the expected list above. Settled for #17:
+   trigger needs (3.4). Settled for #17:
    `expo-network`, not NetInfo, whose reachability check can send a
    request to a Google server, against section 2 (**[Clead]**).
 7. Whether a gallery photo's position arrives on Android. Android's

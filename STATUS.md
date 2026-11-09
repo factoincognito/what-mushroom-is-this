@@ -10,7 +10,7 @@ Last update: 2026-11-09
 Build: Phase 1, the first version ([`docs/BACKLOG.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/BACKLOG.md)); the specification's intent is approved ([`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/SPEC.md)).
 
 ## Current focus
-The Phase 1 items: out of the backups and the About view, [PBI-1.9](https://github.com/factoincognito/what-mushroom-is-this/blob/128d7935715502bb7e624d504735b0d50c18a889/docs/BACKLOG.md?plain=1#L48), and the queue's follow-ups, PBI-1.21 (added in [#22](https://github.com/factoincognito/what-mushroom-is-this/pull/22)); then the Log and Find screens, [PBI-1.8](https://github.com/factoincognito/what-mushroom-is-this/blob/128d7935715502bb7e624d504735b0d50c18a889/docs/BACKLOG.md?plain=1#L47).
+The Phase 1 items: the Log and Find screens, [PBI-1.8](https://github.com/factoincognito/what-mushroom-is-this/blob/211a431326c57a8a2c9cbd81bd5815e7a8bb6881/docs/BACKLOG.md?plain=1#L47), and the queue's follow-ups, [PBI-1.21](https://github.com/factoincognito/what-mushroom-is-this/blob/211a431326c57a8a2c9cbd81bd5815e7a8bb6881/docs/BACKLOG.md?plain=1#L60) ([#23](https://github.com/factoincognito/what-mushroom-is-this/pull/23)); then the EAS build, once Adam has run `eas init`.
 
 ## Next step
 Clead and Crog: the Phase 1 items up to the EAS build, unattended, one PR each ([PO-159](https://github.com/factoincognito/product-office/blob/3be9e7f707f0da0811be1f1d8249482792d1c3f6/BACKLOG.md?plain=1#L390) step 4 in the product office).

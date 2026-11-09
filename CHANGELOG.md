@@ -19,6 +19,8 @@ All notable changes to What mushroom is this? are documented here.
   the photo prepared for analysis (#14).
 - The analysis queue: its triggers, stops, restarts and messages, and
   "analyse now" on the Log screen (#17).
+- Out of Android's backups and device transfers: the find log, the photos
+  and the settings; and the About view with the licences (#21).
 
 ### Changed
 
