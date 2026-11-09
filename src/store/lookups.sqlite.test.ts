@@ -212,10 +212,32 @@ describe("a text find (PBI-2.2)", () => {
     expect(photos.files.size).toBe(0);
   });
 
-  it("is not shown by Phase 1's views, which show a find by its photo: get refuses it, the list marks it, the queue passes over it", async () => {
+  it("is listed without a photo and taken by the queue's pick, though get, Phase 1's view by a photo, refuses it (PBI-2.4)", async () => {
     const id = await store.addText(textFind);
     await expect(store.get(id)).rejects.toMatchObject({ code: "corrupt" });
-    await expect(store.list()).resolves.toEqual([{ readable: false, id }]);
+    await expect(store.list()).resolves.toEqual([
+      { readable: true, id, photoUri: null, time, analysis: { state: "waiting" } },
+    ]);
+    await expect(store.oldestWaiting()).resolves.toBe(id);
+  });
+
+  it("is listed with its answer once analysed from its text, its self-check waiting (PBI-2.4)", async () => {
+    const id = await answeredTextFind();
+    await expect(store.list()).resolves.toEqual([
+      {
+        readable: true,
+        id,
+        photoUri: null,
+        time,
+        analysis: {
+          state: "done",
+          result: "match",
+          names: { sv: "Kantarell", en: "Chanterelle", it: "Gallinaccio" },
+          edibility: "edible",
+          confidence: 90,
+        },
+      },
+    ]);
     await expect(store.oldestWaiting()).resolves.toBeNull();
   });
 

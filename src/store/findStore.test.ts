@@ -1436,6 +1436,48 @@ describe("list", () => {
     expect(events).toEqual([{ method: "all", sql: LIST, params: [] }]);
   });
 
+  it("lists a text find without photos as readable, with no photo (PBI-2.4)", async () => {
+    db.reply("all", LIST, [
+      summaryRow({ id: 8, text: "A yellow funnel.", photos: "[]", batches: 0 }),
+      summaryRow({
+        ...textRow({ id: 7 }),
+        result: "match",
+        name_sv: "Kantarell",
+        name_en: "Chanterelle",
+        name_it: "Gallinaccio",
+        edibility: "edible",
+        confidence_score: 90,
+      }),
+    ]);
+    await expect(store.list()).resolves.toEqual([
+      {
+        readable: true,
+        id: 8,
+        photoUri: null,
+        time: { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" },
+        analysis: { state: "waiting" },
+      },
+      expect.objectContaining({
+        readable: true,
+        id: 7,
+        photoUri: null,
+        analysis: expect.objectContaining({ state: "done", result: "match", confidence: 90 }),
+      }),
+    ]);
+  });
+
+  it("lists a text find that has photos by its first photo (PBI-2.4)", async () => {
+    db.reply("all", LIST, [
+      summaryRow({
+        text: "A yellow funnel.",
+        photos: '[{"file":"p1.jpg","batch":1},{"file":"p2.jpg","batch":1}]',
+      }),
+    ]);
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id: 7, photoUri: "file:///doc/photos/p1.jpg" }),
+    ]);
+  });
+
   it("gives an empty list for an empty log", async () => {
     await expect(store.list()).resolves.toEqual([]);
   });
@@ -1489,9 +1531,10 @@ describe("list", () => {
     ["an accuracy stored as text (fix 1)", summaryRow({ accuracy_m: "12" })],
     ["a photo name stored as a number", summaryRow({ photos: '[{"file":7,"batch":1}]' })],
     [
-      "a text find without photos, which the Log cannot show until PBI-2.7 (PBI-2.2)",
-      summaryRow({ text: "A yellow funnel.", photos: "[]", batches: 0 }),
+      "neither text nor a photo (PBI-2.4)",
+      summaryRow({ text: null, photos: "[]", batches: 0 }),
     ],
+    ["a text that is blank (PBI-2.4)", summaryRow({ text: "  ", photos: "[]", batches: 0 })],
     ["a photo list that is not JSON (PBI-2.2)", summaryRow({ photos: "[" })],
     ["an unknown self-check state (PBI-2.2)", summaryRow({ self_check: "maybe" })],
     ["a failed find without a cause", summaryRow({ state: "failed", failure_detail: "x" })],
@@ -1590,6 +1633,24 @@ describe("oldestWaiting (PBI-1.7, PBI-1.16)", () => {
 
   it("gives null when no find is waiting", async () => {
     await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
+  it("gives a waiting text find without photos, which the queue analyses by its text (PBI-2.4)", async () => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) =>
+      params[0] === 0 ? row({ id: 4, text: "A yellow funnel.", photos: "[]", batches: 0 }) : null,
+    );
+    await expect(store.oldestWaiting()).resolves.toBe(4);
+    expect(events).toEqual([{ method: "first", sql: NEXT_WAITING, params: [0] }]);
+  });
+
+  it("passes over a waiting find with neither text nor a photo, as one it cannot read (PBI-2.4)", async () => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) => {
+      if (params[0] === 0) {
+        return row({ id: 2, text: null, photos: "[]", batches: 0 });
+      }
+      return params[0] === 2 ? row({ id: 5 }) : null;
+    });
+    await expect(store.oldestWaiting()).resolves.toBe(5);
   });
 
   it("passes over a waiting find whose row it cannot read, and gives the next one after it", async () => {

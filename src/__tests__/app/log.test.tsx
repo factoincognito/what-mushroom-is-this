@@ -15,7 +15,7 @@ import { formatFindTime } from "../../find/display";
 import { STRINGS } from "../../i18n/strings";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { answerToJson } from "../../store/answerJson";
-import { type Find, type ListedFind, StoreError } from "../../store/find";
+import { type Find, type ListedFind, type StoredFind, StoreError } from "../../store/find";
 import { memoryFindLog } from "../../testing/memoryFindLog";
 import { warmUpRouter } from "../../testing/warmUpRouter";
 
@@ -254,6 +254,81 @@ describe("the Log screen's list (SPEC 3.1)", () => {
     await fireEvent.press(await screen.findByTestId("find-row-7"));
     expect(app.pathname()).toBe("/find/7");
     expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+  });
+});
+
+/** A text find without photos (SPEC 3.9), as the store holds it. */
+function textFind(id: number, daysLater: number, analysis: StoredFind["analysis"]): StoredFind {
+  return {
+    id,
+    text: "A yellow funnel with false gills.",
+    photos: [],
+    batchOpen: false,
+    time: { takenAtMs: BASE + daysLater * DAY, utcOffsetMinutes: 120, source: "saved" },
+    position: null,
+    analysis,
+    addedPhotos: analysis.state === "done" ? "analysed" : null,
+    picture: null,
+    selfCheck: null,
+  };
+}
+
+describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
+  it("is listed in its place as a find, not as one that could not be read, with no photo", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, textFind(2, 1, { state: "waiting" }));
+    await startApp();
+    const rows = await screen.findAllByTestId(/^find-row-/);
+    expect(rows.map((row) => row.props.testID)).toEqual(["find-row-2", "find-row-1"]);
+    const row = within(screen.getByTestId("find-row-2"));
+    expect(row.getByText(en.log.waiting)).toBeOnTheScreen();
+    expect(row.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+    expect(screen.queryByText(en.find.unreadable)).not.toBeOnTheScreen();
+  });
+
+  it("shows its answer with the disclaimer for a lookup without photos", async () => {
+    mockLog.finds.set(1, textFind(1, 0, done(CHANTERELLE)));
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(row.getByText("Chanterelle")).toBeOnTheScreen();
+    expect(row.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+    expect(row.queryByText(en.disclaimer)).not.toBeOnTheScreen();
+  });
+
+  it.each([
+    ["no_mushroom", en.find.noMushroomDescribed],
+    ["cannot_tell", en.find.cannotTellDescribed],
+  ] as const)("says %s in the words of a description", async (result, text) => {
+    mockLog.finds.set(1, textFind(1, 0, done({ result })));
+    await startApp();
+    expect(within(await screen.findByTestId("find-row-1")).getByText(text)).toBeOnTheScreen();
+  });
+
+  it("opens the text find's own screen from its row", async () => {
+    mockLog.finds.set(4, textFind(4, 0, { state: "waiting" }));
+    const app = await startApp();
+    await fireEvent.press(await screen.findByTestId("find-row-4"));
+    expect(app.pathname()).toBe("/find/4");
+    expect(await screen.findByText("A yellow funnel with false gills.")).toBeOnTheScreen();
+  });
+
+  it("is analysed by a queue run by its text, which ends with the answer in the list", async () => {
+    mockLog.finds.set(1, textFind(1, 0, { state: "waiting" }));
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    Object.defineProperty(AppState, "currentState", { value: "active", configurable: true });
+    await startApp();
+    expect(await screen.findByText("Chanterelle")).toBeOnTheScreen();
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.messages[0].content[0]).toEqual({
+      type: "text",
+      text: "A yellow funnel with false gills.",
+    });
+  });
+
+  it("has a link to the text lookup", async () => {
+    const app = await startApp();
+    await fireEvent.press(await screen.findByRole("link", { name: en.log.textLookup }));
+    expect(app.pathname()).toBe("/text-lookup");
   });
 });
 

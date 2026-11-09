@@ -57,20 +57,23 @@ function covers(entry: string, path: string): boolean {
 describe("NOT_CHECKED_BY_A_SPEAKER", () => {
   const UNCHECKED = [
     "languageName",
+    "disclaimerDescribed",
     "firstStart",
     "log",
     "settings.title",
     "settings.languageHeading",
     "settings.key",
     "settings.model",
+    "settings.lookups",
     "notFound",
     "newFind",
+    "lookup",
     "queue",
     "find",
     "about",
   ];
 
-  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7, PBI-1.8 and PBI-1.9", () => {
+  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7, PBI-1.8, PBI-1.9 and PBI-2.4", () => {
     expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
   });
 
@@ -180,6 +183,7 @@ describe("the strings of the queue (PBI-1.7)", () => {
       "queue.failed.photo.loadFailed",
       "queue.failed.photo.unknown",
       "queue.failed.refused",
+      "queue.failed.refusedDescribed",
       "queue.failed.request.tooLarge",
       "queue.failed.request.unknown",
       "queue.failed.request.wrong",
@@ -225,6 +229,7 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       "log.newFind",
       "log.retry",
       "log.settings",
+      "log.textLookup",
       "log.title",
       "log.unreadable",
       "log.waiting",
@@ -237,6 +242,7 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       "find.analysisError",
       "find.back",
       "find.cannotTell",
+      "find.cannotTellDescribed",
       "find.confidence",
       "find.confidenceNote",
       "find.confidenceScore",
@@ -246,7 +252,9 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       "find.delete",
       "find.deleteCancel",
       "find.deleteConfirm",
+      "find.deleteConfirmDescribed",
       "find.deleteFailed",
+      "find.description",
       "find.deleteYes",
       "find.edibilities.deadlyPoisonous",
       "find.edibilities.edible",
@@ -263,6 +271,7 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       "find.mapFailed",
       "find.noLookAlikes",
       "find.noMushroom",
+      "find.noMushroomDescribed",
       "find.noPosition",
       "find.notFound",
       "find.openMap",
@@ -309,6 +318,99 @@ describe("the strings of the About view", () => {
       "about.title",
       "about.versionNotPinned",
     ]);
+  });
+});
+
+describe("the strings of the text lookup (PBI-2.4)", () => {
+  it.each(LANGUAGES)("are all there in %s", (language) => {
+    const paths = keyPaths(STRINGS[language]);
+    expect(paths.filter((path) => path.startsWith("lookup."))).toEqual([
+      "lookup.analyse",
+      "lookup.analysing",
+      "lookup.analysisError",
+      "lookup.asking",
+      "lookup.count",
+      "lookup.empty",
+      "lookup.input",
+      "lookup.leaveCancel",
+      "lookup.leaveConfirm",
+      "lookup.leaveYes",
+      "lookup.locationDenied",
+      "lookup.openSettings",
+      "lookup.save",
+      "lookup.saveFailed",
+      "lookup.saveHint",
+      "lookup.saving",
+      "lookup.title",
+      "lookup.turnSaveOn",
+    ]);
+    expect(paths.filter((path) => path.startsWith("settings.lookups."))).toEqual([
+      "settings.lookups.heading",
+      "settings.lookups.saveFailed",
+      "settings.lookups.textSave",
+    ]);
+    for (const path of [
+      "log.textLookup",
+      "find.description",
+      "find.noMushroomDescribed",
+      "find.cannotTellDescribed",
+      "find.deleteConfirmDescribed",
+      "queue.failed.refusedDescribed",
+    ]) {
+      expect(paths).toContain(path);
+    }
+  });
+
+  it.each(LANGUAGES)("give the count in %s with places for it", (language) => {
+    expect(STRINGS[language].lookup.count).toContain("{count}");
+    expect(STRINGS[language].lookup.count).toContain("{max}");
+  });
+
+  it("say in English what no mushroom and cannot tell mean for a text lookup (SPEC 3.9, Answers)", () => {
+    expect(STRINGS.en.find.noMushroomDescribed).toBe("The description is not of a mushroom.");
+    expect(STRINGS.en.find.cannotTellDescribed).toBe(
+      "The description does not say enough to tell which species it is.",
+    );
+  });
+
+  it.each(LANGUAGES)("speak in %s of a description, not a photo, where a lookup has none", (language) => {
+    const t = STRINGS[language];
+    for (const text of [
+      t.find.noMushroomDescribed,
+      t.find.cannotTellDescribed,
+      t.find.deleteConfirmDescribed,
+      t.queue.failed.refusedDescribed,
+    ]) {
+      expect(text).not.toMatch(/photo|foto/i);
+    }
+  });
+});
+
+describe("the disclaimer for a lookup without photos (SPEC 3.9, Answers)", () => {
+  /** A disclaimer's first sentence: up to and including its first full stop and the space after it. */
+  const firstSentence = (text: string) => text.slice(0, text.indexOf(". ") + 2);
+
+  it.each(LANGUAGES)("keeps the first sentence of SPEC 3.5 in %s, and replaces only the second", (language) => {
+    const { disclaimer, disclaimerDescribed } = STRINGS[language];
+    expect(firstSentence(disclaimerDescribed)).toBe(firstSentence(disclaimer));
+    expect(disclaimerDescribed).not.toBe(disclaimer);
+  });
+
+  it("is the English text of SPEC 3.9 as its second sentence", () => {
+    expect(STRINGS.en.disclaimerDescribed).toBe(
+      "The edibility shown is that of the species the app matched. There is no guarantee that the mushroom you described is that species.",
+    );
+  });
+
+  it("is in Swedish and Italian the counterparts of the English, the Italian awaiting a speaker's check", () => {
+    expect(STRINGS.sv.disclaimerDescribed).toBe(
+      "Ätligheten som visas gäller den art som appen har matchat. Det finns ingen garanti för att svampen du har beskrivit är den arten.",
+    );
+    expect(STRINGS.it.disclaimerDescribed).toBe(
+      "La commestibilità indicata è quella della specie individuata dall'app. Non c'è alcuna garanzia che il fungo che hai descritto sia di quella specie.",
+    );
+    expect(NOT_CHECKED_BY_A_SPEAKER.it).toContain("disclaimerDescribed");
+    expect(NOT_CHECKED_BY_A_SPEAKER.sv).toContain("disclaimerDescribed");
   });
 });
 
