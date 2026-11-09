@@ -106,7 +106,9 @@ export interface StoreOptions {
  * highest in the table or the mark, so a damaged ID past 2^53 would make every later find's ID
  * unreadable, even once that find was deleted, since the mark keeps it. The mark is still read
  * while the store can read it, so a deleted find's ID is not given again; and SQLite still moves
- * the mark up to an ID given here. Computed within the INSERT, so no other write comes between.
+ * the mark up to an ID given here. On a damaged file, once the mark is past 2^53, the store cannot
+ * read it and it never comes down again, so an ID above every readable ID left may be given again:
+ * that of a find since deleted. Computed within the INSERT, so no other write comes between.
  */
 const NEXT_ID = `1 + MAX(
   COALESCE((SELECT MAX(id) FROM finds WHERE id BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER}), 0),
