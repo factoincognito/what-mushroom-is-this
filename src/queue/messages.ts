@@ -57,6 +57,8 @@ function stopMessage(stop: QueueStop, strings: Strings, formatTime: FormatTime):
       return t.noKey;
     case "key-refused":
       return t.keyRefused;
+    case "key-not-scoped":
+      return t.keyNotScoped;
     case "no-credit":
       return t.noCredit;
     case "model-unknown":
@@ -85,6 +87,9 @@ export function failureMessage(failure: FindFailure, strings: Strings): string {
 /** Whether a stop names a setting, so that its message links to Settings. */
 export function stopNeedsSettings(stop: QueueStop): boolean {
   return (
-    stop.reason === "no-key" || stop.reason === "key-refused" || stop.reason === "model-unknown"
+    stop.reason === "no-key" ||
+    stop.reason === "key-refused" ||
+    stop.reason === "key-not-scoped" ||
+    stop.reason === "model-unknown"
   );
 }

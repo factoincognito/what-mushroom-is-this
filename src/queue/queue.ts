@@ -33,8 +33,13 @@ export type QueueStop =
   | { reason: "rate-limited"; retryAtMs: number | null; accessResumesAtMs: number | null }
   /** No key is saved, or the key store cannot be read: Settings asks for a key. */
   | { reason: "no-key" }
-  /** 401, 403: Settings asks for a key. */
+  /** 401, 403, or a key that cannot be sent: Settings asks for a key. */
   | { reason: "key-refused" }
+  /**
+   * The 400 of a key not scoped to a workspace (PBI-1.13 classes it as a refused key, status 400):
+   * the app sends no workspace header, so Settings asks for a key created in a workspace.
+   */
+  | { reason: "key-not-scoped" }
   /** 402 or a billing error. */
   | { reason: "no-credit" }
   /** 404: Settings asks for a model. */
@@ -165,7 +170,7 @@ export class AnalysisQueue {
     const reason = this.state.stop?.reason;
     const named =
       setting === "key"
-        ? reason === "no-key" || reason === "key-refused"
+        ? reason === "no-key" || reason === "key-refused" || reason === "key-not-scoped"
         : reason === "model-unknown";
     if (!named) {
       return Promise.resolve();
@@ -421,7 +426,11 @@ function outcomeOf(error: AnalysisError, accessResumesAtMs: number | null): Atte
         stop: { reason: "rate-limited", retryAtMs: error.retryAt, accessResumesAtMs },
       };
     case "key-refused":
-      return { type: "stop", stop: { reason: "key-refused" } };
+      // A refused key with status 400 is only the key not scoped to a workspace (errors.ts).
+      return {
+        type: "stop",
+        stop: { reason: error.status === 400 ? "key-not-scoped" : "key-refused" },
+      };
     case "no-credit":
       return { type: "stop", stop: { reason: "no-credit" } };
     case "model-unknown":

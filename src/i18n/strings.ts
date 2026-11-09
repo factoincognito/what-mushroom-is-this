@@ -106,6 +106,8 @@ export type Strings = {
       readonly rateLimited: string;
       readonly noKey: string;
       readonly keyRefused: string;
+      /** The key belongs to no workspace; the user must replace it with one that does. */
+      readonly keyNotScoped: string;
       readonly noCredit: string;
       readonly modelUnknown: string;
       readonly answer: string;
@@ -256,6 +258,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         noKey: "Analysen behöver din Claude-API-nyckel. Lägg till den i Inställningar.",
         keyRefused:
           "Claude-API:t godtog inte nyckeln, eller så saknar den behörighet. Ange en giltig nyckel i Inställningar.",
+        keyNotScoped:
+          "Nyckeln hör inte till någon arbetsyta, och appen kan inte ange en arbetsyta. Ersätt den i Inställningar med en nyckel som hör till en arbetsyta.",
         noCredit:
           "Nyckelns konto har ingen kredit kvar. Fyll på krediten och tryck sedan på Analysera nu.",
         modelUnknown: "Claude-API:t känner inte till modellen. Välj en annan i Inställningar.",
@@ -365,6 +369,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         noKey: "Analysis needs your Claude API key. Add it in Settings.",
         keyRefused:
           "The Claude API refused the key, or the key lacks permission. Enter a valid key in Settings.",
+        keyNotScoped:
+          "The key belongs to no workspace, and the app cannot name one. Replace it in Settings with a key that belongs to a workspace.",
         noCredit: "The key's account has no credit left. Add credit, then tap Analyse now.",
         modelUnknown: "The Claude API does not know the model. Choose another in Settings.",
         answer:
@@ -474,6 +480,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         noKey: "L'analisi richiede la tua chiave API di Claude. Aggiungila in Impostazioni.",
         keyRefused:
           "L'API di Claude ha rifiutato la chiave, oppure la chiave non ha l'autorizzazione. Inserisci una chiave valida in Impostazioni.",
+        keyNotScoped:
+          "La chiave non appartiene a nessuno spazio di lavoro e l'app non può indicarne uno. Sostituiscila in Impostazioni con una chiave che appartiene a uno spazio di lavoro.",
         noCredit:
           "L'account della chiave non ha più credito. Aggiungi credito, poi tocca Analizza ora.",
         modelUnknown: "L'API di Claude non conosce il modello. Scegline un altro in Impostazioni.",
