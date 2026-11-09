@@ -55,6 +55,11 @@ function emptyLog(): FindLog {
   return {
     add: jest.fn(next),
     addText: jest.fn(next),
+    addWithOpenBatch: jest.fn(next),
+    addPhoto: jest.fn(async () => undefined),
+    completeBatch: jest.fn(async () => undefined),
+    removePhoto: jest.fn(async () => ({ photoRemoved: true })),
+    setAddedPhotos: jest.fn(async () => undefined),
     get: jest.fn(async () => null),
     getStored: jest.fn(async () => null),
     list: jest.fn(async () => []),
@@ -266,6 +271,43 @@ describe("QueueProvider, the triggers (SPEC 3.4)", () => {
       const store = await screenLog?.();
       await expect(store?.addText(NEW_TEXT_FIND)).rejects.toThrow("disk full");
     });
+    expect(queue.trigger).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs it when a batch is completed through the find log the screens get, after the change (SPEC 3.9, Batches; PBI-2.5)", async () => {
+    const { queue, log } = await renderQueue();
+    await act(async () => {
+      const store = await screenLog?.();
+      await store?.completeBatch(4);
+    });
+    expect(log.completeBatch).toHaveBeenCalledWith(4);
+    expect(queue.trigger).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not run it when completing a batch fails (PBI-2.5)", async () => {
+    const log = emptyLog();
+    jest.mocked(log.completeBatch).mockRejectedValue(new Error("disk full"));
+    const { queue } = await renderQueue({ log });
+    await act(async () => {
+      const store = await screenLog?.();
+      await expect(store?.completeBatch(4)).rejects.toThrow("disk full");
+    });
+    expect(queue.trigger).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not run it when a photo lookup's find is saved with its first photo, or a photo is saved (SPEC 3.9, Batches; PBI-2.5)", async () => {
+    const { queue, log } = await renderQueue();
+    let id = 0;
+    await act(async () => {
+      const store = await screenLog?.();
+      id = (await store?.addWithOpenBatch(NEW_FIND)) ?? 0;
+      await store?.addPhoto(id, "file:///cache/b.jpg");
+      await store?.removePhoto(id, 2);
+    });
+    expect(id).toBe(1);
+    expect(log.addWithOpenBatch).toHaveBeenCalledWith(NEW_FIND);
+    expect(log.addPhoto).toHaveBeenCalledWith(1, "file:///cache/b.jpg");
+    expect(log.removePhoto).toHaveBeenCalledWith(1, 2);
     expect(queue.trigger).toHaveBeenCalledTimes(1);
   });
 

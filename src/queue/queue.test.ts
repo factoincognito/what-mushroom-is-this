@@ -54,6 +54,27 @@ class FakeLog implements QueueLog {
     this.put(id, analysis, text, photos);
   }
 
+  /**
+   * A photo find with several photos (PBI-2.5), each named by the find's ID and its number:
+   * `file:///photos/<id>-<n>.jpg`, the first `n` 1, in the batches given.
+   */
+  addPhotos(id: number, batches: number[], analysis: Analysis = { state: "waiting" }): void {
+    const photos = batches.map((batch, index) => ({
+      uri: `file:///photos/${id}-${index + 1}.jpg`,
+      batch,
+    }));
+    this.put(id, analysis, null, photos);
+  }
+
+  /** Changes a find as the store would hold it (an open batch, the photos added since). */
+  set(id: number, change: Partial<StoredFind>): void {
+    const find = this.finds.get(id);
+    if (find === undefined) {
+      throw new Error(`no find ${id}`);
+    }
+    this.finds.set(id, { ...find, ...change });
+  }
+
   private put(id: number, analysis: Analysis, text: string | null, photos: FindPhoto[]): void {
     this.finds.set(id, {
       id,
@@ -73,13 +94,33 @@ class FakeLog implements QueueLog {
     return this.finds.get(id)?.analysis;
   }
 
+  /**
+   * As the store's pick (PBI-2.5): a waiting find, or an analysed one whose photos added since its
+   * answer wait, in either case with its batch complete; oldest first by ID.
+   */
   async oldestWaiting(): Promise<number | null> {
     this.check("oldestWaiting");
     const ids = [...this.finds.values()]
-      .filter((find) => find.analysis.state === "waiting")
+      .filter(
+        (find) =>
+          !find.batchOpen &&
+          (find.analysis.state === "waiting" ||
+            (find.analysis.state === "done" && find.addedPhotos === "waiting")),
+      )
       .map((find) => find.id)
       .sort((a, b) => a - b);
     return ids[0] ?? null;
+  }
+
+  async setAddedPhotos(id: number, state: "waiting" | "not-analysed"): Promise<void> {
+    this.check("setAddedPhotos");
+    this.changes.push(`setAddedPhotos ${id} ${state}`);
+    const find = this.finds.get(id);
+    const from = state === "waiting" ? "not-analysed" : "waiting";
+    if (find === undefined || find.addedPhotos !== from) {
+      throw new StoreError("wrong-state", `find ${id}'s added photos are not ${from}`);
+    }
+    this.finds.set(id, { ...find, addedPhotos: state });
   }
 
   async getStored(id: number): Promise<StoredFind | null> {
@@ -118,7 +159,9 @@ class FakeLog implements QueueLog {
     if (find === undefined) {
       throw new StoreError("not-found", `no find has the ID ${id}`);
     }
-    this.finds.set(id, { ...find, analysis });
+    // An answer covers every photo the find holds here: none is added while a test's analysis runs.
+    const addedPhotos = analysis.state === "done" ? "analysed" : null;
+    this.finds.set(id, { ...find, analysis, addedPhotos });
   }
 
   private check(method: string): void {
@@ -273,7 +316,7 @@ describe("the run (SPEC 3.4)", () => {
         apiAddress: SETTINGS.apiAddress,
         model: "claude-haiku-5-5",
         apiKey: "sk-ant-test",
-        imageBase64: "AAAA",
+        imagesBase64: ["AAAA"],
         timeLimitMs: SETTINGS.timeLimitMs,
       },
     ]);
@@ -664,7 +707,7 @@ describe("the photo for analysis (SPEC 3.3)", () => {
         : { ok: true, imageBase64: "BBBB", width: 1, height: 1 },
     );
     await t.queue.trigger();
-    expect(t.calls.map((call) => call.imageBase64)).toEqual(["BBBB"]);
+    expect(t.calls.map((call) => call.imagesBase64)).toEqual([["BBBB"]]);
     expect(t.log.changes).toEqual([
       "markFailed 1 segment-check: forbidden-segment 0xFFE1",
       "setAnswer 2",
@@ -685,7 +728,7 @@ describe("the photo for analysis (SPEC 3.3)", () => {
         : { ok: true, imageBase64: "BBBB", width: 1, height: 1 },
     );
     await t.queue.trigger();
-    expect(t.calls.map((call) => call.imageBase64)).toEqual(["BBBB"]);
+    expect(t.calls.map((call) => call.imagesBase64)).toEqual([["BBBB"]]);
     expect(t.log.changes).toEqual([
       "markFailed 1 photo: load-failed: unsupported image format",
       "setAnswer 2",
@@ -1368,7 +1411,7 @@ describe("a text find in the queue (SPEC 3.9, PBI-2.4)", () => {
     t.log.addTextFind(3, "A white cap.");
     await t.queue.trigger();
     expect(t.log.changes).toEqual(["setAnswer 1", "setAnswer 2", "setAnswer 3"]);
-    expect(t.calls.map((call) => call.text ?? call.imageBase64)).toEqual([
+    expect(t.calls.map((call) => call.text ?? call.imagesBase64?.[0])).toEqual([
       DESCRIPTION,
       "AAAA",
       "A white cap.",
@@ -1428,15 +1471,24 @@ describe("a text find in the queue (SPEC 3.9, PBI-2.4)", () => {
     expect(t.log.sent).toEqual([{ id: 1, photoUris: [] }]);
   });
 
-  it("sends a text find that has photos by its first photo, as for a photo find, until all its photos are sent (PBI-2.5)", async () => {
+  it("sends a text find that has photos by all its photos and its text, in one request (SPEC 3.9, Batches; PBI-2.5)", async () => {
     const t = setup();
     t.log.addTextFind(1, DESCRIPTION, { state: "waiting" }, [
       { uri: "file:///photos/a.jpg", batch: 1 },
       { uri: "file:///photos/b.jpg", batch: 1 },
     ]);
+    t.setPreparation(async (uri) => ({ ...LOADED, imageBase64: uri.slice(-5, -4) }));
     await t.queue.trigger();
-    expect(t.prepared.map((call) => call.uri)).toEqual(["file:///photos/a.jpg"]);
-    expect(t.log.sent).toEqual([{ id: 1, photoUris: ["file:///photos/a.jpg"] }]);
+    expect(t.prepared.map((call) => call.uri)).toEqual([
+      "file:///photos/a.jpg",
+      "file:///photos/b.jpg",
+    ]);
+    expect(t.calls).toEqual([
+      expect.objectContaining({ imagesBase64: ["a", "b"], text: DESCRIPTION }),
+    ]);
+    expect(t.log.sent).toEqual([
+      { id: 1, photoUris: ["file:///photos/a.jpg", "file:///photos/b.jpg"] },
+    ]);
   });
 
   it("refuses, as a store error that stops the queue, a waiting find with neither text nor a photo, which the store never gives", async () => {
@@ -1450,6 +1502,381 @@ describe("a text find in the queue (SPEC 3.9, PBI-2.4)", () => {
     await expect(t.queue.trigger()).rejects.toMatchObject({ code: "corrupt" });
     expect(t.calls).toEqual([]);
     expect(t.log.changes).toEqual([]);
+  });
+});
+
+/** A segment-check failure of a photo that loaded. */
+const refused: PreparedPhoto = {
+  ok: false,
+  loaded: true,
+  failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+};
+
+/** Prepares each photo as `outcomes` gives it by its URI's name ("1-2" for find 1, photo 2). */
+function photosByName(outcomes: Record<string, PreparedPhoto>) {
+  return async (uri: string): Promise<PreparedPhoto> => {
+    const name = /\/([^/]+)\.jpg$/.exec(uri)?.[1] ?? "";
+    return outcomes[name] ?? { ...LOADED, imageBase64: name };
+  };
+}
+
+const ANSWERED: Analysis = { state: "done", answer: OTHER_ANSWER, model: "m", analysedAtMs: 1 };
+
+describe("all of a find's photos in one request (SPEC 3.9, Batches; PBI-2.5)", () => {
+  it("prepares every photo in the order added and sends them all in one request, telling the store it sent them all", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1, 1, 2]);
+    t.setPreparation(photosByName({}));
+    await t.queue.trigger();
+    expect(t.prepared.map((call) => call.uri)).toEqual([
+      "file:///photos/1-1.jpg",
+      "file:///photos/1-2.jpg",
+      "file:///photos/1-3.jpg",
+    ]);
+    expect(t.calls).toEqual([
+      {
+        apiAddress: SETTINGS.apiAddress,
+        model: "claude-opus-5-5",
+        apiKey: "sk-ant-test",
+        imagesBase64: ["1-1", "1-2", "1-3"],
+        timeLimitMs: SETTINGS.timeLimitMs,
+      },
+    ]);
+    expect(t.log.sent).toEqual([
+      {
+        id: 1,
+        photoUris: ["file:///photos/1-1.jpg", "file:///photos/1-2.jpg", "file:///photos/1-3.jpg"],
+      },
+    ]);
+  });
+
+  it("prepares the photos one at a time: the next only once the one before is ready", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1, 1, 1]);
+    let preparing = 0;
+    let most = 0;
+    t.setPreparation(async () => {
+      preparing += 1;
+      most = Math.max(most, preparing);
+      await flush();
+      preparing -= 1;
+      return LOADED;
+    });
+    await t.queue.trigger();
+    expect(t.prepared).toHaveLength(3);
+    expect(most).toBe(1);
+  });
+
+  it("a photo that fails the segment check: nothing is sent, the find fails naming the photo, and the queue goes on", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1, 1, 1]);
+    t.log.addFind(2);
+    t.setPreparation(photosByName({ "1-2": refused }));
+    await t.queue.trigger();
+    expect(t.calls.map((call) => call.imagesBase64)).toEqual([["BBBB"]]);
+    expect(t.log.changes).toEqual([
+      "markFailed 1 segment-check: photo 2: forbidden-segment 0xFFE1",
+      "setAnswer 2",
+    ]);
+  });
+
+  it("a photo that cannot be loaded: nothing is sent, the find fails naming the photo, and no photo after it is prepared", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1, 1, 1]);
+    t.setPreparation(photosByName({ "1-2": loadFailed("load-failed") }));
+    await t.queue.trigger();
+    expect(t.calls).toEqual([]);
+    expect(t.prepared.map((call) => call.uri)).toEqual([
+      "file:///photos/1-1.jpg",
+      "file:///photos/1-2.jpg",
+    ]);
+    expect(t.log.changes).toEqual(["markFailed 1 photo: photo 2: load-failed"]);
+  });
+
+  it("names the first photo that failed when two fail", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1, 1, 1]);
+    t.setPreparation(photosByName({ "1-1": refused, "1-3": badSize("invalid-size: x") }));
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["markFailed 1 segment-check: photo 1: forbidden-segment 0xFFE1"]);
+  });
+
+  it("analysed from its screen, stops preparing at the first photo that fails", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1, 1, 1]);
+    t.setPreparation(photosByName({ "1-1": refused }));
+    await expect(t.queue.analyseFind(1)).resolves.toMatchObject({ ok: false });
+    expect(t.prepared.map((call) => call.uri)).toEqual(["file:///photos/1-1.jpg"]);
+    expect(t.log.changes).toEqual(["markFailed 1 segment-check: photo 1: forbidden-segment 0xFFE1"]);
+  });
+
+  it("sends the photos left, and no photo of the find's removed one, after a photo was removed", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1, 2], ANSWERED);
+    t.log.set(1, {
+      addedPhotos: "waiting",
+      photos: [{ uri: "file:///photos/1-1.jpg", batch: 1 }],
+    });
+    t.setPreparation(photosByName({}));
+    await t.queue.trigger();
+    expect(t.calls.map((call) => call.imagesBase64)).toEqual([["1-1"]]);
+    expect(t.log.changes).toEqual(["replaceAnswer 1"]);
+  });
+});
+
+describe("the count of failed loads with several photos (SPEC 3.9, Batches; PBI-1.25)", () => {
+  it("a find counts as one whose photos cannot be loaded when any one of them cannot", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1, 1]);
+    t.log.addPhotos(2, [1, 1]);
+    t.log.addFind(3);
+    t.setPreparation(
+      photosByName({ "1-2": loadFailed("load-failed"), "2-1": loadFailed("load-failed") }),
+    );
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["markFailed 1 photo: photo 2: load-failed"]);
+    expect(t.log.state(2)).toEqual({ state: "waiting" });
+    expect(t.log.state(3)).toEqual({ state: "waiting" });
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+  });
+
+  it("in a run, the photos after one that fails the segment check are still loaded, and a find whose photos all load ends the count", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.log.addPhotos(2, [1, 1]);
+    t.log.addFind(3);
+    t.setPreparation(
+      photosByName({
+        "1": loadFailed("load-failed"),
+        "2-1": refused,
+        "3": loadFailed("load-failed"),
+      }),
+    );
+    await t.queue.trigger();
+    expect(t.prepared.map((call) => call.uri)).toEqual([
+      "file:///photos/1.jpg",
+      "file:///photos/2-1.jpg",
+      "file:///photos/2-2.jpg",
+      "file:///photos/3.jpg",
+    ]);
+    expect(t.calls).toEqual([]);
+    expect(t.log.changes).toEqual([
+      "markFailed 1 photo: load-failed",
+      "markFailed 2 segment-check: photo 1: forbidden-segment 0xFFE1",
+      "markFailed 3 photo: load-failed",
+    ]);
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it("a find whose photo after a segment failure does not load counts as one whose photos cannot be loaded", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.log.addPhotos(2, [1, 1]);
+    t.setPreparation(
+      photosByName({ "1": loadFailed("load-failed"), "2-1": refused, "2-2": loadFailed("x") }),
+    );
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["markFailed 1 photo: load-failed"]);
+    expect(t.log.state(2)).toEqual({ state: "waiting" });
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+  });
+});
+
+describe("a new batch on an analysed find (SPEC 3.9, Batches; PBI-2.5)", () => {
+  /** An analysed find with a second batch whose photo waits for the queue. */
+  function analysedWithNewPhotos(t: ReturnType<typeof setup>, id = 1): void {
+    t.log.addPhotos(id, [1, 2], ANSWERED);
+    t.log.set(id, { addedPhotos: "waiting" });
+  }
+
+  it("the queue takes it, sends all its photos and replaces its answer, covering them", async () => {
+    const t = setup();
+    analysedWithNewPhotos(t);
+    t.setPreparation(photosByName({}));
+    await t.queue.trigger();
+    expect(t.calls.map((call) => call.imagesBase64)).toEqual([["1-1", "1-2"]]);
+    expect(t.log.changes).toEqual(["replaceAnswer 1"]);
+    expect(t.log.sent).toEqual([
+      { id: 1, photoUris: ["file:///photos/1-1.jpg", "file:///photos/1-2.jpg"] },
+    ]);
+    expect(t.log.finds.get(1)).toMatchObject({
+      analysis: { state: "done", answer: MATCH, analysedAtMs: NOW },
+      addedPhotos: "analysed",
+    });
+  });
+
+  it("the queue does not take a find while its batch is open", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1, 1]);
+    t.log.set(1, { batchOpen: true });
+    analysedWithNewPhotos(t, 2);
+    t.log.set(2, { batchOpen: true });
+    await t.queue.trigger();
+    expect(t.calls).toEqual([]);
+  });
+
+  it.each([
+    "analysed",
+    "not-analysed",
+  ] as const)("the queue does not take an analysed find whose added photos are %s", async (state) => {
+    const t = setup();
+    analysedWithNewPhotos(t);
+    t.log.set(1, { addedPhotos: state });
+    await t.queue.trigger();
+    expect(t.calls).toEqual([]);
+  });
+
+  it.each([
+    ["no network", "network"],
+    ["the time limit", "time-out"],
+    ["a fault on Anthropic's side", "server"],
+  ] as const)(
+    "%s: the photos stay waiting, the find keeps its answer, and the run ends",
+    async (_name, cause) => {
+      const t = setup();
+      analysedWithNewPhotos(t);
+      analysedWithNewPhotos(t, 2);
+      t.replies.push(fail({ kind: "stays-waiting", cause, status: null }));
+      await t.queue.trigger();
+      expect(t.calls).toHaveLength(1);
+      expect(t.log.changes).toEqual([]);
+      expect(t.log.finds.get(1)).toMatchObject({ analysis: ANSWERED, addedPhotos: "waiting" });
+      expect(t.queue.getState().pause).toBe(cause);
+    },
+  );
+
+  it("a 400: the find keeps its answer, is not marked failed, its new photos are not yet analysed, and the queue goes on", async () => {
+    const t = setup();
+    analysedWithNewPhotos(t);
+    t.log.addFind(2);
+    t.replies.push(
+      fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+    );
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["setAddedPhotos 1 not-analysed", "setAnswer 2"]);
+    expect(t.log.finds.get(1)).toMatchObject({ analysis: ANSWERED, addedPhotos: "not-analysed" });
+  });
+
+  it("a photo that cannot be sized: the find keeps its answer and its new photos are not yet analysed", async () => {
+    const t = setup();
+    analysedWithNewPhotos(t);
+    t.setPreparation(photosByName({ "1-2": badSize("invalid-size: x") }));
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["setAddedPhotos 1 not-analysed"]);
+    expect(t.log.finds.get(1)).toMatchObject({ analysis: ANSWERED });
+  });
+
+  it.each([
+    [
+      "an answer not of the shape",
+      fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
+      { reason: "answer" },
+    ],
+    ["401", fail({ kind: "key-refused", status: 401, cause: "refused" }), { reason: "key-refused" }],
+    [
+      "429",
+      fail({ kind: "rate-limited", retryAt: null }),
+      { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
+    ],
+    ["any other status", fail({ kind: "other", status: 418 }), { reason: "other", status: 418 }],
+  ] as const)(
+    "%s: the queue stops, the find keeps its answer, and its new photos are not yet analysed",
+    async (_name, reply, stop) => {
+      const t = setup();
+      analysedWithNewPhotos(t);
+      t.replies.push(reply);
+      await t.queue.trigger();
+      expect(t.log.changes).toEqual(["setAddedPhotos 1 not-analysed"]);
+      expect(t.log.finds.get(1)).toMatchObject({ analysis: ANSWERED });
+      expect(t.queue.getState().stop).toEqual(stop);
+    },
+  );
+
+  it("without a key: nothing is sent, the photos stay waiting, as a find waits without a key (SPEC 3.2), and the queue stops for a key", async () => {
+    const t = setup();
+    analysedWithNewPhotos(t);
+    t.setKey({ ok: true, key: null });
+    await t.queue.trigger();
+    expect(t.calls).toEqual([]);
+    expect(t.log.changes).toEqual([]);
+    expect(t.log.finds.get(1)).toMatchObject({ addedPhotos: "waiting" });
+    expect(t.queue.getState().stop).toEqual({ reason: "no-key" });
+  });
+
+  it("the second find in a row whose photos do not load: its new photos stay waiting and the run stops (PBI-1.25)", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    analysedWithNewPhotos(t, 2);
+    t.setPreparation(
+      photosByName({ "1": loadFailed("load-failed"), "2-2": loadFailed("load-failed") }),
+    );
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["markFailed 1 photo: load-failed"]);
+    expect(t.log.finds.get(2)).toMatchObject({ analysis: ANSWERED, addedPhotos: "waiting" });
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+  });
+
+  describe("analysed from its screen, when the user asks", () => {
+    it("photos not yet analysed after a failure: an answer replaces the earlier one and covers them", async () => {
+      const t = setup();
+      analysedWithNewPhotos(t);
+      t.log.set(1, { addedPhotos: "not-analysed" });
+      await expect(t.queue.analyseFind(1)).resolves.toEqual({ ok: true });
+      expect(t.log.changes).toEqual(["replaceAnswer 1"]);
+      expect(t.log.finds.get(1)).toMatchObject({ addedPhotos: "analysed" });
+    });
+
+    it("a pause puts photos not yet analysed back to waiting, for the queue's next run", async () => {
+      const t = setup();
+      analysedWithNewPhotos(t);
+      t.log.set(1, { addedPhotos: "not-analysed" });
+      t.replies.push(fail({ kind: "stays-waiting", cause: "network", status: null }));
+      await expect(t.queue.analyseFind(1)).resolves.toEqual({
+        ok: false,
+        notice: { kind: "paused", cause: "network" },
+        answerKept: true,
+      });
+      expect(t.log.changes).toEqual(["setAddedPhotos 1 waiting"]);
+    });
+
+    it("a 400 marks waiting photos not yet analysed, and the answer is kept", async () => {
+      const t = setup();
+      analysedWithNewPhotos(t);
+      t.replies.push(
+        fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+      );
+      await expect(t.queue.analyseFind(1)).resolves.toEqual({
+        ok: false,
+        notice: {
+          kind: "find-failed",
+          failure: { cause: "request", detail: "request-wrong (status 400)" },
+        },
+        answerKept: true,
+      });
+      expect(t.log.changes).toEqual(["setAddedPhotos 1 not-analysed"]);
+      expect(t.log.finds.get(1)).toMatchObject({ analysis: ANSWERED });
+    });
+
+    it("a 400 leaves photos not yet analysed as they are", async () => {
+      const t = setup();
+      analysedWithNewPhotos(t);
+      t.log.set(1, { addedPhotos: "not-analysed" });
+      t.replies.push(
+        fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+      );
+      await t.queue.analyseFind(1);
+      expect(t.log.changes).toEqual([]);
+    });
+
+    it("an analysed find whose photos are all analysed: a failure changes nothing, as in Phase 1", async () => {
+      const t = setup();
+      t.log.addPhotos(1, [1, 1], ANSWERED);
+      t.replies.push(fail({ kind: "stays-waiting", cause: "network", status: null }));
+      await t.queue.analyseFind(1);
+      t.replies.push(fail({ kind: "other", status: 418 }));
+      await t.queue.analyseFind(1);
+      expect(t.log.changes).toEqual([]);
+    });
   });
 });
 
@@ -1622,7 +2049,10 @@ describe("an unsaved lookup, analysed from its screen (SPEC 3.9, Lookups)", () =
     expect(t.calls).toHaveLength(1);
     release();
     await Promise.all([run, lookup]);
-    expect(t.calls.map((call) => call.text ?? call.imageBase64)).toEqual(["AAAA", DESCRIPTION]);
+    expect(t.calls.map((call) => call.text ?? call.imagesBase64?.[0])).toEqual([
+      "AAAA",
+      DESCRIPTION,
+    ]);
   });
 });
 

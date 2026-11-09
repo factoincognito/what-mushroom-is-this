@@ -12,7 +12,7 @@ import { Alert, Linking } from "react-native";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { STRINGS } from "../../i18n/strings";
-import type { NewFind, Position } from "../../store/find";
+import type { NewFind, Position, StoredFind } from "../../store/find";
 import { warmUpRouter } from "../../testing/warmUpRouter";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
@@ -38,14 +38,25 @@ jest.mock("expo-location", () => ({
   requestForegroundPermissionsAsync: jest.fn(),
 }));
 
-/** The find log, in memory. (Named `mock…` so that the hoisted factory may use it.) */
+/**
+ * The find log, in memory. (Named `mock…` so that the hoisted factory may use it.) A photo
+ * lookup's find is saved with its first photo and its batch open (`addWithOpenBatch`, PBI-2.5);
+ * each photo after it is added to the find (`addPhoto`), and the batch is completed at the end.
+ */
 const mockLog = {
   added: [] as NewFind[],
+  /** The photos added to a find after its first, as [find ID, photo URI]. */
+  photosAdded: [] as [number, string][],
+  /** The finds whose batch was completed, in order. */
+  completed: [] as number[],
   positions: [] as [number, Position][],
+  /** The errors of the next saves, first and later photos alike. */
   addErrors: [] as Error[],
-  /** Saves held open, one per call to `add`, until released (`holdNextAdd`). */
+  /** Saves held open, one per save, until released (`holdNextAdd`). */
   addHolds: [] as Promise<void>[],
-  async add(find: NewFind): Promise<number> {
+  /** The finds `getStored` gives, for photos added to a find from its screen. */
+  stored: new Map<number, StoredFind>(),
+  async save(): Promise<void> {
     const hold = mockLog.addHolds.shift();
     if (hold !== undefined) {
       await hold;
@@ -54,8 +65,21 @@ const mockLog = {
     if (error !== undefined) {
       throw error;
     }
+  },
+  async addWithOpenBatch(find: NewFind): Promise<number> {
+    await mockLog.save();
     mockLog.added.push(find);
     return mockLog.added.length;
+  },
+  async addPhoto(id: number, photoUri: string): Promise<void> {
+    await mockLog.save();
+    mockLog.photosAdded.push([id, photoUri]);
+  },
+  async completeBatch(id: number): Promise<void> {
+    mockLog.completed.push(id);
+  },
+  async getStored(id: number): Promise<StoredFind | null> {
+    return mockLog.stored.get(id) ?? null;
   },
   async setPosition(id: number, position: Position): Promise<void> {
     mockLog.positions.push([id, position]);
@@ -111,9 +135,12 @@ async function resetStandIns(): Promise<void> {
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
   phoneIn("en");
   mockLog.added = [];
+  mockLog.photosAdded = [];
+  mockLog.completed = [];
   mockLog.positions = [];
   mockLog.addErrors = [];
   mockLog.addHolds = [];
+  mockLog.stored.clear();
   sendFix = null;
   watchRemoved = 0;
   jest
@@ -311,14 +338,14 @@ describe("a photo from the camera", () => {
     expect(watchRemoved).toBe(1);
   });
 
-  it("goes back to the Log screen from the saved message", async () => {
+  it("is saved with its batch open, so that the queue does not take it yet (SPEC 3.9, Batches)", async () => {
     jest
       .mocked(ImagePicker.launchCameraAsync)
-      .mockResolvedValue(wrong({ canceled: false, assets: [cameraPhoto] }));
-    const app = await openNewFind();
-    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.back }));
-    expect(await screen.findByText(STRINGS.en.log.empty)).toBeOnTheScreen();
-    expect(app.pathname()).toBe("/");
+      .mockResolvedValueOnce(wrong({ canceled: false, assets: [cameraPhoto] }));
+    await openNewFind();
+    expect(mockLog.added).toHaveLength(1);
+    expect(mockLog.completed).toEqual([]);
+    expect(screen.getByRole("button", { name: STRINGS.en.newFind.analyse })).toBeOnTheScreen();
   });
 
   it("can be saved again when saving fails, and is then saved once", async () => {
@@ -436,7 +463,7 @@ describe("dropping a kept photo asks first (PBI-1.20, SPEC 3.1)", () => {
   }
 
   describe("leaving while the photo is being saved is held until the save ends (Clead's fix 1 on #32)", () => {
-    it("the first save: once it succeeds, the held leave goes ahead, asking nothing", async () => {
+    it("the first save: once it succeeds, the held leave goes ahead, asking nothing, and completes the batch", async () => {
       const release = holdNextAdd();
       jest
         .mocked(ImagePicker.launchCameraAsync)
@@ -450,6 +477,7 @@ describe("dropping a kept photo asks first (PBI-1.20, SPEC 3.1)", () => {
       expect(mockLog.added.map((find) => find.photoUri)).toEqual([cameraPhoto.uri]);
       expect(app.pathname()).toBe("/");
       expect(await screen.findByText(STRINGS.en.log.empty)).toBeOnTheScreen();
+      expect(mockLog.completed).toEqual([1]);
     });
 
     it("the first save: once it fails, the screen stays and asks the leave question", async () => {
@@ -673,6 +701,253 @@ describe("leaving the screen", () => {
       [1, { latitude: 59.66, longitude: 17.1, accuracyM: 9, source: "fix" }],
     ]);
     expect(watchRemoved).toBe(1);
+  });
+});
+
+const en = STRINGS.en;
+const secondPhoto = { uri: "file:///cache/ImagePicker/second.jpg", width: 4032, height: 3024 };
+const photoCount = (count: number) =>
+  en.newFind.photoCount.replace("{count}", String(count)).replace("{max}", "5");
+
+/** Leaves the screen as the header's back button would, and lets the router run. */
+async function leaveScreen(): Promise<void> {
+  await act(async () => {
+    router.back();
+  });
+  await settle();
+  await runTimers();
+  await settle();
+}
+
+describe("several photos in one batch (SPEC 3.9, Batches; PBI-2.5)", () => {
+  /** Opens New find; the camera gives the first photo, then `secondPhoto` each time after. */
+  async function withFirstPhoto(): Promise<{ pathname: () => string }> {
+    jest
+      .mocked(ImagePicker.launchCameraAsync)
+      .mockResolvedValueOnce(wrong({ canceled: false, assets: [cameraPhoto] }))
+      .mockResolvedValue(wrong({ canceled: false, assets: [secondPhoto] }));
+    const app = await openNewFind();
+    expect(mockLog.added).toHaveLength(1);
+    return app;
+  }
+
+  it("after the first photo, offers another and Analyse, and saves the next to the same find, not a new one", async () => {
+    await withFirstPhoto();
+    expect(screen.getByText(photoCount(1))).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.takePhoto }));
+    await settle();
+    expect(mockLog.added).toHaveLength(1);
+    expect(mockLog.photosAdded).toEqual([[1, secondPhoto.uri]]);
+    expect(screen.getByText(photoCount(2))).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: en.newFind.analyse })).toBeOnTheScreen();
+    expect(mockLog.completed).toEqual([]);
+  });
+
+  it("saves a photo from the gallery after one from the camera to the same find, and takes no time or position from it", async () => {
+    await withFirstPhoto();
+    jest
+      .mocked(ImagePicker.launchImageLibraryAsync)
+      .mockResolvedValue(wrong({ canceled: false, assets: [galleryPhoto] }));
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.pickFromGallery }));
+    await settle();
+    expect(mockLog.photosAdded).toEqual([[1, galleryPhoto.uri]]);
+    expect(mockLog.added).toHaveLength(1);
+    expect(mockLog.added[0]?.time.source).toBe("saved");
+  });
+
+  it("offers no more photos once the find holds the most, and says so", async () => {
+    await withFirstPhoto();
+    for (let i = 0; i < 4; i += 1) {
+      await fireEvent.press(screen.getByRole("button", { name: en.newFind.takePhoto }));
+      await settle();
+    }
+    expect(mockLog.photosAdded).toHaveLength(4);
+    expect(screen.getByText(photoCount(5))).toBeOnTheScreen();
+    expect(screen.getByText(en.newFind.maxReached)).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.newFind.takePhoto })).not.toBeOnTheScreen();
+    expect(
+      screen.queryByRole("button", { name: en.newFind.pickFromGallery }),
+    ).not.toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: en.newFind.analyse })).toBeOnTheScreen();
+  });
+
+  it("Analyse completes the batch, which is a queue trigger, and opens the find's screen", async () => {
+    const app = await withFirstPhoto();
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.analyse }));
+    await settle();
+    await runTimers();
+    expect(mockLog.completed).toEqual([1]);
+    expect(app.pathname()).toBe("/find/1");
+  });
+
+  it("leaving the screen with photos saved completes the batch, asking nothing", async () => {
+    const app = await withFirstPhoto();
+    await leaveScreen();
+    expect(app.pathname()).toBe("/");
+    expect(screen.queryByText(en.newFind.leaveConfirm)).not.toBeOnTheScreen();
+    expect(mockLog.completed).toEqual([1]);
+  });
+
+  it("leaving the screen before any photo is saved completes nothing", async () => {
+    const app = await openNewFind();
+    await leaveScreen();
+    expect(app.pathname()).toBe("/");
+    expect(mockLog.completed).toEqual([]);
+  });
+
+  it("a later photo whose save fails is kept, and Save again saves it to the same find", async () => {
+    await withFirstPhoto();
+    mockLog.addErrors = [new Error("database is locked")];
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.takePhoto }));
+    await settle();
+    expect(screen.getByText(en.newFind.saveFailed)).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.newFind.analyse })).not.toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.retrySave }));
+    await settle();
+    expect(mockLog.photosAdded).toEqual([[1, secondPhoto.uri]]);
+    expect(mockLog.added).toHaveLength(1);
+    expect(screen.getByText(photoCount(2))).toBeOnTheScreen();
+  });
+
+  it("asks before leaving with a later photo whose save failed, and completes the batch once left", async () => {
+    const app = await withFirstPhoto();
+    mockLog.addErrors = [new Error("database is locked")];
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.takePhoto }));
+    await settle();
+    await leaveScreen();
+    expect(screen.getByText(en.newFind.leaveConfirm)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.leaveYes }));
+    await settle();
+    await runTimers();
+    expect(app.pathname()).toBe("/");
+    expect(mockLog.photosAdded).toEqual([]);
+    expect(mockLog.completed).toEqual([1]);
+  });
+
+  it("a later camera photo changes nothing of the find's position", async () => {
+    await withFirstPhoto();
+    await act(async () => sendFix?.(fix(59.66, 17.1, 9)));
+    await settle();
+    expect(mockLog.positions).toHaveLength(1);
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.takePhoto }));
+    await settle();
+    await act(async () => sendFix?.(fix(1, 2, 3)));
+    await settle();
+    expect(mockLog.positions).toHaveLength(1);
+    expect(mockLog.added).toHaveLength(1);
+  });
+});
+
+describe("adding photos to a find from its screen (SPEC 3.9, Batches; PBI-2.5)", () => {
+  /** A find of the store with `count` photos, an answer, and text or none. */
+  function storedFind(id: number, count: number, text: string | null = null): StoredFind {
+    return {
+      id,
+      text,
+      photos: Array.from({ length: count }, (_, i) => ({ uri: `file:///p/${i}.jpg`, batch: 1 })),
+      batchOpen: false,
+      time: { takenAtMs: 1, utcOffsetMinutes: 0, source: "saved" },
+      position: null,
+      analysis: { state: "waiting" },
+      addedPhotos: null,
+      picture: null,
+      selfCheck: null,
+    };
+  }
+
+  /** Opens the screen that adds photos to the find, from the Log, as its screen's link does. */
+  async function openAddTo(id: number): Promise<{ pathname: () => string }> {
+    const app = renderRouter(APP_DIR, { initialUrl: "/" });
+    await app;
+    await act(async () => {
+      router.push(`/new-find?find=${id}`);
+    });
+    await settle();
+    return { pathname: () => app.getPathname() };
+  }
+
+  it("opens the camera at once, asks for no location, and saves the photo to that find", async () => {
+    mockLog.stored.set(7, storedFind(7, 2));
+    jest
+      .mocked(ImagePicker.launchCameraAsync)
+      .mockResolvedValueOnce(wrong({ canceled: false, assets: [secondPhoto] }));
+    await openAddTo(7);
+    expect(Location.getForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(Location.watchPositionAsync).not.toHaveBeenCalled();
+    expect(ImagePicker.launchCameraAsync).toHaveBeenCalledTimes(1);
+    expect(mockLog.added).toEqual([]);
+    expect(mockLog.photosAdded).toEqual([[7, secondPhoto.uri]]);
+    expect(screen.getByText(photoCount(3))).toBeOnTheScreen();
+  });
+
+  it("adds photos to a text find too", async () => {
+    mockLog.stored.set(7, storedFind(7, 0, "A yellow funnel."));
+    jest
+      .mocked(ImagePicker.launchCameraAsync)
+      .mockResolvedValueOnce(wrong({ canceled: false, assets: [secondPhoto] }));
+    await openAddTo(7);
+    expect(mockLog.photosAdded).toEqual([[7, secondPhoto.uri]]);
+    expect(screen.getByText(photoCount(1))).toBeOnTheScreen();
+  });
+
+  it("Analyse completes the batch and goes back to the screen it was opened from", async () => {
+    mockLog.stored.set(7, storedFind(7, 1));
+    jest
+      .mocked(ImagePicker.launchCameraAsync)
+      .mockResolvedValueOnce(wrong({ canceled: false, assets: [secondPhoto] }));
+    const app = await openAddTo(7);
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.analyse }));
+    await settle();
+    await runTimers();
+    expect(mockLog.completed).toEqual([7]);
+    expect(app.pathname()).toBe("/");
+  });
+
+  it("leaving the screen completes the batch", async () => {
+    mockLog.stored.set(7, storedFind(7, 1));
+    jest
+      .mocked(ImagePicker.launchCameraAsync)
+      .mockResolvedValueOnce(wrong({ canceled: false, assets: [secondPhoto] }));
+    const app = await openAddTo(7);
+    await leaveScreen();
+    expect(app.pathname()).toBe("/");
+    expect(mockLog.completed).toEqual([7]);
+  });
+
+  it("offers no Analyse and completes nothing before a photo is added", async () => {
+    mockLog.stored.set(7, storedFind(7, 1));
+    await openAddTo(7);
+    expect(screen.queryByRole("button", { name: en.newFind.analyse })).not.toBeOnTheScreen();
+    await leaveScreen();
+    expect(mockLog.completed).toEqual([]);
+  });
+
+  it("offers no photo for a find that holds the most, says so, and opens no camera", async () => {
+    mockLog.stored.set(7, storedFind(7, 5));
+    await openAddTo(7);
+    expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
+    expect(screen.getByText(en.newFind.maxReached)).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.newFind.takePhoto })).not.toBeOnTheScreen();
+  });
+
+  it.each([
+    ["does not exist", "7", null],
+    ["is named by no find ID", "abc", null],
+    ["cannot be read", "7", new Error("the stored row is not an object")],
+  ])("says so when the find %s, offers no photo, and opens no camera", async (_, param, error) => {
+    if (error !== null) {
+      jest.spyOn(mockLog, "getStored").mockRejectedValueOnce(error);
+    }
+    const app = renderRouter(APP_DIR, { initialUrl: "/" });
+    await app;
+    await act(async () => {
+      router.push(`/new-find?find=${param}`);
+    });
+    await settle();
+    expect(screen.getByText(en.newFind.findUnavailable)).toBeOnTheScreen();
+    expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: en.newFind.takePhoto })).not.toBeOnTheScreen();
+    expect(screen.queryByText(/stored row/)).not.toBeOnTheScreen();
   });
 });
 

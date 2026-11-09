@@ -470,6 +470,51 @@ describe("the state of the photos added since the answer (PBI-2.2)", () => {
   });
 });
 
+describe("the queue's pick of an analysed find with new photos (SPEC 3.9, Batches; PBI-2.5)", () => {
+  async function analysed1(): Promise<number> {
+    const id = await store.add(photoFind());
+    await store.setAnswer(id, analysed, await sentAll(id));
+    return id;
+  }
+
+  it("takes an analysed find whose added photos wait, only once their batch is complete", async () => {
+    const id = await analysed1();
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+    await store.addPhoto(id, "file:///cache/b.jpg");
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+    await store.completeBatch(id);
+    await expect(store.oldestWaiting()).resolves.toBe(id);
+  });
+
+  it("does not take it once its added photos are not yet analysed after a failure, and takes it again when they wait", async () => {
+    const id = await analysed1();
+    await store.addPhoto(id, "file:///cache/b.jpg");
+    await store.completeBatch(id);
+    await store.setAddedPhotos(id, "not-analysed");
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+    await store.setAddedPhotos(id, "waiting");
+    await expect(store.oldestWaiting()).resolves.toBe(id);
+  });
+
+  it("does not take it once an answer covers its photos", async () => {
+    const id = await analysed1();
+    await store.addPhoto(id, "file:///cache/b.jpg");
+    await store.completeBatch(id);
+    await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 }, await sentAll(id));
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
+  it("takes the finds oldest first by ID, waiting ones and analysed ones with new photos alike", async () => {
+    const first = await analysed1();
+    const second = await store.add(photoFind());
+    await store.addPhoto(first, "file:///cache/b.jpg");
+    await store.completeBatch(first);
+    await expect(store.oldestWaiting()).resolves.toBe(first);
+    await store.replaceAnswer(first, analysed, await sentAll(first));
+    await expect(store.oldestWaiting()).resolves.toBe(second);
+  });
+});
+
 describe("removing a photo (PBI-2.2)", () => {
   it("removes the photo with the number given and its file, keeping the others in order with their batches", async () => {
     const id = await store.add(photoFind());

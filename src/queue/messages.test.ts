@@ -374,6 +374,50 @@ function leavesOf(value: unknown, path = ""): [string, string][] {
   );
 }
 
+describe("failureMessage: a failure that names one of the find's photos (SPEC 3.9, Batches; PBI-2.5)", () => {
+  it.each(LANGUAGES)("names the photo and says why it failed in %s, with no code", (language) => {
+    const t = STRINGS[language];
+    const named = (cause: FindFailure["cause"], detail: string) =>
+      failureMessage({ cause, detail }, t);
+    const cases = [
+      [named("photo", "photo 2: load-failed"), "2", t.queue.failed.photo.loadFailed],
+      [named("photo", "photo 5: invalid-size: 0 x 0"), "5", t.queue.failed.photo.invalidSize],
+      [
+        named("segment-check", "photo 3: forbidden-segment 0xFFE1"),
+        "3",
+        t.queue.failed.segmentCheck.app1,
+      ],
+      [named("segment-check", "photo 1: trailing-data"), "1", t.queue.failed.segmentCheck.trailingData],
+    ] as const;
+    for (const [message, number, reason] of cases) {
+      expect(message).toBe(
+        t.queue.failed.numbered.replace("{number}", number).replace("{reason}", reason),
+      );
+      expect(message).toContain(number);
+      expect(message).not.toMatch(INTERNAL);
+      expect(message).not.toMatch(/[{}]/);
+    }
+  });
+
+  it("reads a detail of another form, or a photo number that is no number, by its general sentence", () => {
+    const t = STRINGS.en.queue.failed;
+    expect(failureMessage({ cause: "photo", detail: "photo x: load-failed" }, STRINGS.en)).toBe(
+      t.photo.unknown,
+    );
+    expect(failureMessage({ cause: "photo", detail: "photo 0: load-failed" }, STRINGS.en)).toBe(
+      t.photo.unknown,
+    );
+    expect(
+      failureMessage({ cause: "segment-check", detail: "photo 2: something new" }, STRINGS.en),
+    ).toBe(t.numbered.replace("{number}", "2").replace("{reason}", t.segmentCheck.unknown));
+  });
+
+  it("names no photo for a cause that is not about a photo", () => {
+    const failure: FindFailure = { cause: "request", detail: "photo 2: request-wrong (status 400)" };
+    expect(failureMessage(failure, STRINGS.en)).toBe(STRINGS.en.queue.failed.request.unknown);
+  });
+});
+
 describe("the placeholders of the queue's strings", () => {
   const placeholders = (text: string) => (text.match(/\{[a-z]+\}/g) ?? []).sort();
 
