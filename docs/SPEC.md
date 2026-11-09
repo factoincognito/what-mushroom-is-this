@@ -72,8 +72,9 @@ its own tests; the screens only wire them together. The modules:
 Nothing leaves the phone except the photo sent for analysis (section 3.3).
 There is no server. Phase 2 adds the text and the several photos of a
 lookup, sent for analysis, the area the map shows, sent to the map
-provider for its tiles, and the Latin name of a text lookup's species,
-sent to Wikimedia for its picture (3.9, Adam's decisions, 2026-11-09).
+provider for its tiles, the Latin name of a text lookup's species, sent
+to Wikimedia for its picture, and that picture, sent to Anthropic for the
+self-check (3.9, Adam's decisions, 2026-11-09).
 
 ## 3. Component specs
 
@@ -443,24 +444,39 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
 - When the answer to a text lookup names a species, the app shows a
   representative picture of that species from Wikimedia Commons (Adam).
   It is the picture that Wikidata gives as the image of the species'
-  item, found by its Latin name (**[Clead]**, **[not checked]**: Known
-  unknown 15). With no such picture, or one whose licence is not among
-  those the IP policy allows for this use, there is no picture
-  (**[Clead]**).
+  item, found by its Latin name, fetched as a JPEG or PNG thumbnail at
+  the width the resize of 3.3 needs (**[Clead]**, **[not checked]**:
+  Known unknown 15).
+- The picture, and the check below, belong to a text find without
+  photos. Once a text find has photos, its answer comes from its photos
+  and its text (Batches), and it has no picture and no check; the list
+  shows its first photo (**[Clead]**).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
   Commons are shown with it, as its licence requires (**[Clead]**).
 - On a saved find it is stored with the find, apart from its photos: it
-  is never sent for analysis and does not count toward the 5 photos
+  is never one of the find's photos and does not count toward the 5
   (**[Clead]**). A new answer naming another species replaces it. On an
-  unsaved lookup it is shown and not stored.
+  unsaved lookup it is shown, not stored, and the app's copy is removed
+  when the screen is left (**[Clead]**).
 - Only the Latin name is sent to Wikimedia, which also sees the phone's
-  IP address (**[Clead]**). Without a network the picture is fetched the
-  next time the find is opened with one (**[Clead]**).
-- Pictures from Wikimedia Commons are an exception to 3.7's "pictures
-  from outside sources" (**[Clead]**). Their use goes through the IP
-  policy before the build (**[not checked]**, Known unknown 15).
+  IP address (**[Clead]**).
+- Fetching it (**[Clead]**):
+  - no network, a time limit, 429 or 5xx from Wikimedia: the picture,
+    and so the check, wait; on a saved find the queue tries again at its
+    next run, and an unsaved lookup's screen offers "Check again";
+  - no Wikidata item, no image, a licence the IP policy does not allow
+    for this use, any other answer, or a picture that cannot be loaded or
+    fails the metadata check after its resize: there is no picture, for
+    that answer, and the find says it could not be checked.
+- Pictures from Wikimedia Commons, and the Wikidata data used to find
+  them, are an exception to 3.7's "pictures from outside sources" and
+  "species data from outside sources" (**[Clead]**). The licence of each
+  picture must allow it to be shown with credit, resized, and sent to
+  Anthropic for the check; their use goes through the IP policy before
+  the build (**[not checked]**, Known unknown 15).
+
 **The self-check of a text lookup** (Adam, 19:01; at run time, after
 every text lookup, and a mismatch makes the edibility "unknown": his
 answers to Clead's questions, 19:05).
@@ -468,23 +484,35 @@ answers to Clead's questions, 19:05).
 - After a text lookup's answer names a species and its picture is
   fetched, the app runs a photo lookup on that picture, without the
   text, and compares the species it names with the text lookup's (Adam).
-  The picture is resized and checked as a photo is in 3.3 (**[Clead]**).
-  The two match when their Latin names are the same, ignoring case and
-  surrounding spaces (**[Clead]**).
+  The picture is resized and checked as a photo is in 3.3; the picture,
+  not the user's text, is sent to Anthropic (**[Clead]**). The two match
+  when the first two words of their Latin names, genus and species, are
+  the same, ignoring case (**[Clead]**). The check's own confidence is
+  not used (**[Clead]**).
+- On a saved find the queue run that brings the text answer fetches the
+  picture and runs the check at once, before it takes the next find
+  (**[Clead]**). An unsaved lookup runs them at once after its answer. A
+  new answer to a text find brings a new picture and a new check
+  (**[Clead]**).
 - When they match, the find says the check agreed. When the check names
   another species, the find says so, names both, and the edibility shown
   is "unknown" (Adam). A check answer of "no mushroom" or "cannot tell"
-  counts as not matching (**[Clead]**).
-- With no picture, there is no check; the find says it could not be
-  checked, and the edibility is shown as the other rules give it
+  counts as not matching, and the find says the check could not name a
+  species (**[Clead]**). The filters use the text answer's species
   (**[Clead]**).
 - The check is a request of its own, on the user's key. Its error
-  classes are those of 3.3: one that leaves a find waiting leaves the
-  check waiting for the queue on a saved find, or offers "Check again" on
-  an unsaved lookup's screen; any other marks the check failed, and the
-  find says it could not be checked (**[Clead]**).
-- An unsaved lookup runs the check at once after its answer. A new answer
-  to a text find brings a new picture and a new check (**[Clead]**).
+  classes are those of 3.3, in the same three groups as for an unsaved
+  lookup (Lookups): one that leaves a find waiting leaves the check
+  waiting; one that stops the queue stops it as for a find, and the check
+  waits; any other marks the check failed, and the find says it could
+  not be checked. A check that waits is tried again at the queue's next
+  run, or by "Check again" on an unsaved lookup's screen (**[Clead]**).
+- A check picture that cannot be loaded neither counts toward the count
+  of 3.3 (PBI-1.25) nor ends it (**[Clead]**).
+- The edibility shown while the check has not agreed (waiting, failed,
+  or no picture) is Adam's to decide. Clead proposes "unknown" until the
+  check agrees, with the find saying why. Until he decides, Clead's
+  proposal holds.
 
 **The store** (3.6 for Phase 2; **[Clead]**).
 
