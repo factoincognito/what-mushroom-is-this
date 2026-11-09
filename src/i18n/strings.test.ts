@@ -66,10 +66,11 @@ describe("NOT_CHECKED_BY_A_SPEAKER", () => {
     "notFound",
     "newFind",
     "queue",
+    "find",
     "about",
   ];
 
-  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7 and PBI-1.9", () => {
+  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7, PBI-1.8 and PBI-1.9", () => {
     expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
   });
 
@@ -152,11 +153,29 @@ describe("the strings of the queue (PBI-1.7)", () => {
     expect(keyPaths(STRINGS[language]).filter((path) => path.startsWith("queue."))).toEqual([
       "queue.analyseNow",
       "queue.answerKept",
-      "queue.failed.answer",
-      "queue.failed.photo",
+      "queue.failed.answer.cutOff",
+      "queue.failed.answer.notApi",
+      "queue.failed.answer.shape",
+      "queue.failed.photo.invalidSize",
+      "queue.failed.photo.loadFailed",
+      "queue.failed.photo.unknown",
       "queue.failed.refused",
-      "queue.failed.request",
-      "queue.failed.segmentCheck",
+      "queue.failed.request.tooLarge",
+      "queue.failed.request.unknown",
+      "queue.failed.request.wrong",
+      "queue.failed.segmentCheck.app0",
+      "queue.failed.segmentCheck.app1",
+      "queue.failed.segmentCheck.app13",
+      "queue.failed.segmentCheck.app2",
+      "queue.failed.segmentCheck.comment",
+      "queue.failed.segmentCheck.invalidInput",
+      "queue.failed.segmentCheck.malformed",
+      "queue.failed.segmentCheck.notJpeg",
+      "queue.failed.segmentCheck.otherApp",
+      "queue.failed.segmentCheck.otherMarker",
+      "queue.failed.segmentCheck.trailingData",
+      "queue.failed.segmentCheck.truncated",
+      "queue.failed.segmentCheck.unknown",
       "queue.openSettings",
       "queue.paused.network",
       "queue.paused.server",
@@ -175,6 +194,83 @@ describe("the strings of the queue (PBI-1.7)", () => {
       "queue.stopped.spendLimitUntil",
     ]);
   });
+});
+
+describe("the strings of the Log and Find screens (PBI-1.8)", () => {
+  it.each(LANGUAGES)("are all there in %s", (language) => {
+    const paths = keyPaths(STRINGS[language]);
+    expect(paths.filter((path) => path.startsWith("log."))).toEqual([
+      "log.empty",
+      "log.failed",
+      "log.newFind",
+      "log.retry",
+      "log.settings",
+      "log.title",
+      "log.unreadable",
+      "log.waiting",
+    ]);
+    expect(paths.filter((path) => path.startsWith("find."))).toEqual([
+      "find.accuracy",
+      "find.analyse",
+      "find.analyseAgain",
+      "find.analysing",
+      "find.analysisError",
+      "find.back",
+      "find.cannotTell",
+      "find.confidence",
+      "find.confidenceNote",
+      "find.confidences.high",
+      "find.confidences.low",
+      "find.confidences.medium",
+      "find.delete",
+      "find.deleteCancel",
+      "find.deleteConfirm",
+      "find.deleteFailed",
+      "find.deleteYes",
+      "find.edibilities.deadlyPoisonous",
+      "find.edibilities.edible",
+      "find.edibilities.edibleAfterPreparation",
+      "find.edibilities.notEdible",
+      "find.edibilities.poisonous",
+      "find.edibilities.unknown",
+      "find.edibility",
+      "find.failed",
+      "find.generalInformation",
+      "find.latin",
+      "find.lookAlikeEdibility",
+      "find.lookAlikes",
+      "find.mapFailed",
+      "find.noLookAlikes",
+      "find.noMushroom",
+      "find.noPosition",
+      "find.notFound",
+      "find.openMap",
+      "find.photo",
+      "find.position",
+      "find.positionSources.fix",
+      "find.positionSources.lastKnown",
+      "find.positionSources.photo",
+      "find.time",
+      "find.timeSources.photo",
+      "find.timeSources.photoPhoneOffset",
+      "find.timeSources.saved",
+      "find.title",
+      "find.unreadable",
+      "find.waiting",
+    ]);
+  });
+
+  it.each(LANGUAGES)(
+    "label the edibility in %s as that of a species, with a place for it",
+    (lang) => {
+      expect(STRINGS[lang].find.edibility).toContain("{edibility}");
+      expect(STRINGS[lang].find.lookAlikeEdibility).toContain("{edibility}");
+      expect(STRINGS[lang].find.confidence).toContain("{confidence}");
+      expect(STRINGS[lang].find.time).toContain("{time}");
+      expect(STRINGS[lang].find.position).toContain("{coordinates}");
+      expect(STRINGS[lang].find.accuracy).toContain("{metres}");
+    },
+  );
 });
 
 describe("the strings of the About view", () => {

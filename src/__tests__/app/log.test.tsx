@@ -1,0 +1,290 @@
+/**
+ * The Log screen in full (docs/SPEC.md 3.1, 3.3, 3.5; PBI-1.8), through the router: the finds
+ * newest first, each with its photo, date and time, the species name in the app's language and the
+ * edibility shown with the disclaimer; a find waiting or failed says so; a log that cannot be read
+ * says so. The native modules are mocked at their boundary, and the find log is in memory.
+ */
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getLocales } from "expo-localization";
+import { act, fireEvent, renderRouter, screen, within } from "expo-router/testing-library";
+import { AppState } from "react-native";
+
+import type { Answer, Match } from "../../analysis/answer";
+import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { formatFindTime } from "../../find/display";
+import { STRINGS } from "../../i18n/strings";
+import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
+import { answerToJson } from "../../store/answerJson";
+import { type Find, StoreError } from "../../store/find";
+import { memoryFindLog } from "../../testing/memoryFindLog";
+
+jest.mock("@react-native-async-storage/async-storage", () =>
+  require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+);
+jest.mock("expo-localization", () => ({ getLocales: jest.fn() }));
+
+const mockSecrets = new Map<string, string>();
+jest.mock("expo-secure-store", () => ({
+  getItemAsync: jest.fn(async (key: string) => mockSecrets.get(key) ?? null),
+  setItemAsync: jest.fn(async (key: string, value: string) => {
+    mockSecrets.set(key, value);
+  }),
+  deleteItemAsync: jest.fn(async (key: string) => {
+    mockSecrets.delete(key);
+  }),
+}));
+jest.mock("expo-network", () => ({
+  getNetworkStateAsync: jest.fn(async () => ({ isConnected: true, isInternetReachable: true })),
+  addNetworkStateListener: jest.fn(() => ({ remove: jest.fn() })),
+}));
+jest.mock("../../image/prepareForAnalysis", () => ({
+  ...jest.requireActual("../../image/prepareForAnalysis"),
+  preparePhotoForAnalysis: jest.fn(async () => ({
+    ok: true,
+    imageBase64: "AAAA",
+    width: 2212,
+    height: 1659,
+  })),
+}));
+
+/** The find log in memory. (Named `mock…` so that the hoisted factory may use it.) */
+const mockLog = memoryFindLog();
+jest.mock("../../store/deviceFindStore", () => ({ openFindLog: jest.fn(async () => mockLog) }));
+
+const APP_DIR = "./src/app";
+const en = STRINGS.en;
+
+const CHANTERELLE: Match = {
+  result: "match",
+  names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
+  edibility: "edible",
+  confidence: "high",
+  generalInformation: { sv: "En gul svamp.", en: "A yellow mushroom.", it: "Un fungo giallo." },
+  lookAlikes: [],
+};
+
+const DAY = 86_400_000;
+const BASE = Date.UTC(2026, 8, 1, 10, 0);
+
+function find(id: number, daysLater: number, analysis: Find["analysis"]): Find {
+  return {
+    id,
+    photoUri: `file:///photos/${id}.jpg`,
+    time: { takenAtMs: BASE + daysLater * DAY, utcOffsetMinutes: 120, source: "saved" },
+    position: null,
+    analysis,
+  };
+}
+
+function done(answer: Answer): Find["analysis"] {
+  return { state: "done", answer, model: "claude-opus-5-5", analysedAtMs: BASE };
+}
+
+/** The body of a Messages API answer whose text is the answer. */
+function apiAnswer(answer: Answer) {
+  return {
+    status: 200,
+    headers: { get: () => null },
+    text: async () =>
+      JSON.stringify({
+        type: "message",
+        content: [{ type: "text", text: answerToJson(answer) }],
+        stop_reason: "end_turn",
+      }),
+  };
+}
+
+function phoneIn(languageCode: string): void {
+  jest
+    .mocked(getLocales)
+    .mockReturnValue([
+      { languageCode, languageTag: languageCode } as ReturnType<typeof getLocales>[number],
+    ]);
+}
+
+async function startApp(initialUrl = "/"): Promise<{ pathname: () => string }> {
+  const app = renderRouter(APP_DIR, { initialUrl });
+  await app;
+  return { pathname: () => app.getPathname() };
+}
+
+const fetchMock = jest.fn();
+
+beforeEach(async () => {
+  await AsyncStorage.clear();
+  await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+  await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
+  mockSecrets.clear();
+  mockSecrets.set(API_KEY_STORE_KEY, "sk-ant-api03-abcDEF_123");
+  mockLog.finds.clear();
+  phoneIn("en");
+  fetchMock.mockReset();
+  globalThis.fetch = fetchMock;
+  // In the background: no run starts by itself unless a test brings the app to the front.
+  Object.defineProperty(AppState, "currentState", { value: "background", configurable: true });
+});
+
+afterAll(() => {
+  Object.defineProperty(AppState, "currentState", { value: undefined, configurable: true });
+});
+
+describe("the Log screen's list (SPEC 3.1)", () => {
+  it("lists the finds newest first, each with its photo, date and time and name", async () => {
+    const first = find(1, 0, done(CHANTERELLE));
+    mockLog.finds.set(1, first);
+    mockLog.finds.set(2, find(2, 2, { state: "waiting" }));
+    mockLog.finds.set(3, find(3, 1, done({ result: "no_mushroom" })));
+    await startApp();
+    const rows = await screen.findAllByTestId(/^find-row-/);
+    expect(rows.map((row) => row.props.testID)).toEqual(["find-row-2", "find-row-3", "find-row-1"]);
+    const row = within(screen.getByTestId("find-row-1"));
+    expect(row.getByText("Chanterelle")).toBeOnTheScreen();
+    expect(row.getByText(formatFindTime(first.time, "en"))).toBeOnTheScreen();
+    expect(row.getByLabelText(en.find.photo)).toHaveProp("source", { uri: "file:///photos/1.jpg" });
+    expect(screen.queryByText(en.log.empty)).not.toBeOnTheScreen();
+  });
+
+  it("shows the edibility of the matched species with the disclaimer next to it", async () => {
+    mockLog.finds.set(
+      1,
+      find(1, 0, done({ ...CHANTERELLE, edibility: "edible_after_preparation" })),
+    );
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(
+      row.getByText(
+        en.find.edibility.replace("{edibility}", en.find.edibilities.edibleAfterPreparation),
+      ),
+    ).toBeOnTheScreen();
+    expect(row.getByText(en.disclaimer)).toBeOnTheScreen();
+  });
+
+  it("shows unknown when the confidence is low, whatever was stored", async () => {
+    mockLog.finds.set(
+      1,
+      find(1, 0, done({ ...CHANTERELLE, edibility: "deadly_poisonous", confidence: "low" })),
+    );
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(
+      row.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(row.queryByText(en.find.edibilities.deadlyPoisonous, { exact: false })).toBeNull();
+    expect(row.getByText(en.disclaimer)).toBeOnTheScreen();
+  });
+
+  it("says that a find waits, that one failed, and what Claude could not tell, with no edibility", async () => {
+    mockLog.finds.set(1, find(1, 3, { state: "waiting" }));
+    mockLog.finds.set(
+      2,
+      find(2, 2, { state: "failed", failure: { cause: "segment-check", detail: "APP1" } }),
+    );
+    mockLog.finds.set(3, find(3, 1, done({ result: "no_mushroom" })));
+    mockLog.finds.set(4, find(4, 0, done({ result: "cannot_tell" })));
+    await startApp();
+    expect(within(await screen.findByTestId("find-row-1")).getByText(en.log.waiting)).toBeTruthy();
+    expect(within(screen.getByTestId("find-row-2")).getByText(en.log.failed)).toBeTruthy();
+    expect(within(screen.getByTestId("find-row-3")).getByText(en.find.noMushroom)).toBeTruthy();
+    expect(within(screen.getByTestId("find-row-4")).getByText(en.find.cannotTell)).toBeTruthy();
+    expect(screen.queryByText(en.disclaimer)).not.toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)(
+    "shows the name, the edibility and the disclaimer in %s",
+    async (lang) => {
+      phoneIn(lang);
+      const only = find(1, 0, done(CHANTERELLE));
+      mockLog.finds.set(1, only);
+      await startApp();
+      const t = STRINGS[lang];
+      const row = within(await screen.findByTestId("find-row-1"));
+      expect(row.getByText(CHANTERELLE.names[lang])).toBeOnTheScreen();
+      expect(
+        row.getByText(t.find.edibility.replace("{edibility}", t.find.edibilities.edible)),
+      ).toBeOnTheScreen();
+      expect(row.getByText(t.disclaimer)).toBeOnTheScreen();
+      expect(row.getByText(formatFindTime(only.time, lang))).toBeOnTheScreen();
+    },
+  );
+
+  it("says the log is empty when it has no finds", async () => {
+    await startApp();
+    expect(await screen.findByText(en.log.empty)).toBeOnTheScreen();
+  });
+
+  it("opens a find's own screen from its row", async () => {
+    mockLog.finds.set(7, find(7, 0, done(CHANTERELLE)));
+    const app = await startApp();
+    await fireEvent.press(await screen.findByTestId("find-row-7"));
+    expect(app.pathname()).toBe("/find/7");
+    expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+  });
+});
+
+describe("a log the store cannot read (reviewer's note 5 on #11)", () => {
+  it("says so, without an error's text, and reads it again when asked", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    jest
+      .spyOn(mockLog, "list")
+      .mockRejectedValueOnce(
+        new StoreError("corrupt", "the stored edibility is not one the store knows"),
+      );
+    await startApp();
+    expect(await screen.findByText(en.log.unreadable)).toBeOnTheScreen();
+    expect(screen.queryByText(/stored edibility/)).not.toBeOnTheScreen();
+    expect(screen.queryByText(en.log.empty)).not.toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: en.log.retry }));
+    expect(await screen.findByText("Chanterelle")).toBeOnTheScreen();
+    expect(screen.queryByText(en.log.unreadable)).not.toBeOnTheScreen();
+  });
+
+  it("says so when the log cannot be opened at all", async () => {
+    const { openFindLog } = jest.requireMock("../../store/deviceFindStore");
+    jest.mocked(openFindLog).mockRejectedValueOnce(new Error("disk I/O error"));
+    await startApp();
+    expect(await screen.findByText(en.log.unreadable)).toBeOnTheScreen();
+    expect(screen.queryByText(/disk/)).not.toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)("says so in %s", async (lang) => {
+    phoneIn(lang);
+    jest.spyOn(mockLog, "list").mockRejectedValueOnce(new StoreError("corrupt", "x"));
+    await startApp();
+    expect(await screen.findByText(STRINGS[lang].log.unreadable)).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: STRINGS[lang].log.retry })).toBeOnTheScreen();
+  });
+});
+
+describe("the list follows the log", () => {
+  it("shows a find's answer once the queue has analysed it", async () => {
+    mockLog.finds.set(1, find(1, 0, { state: "waiting" }));
+    fetchMock.mockResolvedValue(apiAnswer(CHANTERELLE));
+    Object.defineProperty(AppState, "currentState", { value: "active", configurable: true });
+    await startApp();
+    expect(await screen.findByText("Chanterelle")).toBeOnTheScreen();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(en.log.waiting)).not.toBeOnTheScreen();
+  });
+
+  it("no longer lists a find deleted on its own screen", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, done({ result: "cannot_tell" })));
+    const app = await startApp();
+    await fireEvent.press(await screen.findByTestId("find-row-1"));
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.delete }));
+    await fireEvent.press(screen.getByRole("button", { name: en.find.deleteYes }));
+    expect(app.pathname()).toBe("/");
+    expect(await screen.findByTestId("find-row-2")).toBeOnTheScreen();
+    expect(screen.queryByTestId("find-row-1")).not.toBeOnTheScreen();
+  });
+});
+
+describe("the Log screen's other parts are kept", () => {
+  it("still has New find and Settings below the list", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    await startApp();
+    expect(await screen.findByRole("link", { name: en.log.newFind })).toBeOnTheScreen();
+    expect(screen.getByRole("link", { name: en.log.settings })).toBeOnTheScreen();
+    await act(async () => undefined);
+  });
+});

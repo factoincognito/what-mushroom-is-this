@@ -628,4 +628,13 @@ describe("shownEdibility", () => {
       expect(shownEdibility(answer)).toBe("poisonous");
     },
   );
+
+  it("takes the edibility and the confidence alone, as the Log's summary of a find has them", () => {
+    const summary: { edibility: "edible"; confidence: "low" | "high" } = {
+      edibility: "edible",
+      confidence: "low",
+    };
+    expect(shownEdibility(summary)).toBe("unknown");
+    expect(shownEdibility({ ...summary, confidence: "high" })).toBe("edible");
+  });
 });

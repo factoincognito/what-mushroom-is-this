@@ -1,5 +1,18 @@
 import { LANGUAGES } from "../i18n/languages";
-import { STRINGS } from "../i18n/strings";
+import { STRINGS, type Strings } from "../i18n/strings";
+import { preparePhotoForAnalysis } from "../image/prepareForAnalysis";
+import type { FindFailure } from "../store/find";
+import {
+  analysisFailure,
+  encoderOf,
+  http,
+  JPEG,
+  jpeg,
+  jpegWith,
+  messageBody,
+  photoFailure,
+  unloadableEncoder,
+} from "../testing/failureDetails";
 import { failureMessage, formatTimeIn, noticeMessage, stopNeedsSettings } from "./messages";
 import type { QueueNotice, QueueStop } from "./queue";
 
@@ -99,7 +112,7 @@ describe("noticeMessage", () => {
     ).toBe(STRINGS.en.queue.stopped.other.replace("{status}", "418"));
   });
 
-  it.each(LANGUAGES)("names the marker the segment check refused in %s", (language) => {
+  it.each(LANGUAGES)("names the marker the segment check refused in %s, in words", (language) => {
     const message = noticeMessage(
       {
         kind: "find-failed",
@@ -108,7 +121,9 @@ describe("noticeMessage", () => {
       STRINGS[language],
       formatTime,
     );
-    expect(message).toContain("0xFFE1");
+    expect(message).toBe(STRINGS[language].queue.failed.segmentCheck.app1);
+    expect(message).toContain("APP1");
+    expect(message).not.toContain("0xFFE1");
   });
 
   it.each(LANGUAGES)(
@@ -125,31 +140,247 @@ describe("noticeMessage", () => {
   );
 });
 
-describe("failureMessage", () => {
-  it.each([
-    ["segment-check", "segmentCheck"],
-    ["request", "request"],
-    ["answer", "answer"],
-    ["photo", "photo"],
-    ["refused", "refused"],
-  ] as const)("gives a failed find's cause %s its message, with the detail", (cause, key) => {
-    expect(failureMessage({ cause, detail: "D" }, STRINGS.en)).toBe(
-      STRINGS.en.queue.failed[key].replace("{detail}", "D"),
+/**
+ * The failures as the app stores them, each made by the module that writes it (fix 2 of the
+ * review of #24), and the plain words each is shown in (fix 1). `expected` picks the sentence.
+ */
+type Failed = Strings["queue"]["failed"];
+const STORED: readonly {
+  readonly name: string;
+  readonly make: () => Promise<FindFailure>;
+  readonly expected: (t: Failed) => string;
+}[] = [
+  {
+    name: "an APP1 segment (EXIF, XMP)",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.EXIF))),
+    expected: (t) => t.segmentCheck.app1,
+  },
+  {
+    name: "an APP0 segment that is not JFIF (a JFIF extension)",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.JFXX))),
+    expected: (t) => t.segmentCheck.app0,
+  },
+  {
+    name: "an APP2 segment that is not a colour profile",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.MPF))),
+    expected: (t) => t.segmentCheck.app2,
+  },
+  {
+    name: "an APP13 segment (IPTC)",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.IPTC))),
+    expected: (t) => t.segmentCheck.app13,
+  },
+  {
+    name: "another application segment (APP5)",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.APP5))),
+    expected: (t) => t.segmentCheck.otherApp.replace("{number}", "5"),
+  },
+  {
+    name: "a comment",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.COM))),
+    expected: (t) => t.segmentCheck.comment,
+  },
+  {
+    name: "another marker off the allowlist (DNL)",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.DNL))),
+    expected: (t) => t.segmentCheck.otherMarker,
+  },
+  {
+    name: "data after the end of the image",
+    make: () =>
+      photoFailure(
+        preparePhotoForAnalysis,
+        encoderOf(jpeg(JPEG.SOI, JPEG.JFIF, JPEG.DQT, JPEG.SOF0, JPEG.SCAN, JPEG.EOI, JPEG.SOI)),
+      ),
+    expected: (t) => t.segmentCheck.trailingData,
+  },
+  {
+    name: "a JPEG cut short",
+    make: () =>
+      photoFailure(preparePhotoForAnalysis, encoderOf(jpeg(JPEG.SOI, JPEG.JFIF, JPEG.DQT))),
+    expected: (t) => t.segmentCheck.truncated,
+  },
+  {
+    name: "a JPEG with no scan before its end",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpeg(JPEG.SOI, JPEG.EOI))),
+    expected: (t) => t.segmentCheck.malformed,
+  },
+  {
+    name: "bytes that are not a JPEG",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(Uint8Array.from([0x89, 0x50]))),
+    expected: (t) => t.segmentCheck.notJpeg,
+  },
+  {
+    name: "an encoder output that is not bytes",
+    make: () =>
+      photoFailure(preparePhotoForAnalysis, {
+        async load() {
+          return {
+            width: 4032,
+            height: 3024,
+            // The encoder's output as it could come from native code, not typed bytes.
+            encodeJpeg: async () => JSON.parse("[255, 216]"),
+            release: () => undefined,
+          };
+        },
+      }),
+    expected: (t) => t.segmentCheck.invalidInput,
+  },
+  {
+    name: "a photo the encoder cannot load, with a native message that names its file",
+    make: () =>
+      photoFailure(
+        preparePhotoForAnalysis,
+        unloadableEncoder(
+          new Error("Could not load the image: file:///data/user/0/app/files/photos/p1.jpg"),
+        ),
+      ),
+    expected: (t) => t.photo.loadFailed,
+  },
+  {
+    name: "a photo the encoder cannot load, with no message",
+    make: () => photoFailure(preparePhotoForAnalysis, unloadableEncoder(new Error(""))),
+    expected: (t) => t.photo.loadFailed,
+  },
+  {
+    name: "a photo whose decoded size cannot be used",
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(), 0, 3024)),
+    expected: (t) => t.photo.invalidSize,
+  },
+  {
+    name: "a 400 for a wrong request",
+    make: () =>
+      analysisFailure(
+        http(
+          400,
+          JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "x" } }),
+        ),
+      ),
+    expected: (t) => t.request.wrong,
+  },
+  {
+    name: "a 413 for a request too large",
+    make: () => analysisFailure(http(413, "")),
+    expected: (t) => t.request.tooLarge,
+  },
+  {
+    name: "an answer that is not from the API (a Wi-Fi sign-in page)",
+    make: () => analysisFailure(http(200, "<html>Sign in to the Wi-Fi</html>")),
+    expected: (t) => t.answer.notApi,
+  },
+  {
+    name: "an answer cut off at max_tokens",
+    make: () =>
+      analysisFailure(
+        http(200, messageBody([{ type: "text", text: '{"result":"ma' }], "max_tokens")),
+      ),
+    expected: (t) => t.answer.cutOff,
+  },
+  {
+    name: "an answer cut off at the context window",
+    make: () =>
+      analysisFailure(
+        http(200, messageBody([{ type: "text", text: "{" }], "model_context_window_exceeded")),
+      ),
+    expected: (t) => t.answer.cutOff,
+  },
+  {
+    name: "an answer that is not JSON",
+    make: () => analysisFailure(http(200, messageBody([{ type: "text", text: "A chanterelle." }]))),
+    expected: (t) => t.answer.shape,
+  },
+  {
+    name: "an answer that does not fit the shape",
+    make: () =>
+      analysisFailure(http(200, messageBody([{ type: "text", text: '{"result":"maybe"}' }]))),
+    expected: (t) => t.answer.shape,
+  },
+  {
+    name: "a refusal",
+    make: () => analysisFailure(http(200, messageBody([], "refusal"))),
+    expected: (t) => t.refused,
+  },
+];
+
+/** What no message may show: the stored codes, markers, statuses, stop reasons and file paths. */
+const INTERNAL =
+  /0x|forbidden-segment|trailing-data|not-jpeg|truncated|malformed|invalid-input|load-failed|invalid-size|request-wrong|request-too-large|stop_reason|max_tokens|status|file:|Messages API message|not JSON|is not one of/;
+
+describe("failureMessage: a failure as the app stores it, in plain words (PBI-1.8)", () => {
+  it.each(
+    LANGUAGES.flatMap((language) => STORED.map((item) => [item.name, language, item] as const)),
+  )("shows %s in %s as its sentence, with no code or path", async (_name, language, item) => {
+    const failure = await item.make();
+    const message = failureMessage(failure, STRINGS[language]);
+    expect(message).toBe(item.expected(STRINGS[language].queue.failed));
+    expect(message).not.toMatch(INTERNAL);
+    expect(message).not.toMatch(/[{}]/);
+  });
+
+  it("is fed the details exactly as the modules write them", async () => {
+    const details = await Promise.all(STORED.map(async (item) => (await item.make()).detail));
+    expect(details.slice(0, 7)).toEqual([
+      "forbidden-segment 0xFFE1",
+      "forbidden-segment 0xFFE0",
+      "forbidden-segment 0xFFE2",
+      "forbidden-segment 0xFFED",
+      "forbidden-segment 0xFFE5",
+      "forbidden-segment 0xFFFE",
+      "forbidden-segment 0xFFDC",
+    ]);
+    expect(details).toContain("trailing-data");
+    expect(details).toContain(
+      "load-failed: Could not load the image: file:///data/user/0/app/files/photos/p1.jpg",
     );
+    expect(details).toContain("load-failed");
+    expect(details).toContain("request-wrong (status 400)");
+    expect(details).toContain("request-too-large (status 413)");
+    expect(details.some((detail) => detail.startsWith("invalid-size: "))).toBe(true);
+  });
+
+  it.each(LANGUAGES)("gives an unknown detail of each cause a general sentence in %s", (lang) => {
+    const t = STRINGS[lang].queue.failed;
+    const unknown = (cause: FindFailure["cause"], detail: string) =>
+      failureMessage({ cause, detail }, STRINGS[lang]);
+    expect(unknown("segment-check", "a new reason 0xFFE1")).toBe(t.segmentCheck.unknown);
+    expect(unknown("segment-check", "forbidden-segment")).toBe(t.segmentCheck.unknown);
+    expect(unknown("segment-check", "forbidden-segment 0xFFE1 more")).toBe(t.segmentCheck.unknown);
+    expect(unknown("photo", "the photo could not be read")).toBe(t.photo.unknown);
+    expect(unknown("request", "request-wrong")).toBe(t.request.unknown);
+    expect(unknown("answer", "something else")).toBe(t.answer.shape);
+    expect(unknown("refused", "anything")).toBe(t.refused);
+  });
+
+  it.each(LANGUAGES)("gives each sentence its own text in %s", (lang) => {
+    const texts = STORED.map((item) => item.expected(STRINGS[lang].queue.failed));
+    const t = STRINGS[lang].queue.failed;
+    const all = new Set([...texts, t.segmentCheck.unknown, t.photo.unknown, t.request.unknown]);
+    // Two photo loads share a sentence, two cut-off answers and two answers off the shape; the
+    // rest, and the three general sentences, are each their own.
+    expect(all.size).toBe(STORED.length - 3 + 3);
   });
 });
+
+/** Every leaf of a nested strings object, by its key path. */
+function leavesOf(value: unknown, path = ""): [string, string][] {
+  if (typeof value === "string") {
+    return [[path, value]];
+  }
+  if (typeof value !== "object" || value === null) {
+    return [];
+  }
+  return Object.entries(value).flatMap(([key, child]) =>
+    leavesOf(child, path === "" ? key : `${path}.${key}`),
+  );
+}
 
 describe("the placeholders of the queue's strings", () => {
   const placeholders = (text: string) => (text.match(/\{[a-z]+\}/g) ?? []).sort();
 
   it.each(LANGUAGES)("are those of English in %s", (language) => {
-    const groups = ["paused", "stopped", "failed"] as const;
-    for (const group of groups) {
-      const en: Record<string, string> = STRINGS.en.queue[group];
-      const other: Record<string, string> = STRINGS[language].queue[group];
-      for (const [key, text] of Object.entries(en)) {
-        expect(placeholders(other[key] ?? "")).toEqual(placeholders(text));
-      }
+    const other = new Map(leavesOf(STRINGS[language].queue));
+    for (const [path, text] of leavesOf(STRINGS.en.queue)) {
+      expect(placeholders(other.get(path) ?? "")).toEqual(placeholders(text));
     }
   });
 });

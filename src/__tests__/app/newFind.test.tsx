@@ -42,6 +42,9 @@ const mockLog = {
     mockLog.added.push(find);
     return mockLog.added.length;
   },
+  async list() {
+    return [];
+  },
 };
 jest.mock("../../store/deviceFindStore", () => ({
   openFindLog: jest.fn(async () => mockLog),

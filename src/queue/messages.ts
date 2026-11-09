@@ -5,6 +5,7 @@
 
 import type { Language } from "../i18n/languages";
 import type { Strings } from "../i18n/strings";
+import type { JpegSegmentFailure } from "../image/jpegSegments";
 import type { FindFailure } from "../store/find";
 import type { QueueNotice, QueueStop } from "./queue";
 
@@ -72,17 +73,113 @@ function stopMessage(stop: QueueStop, strings: Strings, formatTime: FormatTime):
   }
 }
 
-/** Why a find failed; for the segment check, the detail names the refused marker. */
+/**
+ * Why a find failed, in plain words (docs/SPEC.md 3.3; the review of #24, fix 1). The stored
+ * detail is read for its form, as the modules that write it give it, and each form has its own
+ * sentence; nothing of the detail itself is shown, so no code, marker number, status, native
+ * message or file path reaches the user. A form the app does not know gets the cause's general
+ * sentence. Details already stored in these forms are read the same way.
+ */
 export function failureMessage(failure: FindFailure, strings: Strings): string {
   const t = strings.queue.failed;
-  const template = {
-    "segment-check": t.segmentCheck,
-    request: t.request,
-    answer: t.answer,
-    photo: t.photo,
-    refused: t.refused,
-  }[failure.cause];
-  return fill(template, { detail: failure.detail });
+  const { detail } = failure;
+  switch (failure.cause) {
+    case "segment-check":
+      return segmentCheckMessage(detail, t.segmentCheck);
+    case "photo":
+      // `prepareForAnalysis.ts`: "load-failed", "load-failed: <the encoder's message>",
+      // "invalid-size: <what>".
+      if (detail === "load-failed" || detail.startsWith("load-failed: ")) {
+        return t.photo.loadFailed;
+      }
+      return detail.startsWith("invalid-size: ") ? t.photo.invalidSize : t.photo.unknown;
+    case "request":
+      // `queue.ts`: "<reason> (status <status>)".
+      if (REQUEST_WRONG.test(detail)) {
+        return t.request.wrong;
+      }
+      return REQUEST_TOO_LARGE.test(detail) ? t.request.tooLarge : t.request.unknown;
+    case "answer":
+      // `answer.ts`: the not-API detail, a cut-off answer's, and the shape's many details.
+      if (detail === NOT_API_DETAIL) {
+        return t.answer.notApi;
+      }
+      return CUT_OFF.test(detail) ? t.answer.cutOff : t.answer.shape;
+    case "refused":
+      return t.refused;
+  }
+}
+
+const REQUEST_WRONG = /^request-wrong \(status \d+\)$/;
+const REQUEST_TOO_LARGE = /^request-too-large \(status \d+\)$/;
+/** `readMessageBody`'s detail for a body that is not a Messages API message. */
+const NOT_API_DETAIL = "the body is not a Messages API message";
+/** `readMessageBody`'s detail for a cut-off answer, with its `stop_reason`. */
+const CUT_OFF = /^the answer was cut off \(stop_reason [a-z_]+\)$/;
+/** `prepareForAnalysis.ts`: "<reason>" or "<reason> 0xFFxx", the reason the segment check's. */
+const SEGMENT_DETAIL = /^([a-z-]+)(?: 0x([0-9A-F]{4}))?$/;
+
+const APP0 = 0xffe0;
+const APP15 = 0xffef;
+const COM = 0xfffe;
+
+type SegmentStrings = Strings["queue"]["failed"]["segmentCheck"];
+
+function segmentCheckMessage(detail: string, t: SegmentStrings): string {
+  const match = SEGMENT_DETAIL.exec(detail);
+  const reason = match?.[1];
+  if (reason === undefined || !isSegmentFailure(reason)) {
+    return t.unknown;
+  }
+  const hex = match?.[2];
+  const marker = hex === undefined ? null : Number.parseInt(hex, 16);
+  switch (reason) {
+    case "forbidden-segment":
+      return marker === null ? t.unknown : forbiddenMarkerMessage(marker, t);
+    case "trailing-data":
+      return t.trailingData;
+    case "truncated":
+      return t.truncated;
+    case "malformed":
+      return t.malformed;
+    case "not-jpeg":
+      return t.notJpeg;
+    case "invalid-input":
+      return t.invalidInput;
+  }
+}
+
+/** The marker the check refused, in words: the segments that carry metadata by name. */
+function forbiddenMarkerMessage(marker: number, t: SegmentStrings): string {
+  if (marker === APP0) {
+    return t.app0;
+  }
+  if (marker === APP0 + 1) {
+    return t.app1;
+  }
+  if (marker === APP0 + 2) {
+    return t.app2;
+  }
+  if (marker === APP0 + 13) {
+    return t.app13;
+  }
+  if (marker > APP0 + 2 && marker <= APP15) {
+    return fill(t.otherApp, { number: String(marker - APP0) });
+  }
+  return marker === COM ? t.comment : t.otherMarker;
+}
+
+const SEGMENT_FAILURES: readonly JpegSegmentFailure[] = [
+  "invalid-input",
+  "not-jpeg",
+  "truncated",
+  "malformed",
+  "forbidden-segment",
+  "trailing-data",
+];
+
+function isSegmentFailure(value: string): value is JpegSegmentFailure {
+  return SEGMENT_FAILURES.some((known) => known === value);
 }
 
 /** Whether a stop names a setting, so that its message links to Settings. */
