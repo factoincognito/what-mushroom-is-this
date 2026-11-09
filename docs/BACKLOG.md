@@ -72,13 +72,14 @@ write it.
   - the expo-network mock's cast is checked against the enum's string form;
   - #29's test imports `compileModsAsync` from `expo/config-plugins`, and the key's startup survives the effect running twice.
   Spec 3.2, 3.3, 3.6.
-- **[NEXT] PBI-1.27** (the Clead-role reviewers' non-blocking notes on #31 to #33) — Follow-ups that need no phone:
+- **[DONE] PBI-1.27** (done 2026-11-09 in #36, `54a0adf`, Clead-role review approved; also the ordinary delete answers `not-found` when its DELETE changed no row; a find with the ID 2^53−1 exactly, reachable only by damage, is left as it is, Clead's decision) (the Clead-role reviewers' non-blocking notes on #31 to #33) — Follow-ups that need no phone:
   - `deleteUnreadable` removes the photo only when the delete changed a row;
   - after a damaged ID past 2^53, `AUTOINCREMENT` does not leave every new find unreadable;
   - the "Development tools" rows of `THIRD-PARTY-NOTICES.md` are tested against what is installed;
   - the comment on "Save again"'s `void` names the test reason too;
   - with the location allowed, a test asserts that New find shows neither the refusal text nor the settings button (reviewer's note 1 on #16).
   Spec 3.1, 3.6.
+- **[NEXT] PBI-1.28** (Clead-role reviewers' notes on #16 and #36) — Follow-ups that need no phone: find why the first test of `newFind.test.tsx` sometimes times out under load (seen in the #24, #32, #16 and #36 work; it passes alone and in CI), and fix it; the code comment on the next-ID rule names that on a damaged file, once SQLite's high-water mark is past 2^53, an ID above every readable ID left may be given again. Spec 3.6.
 
 ---
 
