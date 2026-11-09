@@ -121,26 +121,45 @@ describe("formatCoordinates and formatAccuracy", () => {
 describe("mapLink", () => {
   const position = { latitude: 59.6995, longitude: 17.1234567 };
 
+  const ANDROID = { OS: "android", Version: 35 };
+  const UNIFIED = "https://maps.apple.com/place?coordinate=59.699500,17.123457";
+  const QUERY = "https://maps.apple.com/?ll=59.699500,17.123457&q=59.699500,17.123457";
+
   it("on Android, is a geo URI that searches the coordinates, so the map app puts a pin there", () => {
-    expect(mapLink(position, "android")).toBe("geo:0,0?q=59.699500,17.123457");
+    expect(mapLink(position, ANDROID)).toBe("geo:0,0?q=59.699500,17.123457");
   });
 
-  it("on iOS, is Apple's unified Maps URL for a place at the coordinates", () => {
-    expect(mapLink(position, "ios")).toBe(
-      "https://maps.apple.com/place?coordinate=59.699500,17.123457",
-    );
+  it.each(["18.4", "18.4.1", "18.10", "19.0", "26", "26.1"])(
+    "on iOS %s (18.4 or later), is Apple's unified Maps URL for a place at the coordinates",
+    (version) => {
+      expect(mapLink(position, { OS: "ios", Version: version })).toBe(UNIFIED);
+    },
+  );
+
+  it.each(["18.3", "18.3.2", "18", "17.6", "16.4", "", "beta", "18.x"])(
+    "on iOS %s (before 18.4, or a version it cannot read), is the older query form",
+    (version) => {
+      expect(mapLink(position, { OS: "ios", Version: version })).toBe(QUERY);
+    },
+  );
+
+  it("on iOS with a version that is not text, is the older query form", () => {
+    expect(mapLink(position, { OS: "ios", Version: 18.4 })).toBe(QUERY);
   });
 
   it("on any other platform, is the geo URI", () => {
-    expect(mapLink(position, "web")).toBe("geo:0,0?q=59.699500,17.123457");
+    expect(mapLink(position, { OS: "web", Version: "" })).toBe("geo:0,0?q=59.699500,17.123457");
   });
 
   it("writes negative and tiny coordinates as plain decimals, never in exponent form", () => {
-    expect(mapLink({ latitude: -33.8666, longitude: 1e-7 }, "android")).toBe(
+    expect(mapLink({ latitude: -33.8666, longitude: 1e-7 }, ANDROID)).toBe(
       "geo:0,0?q=-33.866600,0.000000",
     );
-    expect(mapLink({ latitude: -1e-9, longitude: -0 }, "android")).toBe(
+    expect(mapLink({ latitude: -1e-9, longitude: -0 }, ANDROID)).toBe(
       "geo:0,0?q=0.000000,0.000000",
+    );
+    expect(mapLink({ latitude: -33.8666, longitude: 1e-7 }, { OS: "ios", Version: "17.0" })).toBe(
+      "https://maps.apple.com/?ll=-33.866600,0.000000&q=-33.866600,0.000000",
     );
   });
 
@@ -150,7 +169,8 @@ describe("mapLink", () => {
     [{ latitude: 0, longitude: -180.5 }],
     [{ latitude: 0, longitude: Number.POSITIVE_INFINITY }],
   ])("refuses a coordinate out of range: %o", (bad) => {
-    expect(() => mapLink(bad, "android")).toThrow(RangeError);
+    expect(() => mapLink(bad, ANDROID)).toThrow(RangeError);
+    expect(() => mapLink(bad, { OS: "ios", Version: "18.4" })).toThrow(RangeError);
   });
 });
 

@@ -18,9 +18,18 @@ import { formatFindTime, mapLink } from "../../find/display";
 import { STRINGS } from "../../i18n/strings";
 import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
-import { failureMessage } from "../../queue/messages";
 import { answerToJson } from "../../store/answerJson";
 import { type Find, StoreError } from "../../store/find";
+import {
+  analysisFailure,
+  encoderOf,
+  http,
+  JPEG,
+  jpegWith,
+  messageBody,
+  photoFailure,
+  unloadableEncoder,
+} from "../../testing/failureDetails";
 import { memoryFindLog } from "../../testing/memoryFindLog";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
@@ -53,6 +62,15 @@ jest.mock("../../store/deviceFindStore", () => ({ openFindLog: jest.fn(async () 
 
 const APP_DIR = "./src/app";
 const en = STRINGS.en;
+
+/** The image module as it is, for the failures it really stores; the screen gets the mock. */
+const { preparePhotoForAnalysis: actualPrepare } = jest.requireActual<
+  typeof import("../../image/prepareForAnalysis")
+>("../../image/prepareForAnalysis");
+
+/** What no failure on the screen may show: the stored codes, markers, statuses and paths. */
+const INTERNAL =
+  /0x|forbidden-segment|trailing-data|load-failed|invalid-size|request-wrong|request-too-large|stop_reason|status|file:/;
 
 const FLY_AGARIC = {
   sv: "Röd flugsvamp",
@@ -357,10 +375,24 @@ describe("the time and the position, with where each came from (SPEC 3.1, 3.6)",
     await startApp();
     await fireEvent.press(await screen.findByRole("link", { name: en.find.openMap }));
     expect(openURL).toHaveBeenCalledWith(
-      mapLink({ latitude: 59.6995, longitude: 17.1234 }, Platform.OS),
+      mapLink({ latitude: 59.6995, longitude: 17.1234 }, Platform),
     );
     expect(find.position).toMatchObject({ latitude: 59.6995, longitude: 17.1234 });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["18.4", "https://maps.apple.com/place?coordinate=59.699500,17.123400"],
+    ["17.5", "https://maps.apple.com/?ll=59.699500,17.123400&q=59.699500,17.123400"],
+  ])("on iOS %s, opens the form of the map link for that version", async (version, url) => {
+    expect(Platform.OS).toBe("ios");
+    const versionNow = jest.spyOn(Platform, "Version", "get").mockReturnValue(version);
+    const openURL = jest.spyOn(Linking, "openURL").mockResolvedValueOnce(true);
+    mockLog.finds.set(1, aFind(done(PORCINI)));
+    await startApp();
+    await fireEvent.press(await screen.findByRole("link", { name: en.find.openMap }));
+    expect(openURL).toHaveBeenLastCalledWith(url);
+    versionNow.mockRestore();
   });
 
   it("opens no map app for a position out of range, and says the position could not be opened", async () => {
@@ -396,25 +428,59 @@ describe("a waiting or failed find", () => {
     expect(screen.queryByText(en.disclaimer)).not.toBeOnTheScreen();
   });
 
-  it("names a segment-check failure's refused marker in plain words", async () => {
-    const failure = { cause: "segment-check", detail: "APP1 (EXIF or XMP) at byte 2" } as const;
+  it("names the marker a segment check refused in plain words, as the image module stored it", async () => {
+    const failure = await photoFailure(actualPrepare, encoderOf(jpegWith(JPEG.EXIF)));
+    expect(failure).toEqual({ cause: "segment-check", detail: "forbidden-segment 0xFFE1" });
     mockLog.finds.set(1, aFind({ state: "failed", failure }));
     await startApp();
     expect(await screen.findByText(en.find.failed)).toBeOnTheScreen();
-    expect(screen.getByText(failureMessage(failure, en))).toBeOnTheScreen();
-    expect(screen.getByText(/APP1 \(EXIF or XMP\) at byte 2/)).toBeOnTheScreen();
+    expect(screen.getByText(en.queue.failed.segmentCheck.app1)).toBeOnTheScreen();
+    expect(screen.queryByText(INTERNAL)).not.toBeOnTheScreen();
     expect(screen.getByRole("button", { name: en.find.analyseAgain })).toBeOnTheScreen();
   });
 
   it.each([
-    [{ cause: "request", detail: "the request is wrong (status 400)" }],
-    [{ cause: "answer", detail: "confidence is not one of low, medium, high" }],
-    [{ cause: "photo", detail: "the photo could not be read" }],
-    [{ cause: "refused", detail: "the answer was refused (stop_reason refusal)" }],
-  ] as const)("names the cause of %o in plain words", async (failure) => {
-    mockLog.finds.set(1, aFind({ state: "failed", failure }));
+    [
+      "a photo that cannot be loaded",
+      () =>
+        photoFailure(
+          actualPrepare,
+          unloadableEncoder(new Error("Could not load the image: file:///data/photos/p1.jpg")),
+        ),
+      en.queue.failed.photo.loadFailed,
+    ],
+    [
+      "a photo whose size cannot be used",
+      () => photoFailure(actualPrepare, encoderOf(jpegWith(), 0, 3024)),
+      en.queue.failed.photo.invalidSize,
+    ],
+    ["a wrong request", () => analysisFailure(http(400, "{}")), en.queue.failed.request.wrong],
+    ["a request too large", () => analysisFailure(http(413, "")), en.queue.failed.request.tooLarge],
+    [
+      "an answer not from the API",
+      () => analysisFailure(http(200, "<html>Wi-Fi</html>")),
+      en.queue.failed.answer.notApi,
+    ],
+    [
+      "an answer cut off",
+      () => analysisFailure(http(200, messageBody([], "max_tokens"))),
+      en.queue.failed.answer.cutOff,
+    ],
+    [
+      "an answer off the shape",
+      () => analysisFailure(http(200, messageBody([{ type: "text", text: '{"result":"x"}' }]))),
+      en.queue.failed.answer.shape,
+    ],
+    [
+      "a refusal",
+      () => analysisFailure(http(200, messageBody([], "refusal"))),
+      en.queue.failed.refused,
+    ],
+  ] as const)("names %s in plain words, as the app stored it", async (_name, make, sentence) => {
+    mockLog.finds.set(1, aFind({ state: "failed", failure: await make() }));
     await startApp();
-    expect(await screen.findByText(failureMessage(failure, en))).toBeOnTheScreen();
+    expect(await screen.findByText(sentence)).toBeOnTheScreen();
+    expect(screen.queryByText(INTERNAL)).not.toBeOnTheScreen();
   });
 
   it("says a key is needed and links to Settings when analysing it finds no key (SPEC 3.2)", async () => {
@@ -478,7 +544,8 @@ describe("analyse again (SPEC 3.1, 3.3)", () => {
     await fireEvent.press(await screen.findByRole("button", { name: en.find.analyseAgain }));
     const message = within(await screen.findByTestId("analysis-message"));
     expect(message.getByText(en.queue.answerKept)).toBeOnTheScreen();
-    expect(message.getByText(/status 400/)).toBeOnTheScreen();
+    expect(message.getByText(en.queue.failed.request.wrong)).toBeOnTheScreen();
+    expect(screen.queryByText(INTERNAL)).not.toBeOnTheScreen();
     expect(screen.getByText(PORCINI.generalInformation.en)).toBeOnTheScreen();
     expect(screen.queryByText(en.find.failed)).not.toBeOnTheScreen();
     expect(mockLog.finds.get(1)?.analysis).toEqual(done(PORCINI));
@@ -499,16 +566,21 @@ describe("analyse again (SPEC 3.1, 3.3)", () => {
 
   it("marks a waiting find failed when the segment check refuses its photo, and names the marker", async () => {
     mockLog.finds.set(1, aFind({ state: "waiting" }));
-    jest.mocked(preparePhotoForAnalysis).mockResolvedValueOnce({
-      ok: false,
-      failure: { cause: "segment-check", detail: "APP13 (IPTC)" },
-    });
+    jest
+      .mocked(preparePhotoForAnalysis)
+      .mockImplementationOnce((uri, model) =>
+        actualPrepare(uri, model, encoderOf(jpegWith(JPEG.IPTC))),
+      );
     await startApp();
     await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
     expect(await screen.findByText(en.find.failed)).toBeOnTheScreen();
-    expect(screen.getAllByText(/APP13 \(IPTC\)/)).toHaveLength(1);
+    expect(screen.getAllByText(en.queue.failed.segmentCheck.app13)).toHaveLength(1);
+    expect(screen.queryByText(INTERNAL)).not.toBeOnTheScreen();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(mockLog.finds.get(1)?.analysis.state).toBe("failed");
+    expect(mockLog.finds.get(1)?.analysis).toEqual({
+      state: "failed",
+      failure: { cause: "segment-check", detail: "forbidden-segment 0xFFED" },
+    });
   });
 
   it("says the find waits again when there is no network", async () => {

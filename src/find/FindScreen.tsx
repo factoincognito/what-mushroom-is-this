@@ -144,7 +144,7 @@ export function FindScreen({ id }: { readonly id: number | null }) {
   function openMap(position: Position): void {
     let url: string;
     try {
-      url = mapLink(position, Platform.OS);
+      url = mapLink(position, Platform);
     } catch {
       setMessage({ kind: "map-failed" });
       return;

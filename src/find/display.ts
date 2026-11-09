@@ -83,22 +83,47 @@ export function formatAccuracy(position: Position): string | null {
  *   Android" page (https://developer.android.com/guide/components/google-maps-intents) gives the
  *   form `geo:0,0?q=latitude,longitude`, and with no app named "the system determines which apps
  *   can handle the Intent". Both read 2026-11-09.
- * - iOS: Apple's unified Maps URL for a place, `https://maps.apple.com/place?coordinate=<lat>,<lng>`
- *   ("Adopting unified Maps URLs",
- *   https://developer.apple.com/documentation/mapkit/unified-map-urls, read 2026-11-09, for iOS
- *   18.4 and later).
+ * - iOS 18.4 and later: Apple's unified Maps URL for a place,
+ *   `https://maps.apple.com/place?coordinate=<lat>,<lng>` ("Adopting unified Maps URLs",
+ *   https://developer.apple.com/documentation/mapkit/unified-map-urls, read 2026-11-09: "In iOS
+ *   18.4 and later … the Maps platform provides a new, unified collection of URLs").
+ * - iOS before 18.4, and an iOS version that cannot be read: the older query form,
+ *   `https://maps.apple.com/?ll=<lat>,<lng>&q=<lat>,<lng>` (Clead's decision on #24).
+ *   NOT CHECKED: Apple's own Map Links reference now redirects to the unified page, so this form
+ *   was not read in Apple's text; it is on the iOS checks of the test session.
  *
+ * `platform` is React Native's `Platform`: `OS`, and `Version`, a text such as "18.4.1" on iOS.
  * The coordinates are plain decimals to six places, never in exponent form.
  */
-export function mapLink(position: Pick<Position, "latitude" | "longitude">, os: string): string {
+export function mapLink(
+  position: Pick<Position, "latitude" | "longitude">,
+  platform: { readonly OS: string; readonly Version: string | number },
+): string {
   const { latitude, longitude } = position;
   if (!inRange(latitude, 90) || !inRange(longitude, 180)) {
     throw new RangeError("a position is a latitude within 90 and a longitude within 180 degrees");
   }
   const coordinates = `${decimal(latitude, LINK_DECIMALS)},${decimal(longitude, LINK_DECIMALS)}`;
-  return os === "ios"
+  if (platform.OS !== "ios") {
+    return `geo:0,0?q=${coordinates}`;
+  }
+  return hasUnifiedMapsUrls(platform.Version)
     ? `https://maps.apple.com/place?coordinate=${coordinates}`
-    : `geo:0,0?q=${coordinates}`;
+    : `https://maps.apple.com/?ll=${coordinates}&q=${coordinates}`;
+}
+
+/** iOS's version, "major[.minor[.patch]]", is 18.4 or later. Anything else is not. */
+function hasUnifiedMapsUrls(version: string | number): boolean {
+  if (typeof version !== "string") {
+    return false;
+  }
+  const match = /^(\d+)(?:\.(\d+))?(?:\.\d+)?$/.exec(version);
+  if (match === null) {
+    return false;
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2] ?? "0");
+  return major > 18 || (major === 18 && minor >= 4);
 }
 
 function inRange(value: number, limit: number): boolean {

@@ -92,7 +92,7 @@ export type Strings = {
   };
   /**
    * The analysis queue (docs/SPEC.md 3.3, 3.4): a message for each error class and stop. `{time}`,
-   * `{status}` and `{detail}` are filled in by `src/queue/messages.ts`.
+   * `{status}` and `{number}` are filled in by `src/queue/messages.ts`.
    */
   readonly queue: {
     readonly analyseNow: string;
@@ -123,14 +123,57 @@ export type Strings = {
       /** `{status}`: the answer's HTTP status. */
       readonly other: string;
     };
-    /** Why a find failed; `{detail}` names the refused marker, the status or the answer's fault. */
+    /**
+     * Why a find failed, in plain words: one sentence for each form of the stored detail, and a
+     * general one for a form the app does not know (`src/queue/messages.ts`). No stored code,
+     * marker number, status or file path is shown.
+     */
     readonly failed: {
-      readonly segmentCheck: string;
-      readonly request: string;
-      readonly answer: string;
-      /** The photo could not be read for analysis. */
-      readonly photo: string;
-      /** Claude declined to analyse the photo (`stop_reason` `refusal`); no detail is shown. */
+      /** The segment check refused the photo prepared for analysis. */
+      readonly segmentCheck: {
+        /** APP0 that is not plain JFIF, such as a JFIF extension. */
+        readonly app0: string;
+        /** APP1: EXIF or XMP. */
+        readonly app1: string;
+        /** APP2 that is not an ICC colour profile, such as a Multi-Picture index. */
+        readonly app2: string;
+        /** APP13: IPTC. */
+        readonly app13: string;
+        /** Another application segment; `{number}` is its number, 3 to 15. */
+        readonly otherApp: string;
+        /** COM. */
+        readonly comment: string;
+        /** Any other marker off the allowlist. */
+        readonly otherMarker: string;
+        /** Bytes after the end of the image. */
+        readonly trailingData: string;
+        readonly truncated: string;
+        readonly malformed: string;
+        readonly notJpeg: string;
+        /** The encoder gave no bytes to check. */
+        readonly invalidInput: string;
+        readonly unknown: string;
+      };
+      /** The photo itself could not be loaded, decoded or sized. */
+      readonly photo: {
+        readonly loadFailed: string;
+        readonly invalidSize: string;
+        readonly unknown: string;
+      };
+      /** The API refused the request (400, 413). */
+      readonly request: {
+        readonly wrong: string;
+        readonly tooLarge: string;
+        readonly unknown: string;
+      };
+      /** The answer was not from the API, was cut off, or did not fit the shape. */
+      readonly answer: {
+        readonly notApi: string;
+        readonly cutOff: string;
+        /** Off the shape, and any other answer detail. */
+        readonly shape: string;
+      };
+      /** Claude declined to analyse the photo (`stop_reason` `refusal`). */
       readonly refused: string;
     };
     /** A failed new analysis of a find that has an answer. */
@@ -378,11 +421,43 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "Claude-API:t svarade med status {status}. Tryck på Analysera nu för att försöka igen.",
       },
       failed: {
-        segmentCheck:
-          "Fotot innehåller data som inte skickas ({detail}), så det analyserades inte.",
-        request: "Claude-API:t avvisade förfrågan ({detail}).",
-        answer: "Svaret hade inte den väntade formen ({detail}).",
-        photo: "Fotot gick inte att läsa för analys ({detail}).",
+        segmentCheck: {
+          app0: "Fotot innehåller ett APP0-segment som inte är ren JFIF, till exempel ett JFIF-tillägg som kan bära en liten kopia av bilden med egna data. Det skickas inte, så fotot analyserades inte.",
+          app1: "Fotot innehåller kameradata eller andra metadata (EXIF eller XMP, APP1-segmentet) som inte skickas, så det analyserades inte.",
+          app2: "Fotot har annat än en färgprofil i sitt APP2-segment, till exempel ett register över fler bilder, som inte skickas, så det analyserades inte.",
+          app13:
+            "Fotot innehåller IPTC-data (APP13-segmentet), till exempel en bildtext eller en plats, som inte skickas, så det analyserades inte.",
+          otherApp:
+            "Fotot innehåller programdata (APP{number}-segmentet) som inte skickas, så det analyserades inte.",
+          comment:
+            "Fotot innehåller en kommentar (COM-segmentet) som inte skickas, så det analyserades inte.",
+          otherMarker: "Fotot innehåller en del som appen inte skickar, så det analyserades inte.",
+          trailingData:
+            "Fotot har mer data efter bildens slut, till exempel en bild till, som inte skickas, så det analyserades inte.",
+          truncated: "Fotot som förbereddes för analys är avkortat, så det analyserades inte.",
+          malformed:
+            "Fotot som förbereddes för analys är inte en korrekt uppbyggd JPEG, så det analyserades inte.",
+          notJpeg: "Fotot som förbereddes för analys är ingen JPEG, så det analyserades inte.",
+          invalidInput:
+            "Fotot som förbereddes för analys gick inte att kontrollera, så det analyserades inte.",
+          unknown: "Fotot innehåller data som inte skickas, så det analyserades inte.",
+        },
+        photo: {
+          loadFailed: "Fotot gick inte att läsa in för analys. Filen kan saknas eller vara skadad.",
+          invalidSize:
+            "Fotots storlek gick inte att läsa, så det kunde inte förberedas för analys.",
+          unknown: "Fotot gick inte att läsa för analys.",
+        },
+        request: {
+          wrong: "Claude-API:t avvisade förfrågan som ogiltig.",
+          tooLarge: "Claude-API:t avvisade förfrågan som för stor.",
+          unknown: "Claude-API:t avvisade förfrågan.",
+        },
+        answer: {
+          notApi: "Svaret kom inte från Claude-API:t, till exempel en inloggningssida för wifi.",
+          cutOff: "Claudes svar bröts av innan det var klart.",
+          shape: "Claudes svar hade inte den form som appen väntar sig.",
+        },
         refused: "Claude avböjde att analysera det här fotot.",
       },
       answerKept: "Den nya analysen misslyckades. Det tidigare svaret finns kvar.",
@@ -562,10 +637,44 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         other: "The Claude API answered with status {status}. Tap Analyse now to try again.",
       },
       failed: {
-        segmentCheck: "The photo holds data that is not sent ({detail}), so it was not analysed.",
-        request: "The Claude API refused the request ({detail}).",
-        answer: "The answer did not have the expected form ({detail}).",
-        photo: "The photo could not be read for analysis ({detail}).",
+        segmentCheck: {
+          app0: "The photo holds an APP0 segment that is not plain JFIF, such as a JFIF extension, which can carry a small copy of the image with data of its own. It is not sent, so the photo was not analysed.",
+          app1: "The photo holds camera data or other metadata (EXIF or XMP, the APP1 segment) that is not sent, so it was not analysed.",
+          app2: "The photo holds something other than a colour profile in its APP2 segment, such as an index of further images, which is not sent, so it was not analysed.",
+          app13:
+            "The photo holds IPTC data (the APP13 segment), such as a caption or a place, which is not sent, so it was not analysed.",
+          otherApp:
+            "The photo holds application data (the APP{number} segment) that is not sent, so it was not analysed.",
+          comment:
+            "The photo holds a comment (the COM segment) that is not sent, so it was not analysed.",
+          otherMarker: "The photo holds a part the app does not send, so it was not analysed.",
+          trailingData:
+            "The photo has more data after the end of the image, such as a further image, which is not sent, so it was not analysed.",
+          truncated: "The photo prepared for analysis is cut short, so it was not analysed.",
+          malformed:
+            "The photo prepared for analysis is not a well-formed JPEG, so it was not analysed.",
+          notJpeg: "The photo prepared for analysis is not a JPEG, so it was not analysed.",
+          invalidInput:
+            "The photo prepared for analysis could not be checked, so it was not analysed.",
+          unknown: "The photo holds data that is not sent, so it was not analysed.",
+        },
+        photo: {
+          loadFailed:
+            "The photo could not be loaded for analysis. Its file may be missing or damaged.",
+          invalidSize:
+            "The photo's size could not be read, so it could not be prepared for analysis.",
+          unknown: "The photo could not be read for analysis.",
+        },
+        request: {
+          wrong: "The Claude API refused the request as not valid.",
+          tooLarge: "The Claude API refused the request as too large.",
+          unknown: "The Claude API refused the request.",
+        },
+        answer: {
+          notApi: "The answer did not come from the Claude API, for example a Wi-Fi sign-in page.",
+          cutOff: "Claude's answer was cut off before it was complete.",
+          shape: "Claude's answer did not have the form the app expects.",
+        },
         refused: "Claude declined to analyse this photo.",
       },
       answerKept: "The new analysis failed. The earlier answer is kept.",
@@ -750,11 +859,46 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "L'API di Claude ha risposto con lo stato {status}. Tocca Analizza ora per riprovare.",
       },
       failed: {
-        segmentCheck:
-          "La foto contiene dati che non vengono inviati ({detail}), quindi non è stata analizzata.",
-        request: "L'API di Claude ha rifiutato la richiesta ({detail}).",
-        answer: "La risposta non aveva la forma prevista ({detail}).",
-        photo: "Non è stato possibile leggere la foto per l'analisi ({detail}).",
+        segmentCheck: {
+          app0: "La foto contiene un segmento APP0 che non è JFIF semplice, ad esempio un'estensione JFIF, che può portare una piccola copia dell'immagine con dati propri. Non viene inviato, quindi la foto non è stata analizzata.",
+          app1: "La foto contiene dati della fotocamera o altri metadati (EXIF o XMP, il segmento APP1) che non vengono inviati, quindi non è stata analizzata.",
+          app2: "La foto contiene nel suo segmento APP2 qualcosa di diverso da un profilo colore, ad esempio un indice di altre immagini, che non viene inviato, quindi non è stata analizzata.",
+          app13:
+            "La foto contiene dati IPTC (il segmento APP13), ad esempio una didascalia o un luogo, che non vengono inviati, quindi non è stata analizzata.",
+          otherApp:
+            "La foto contiene dati di un'applicazione (il segmento APP{number}) che non vengono inviati, quindi non è stata analizzata.",
+          comment:
+            "La foto contiene un commento (il segmento COM) che non viene inviato, quindi non è stata analizzata.",
+          otherMarker:
+            "La foto contiene una parte che l'app non invia, quindi non è stata analizzata.",
+          trailingData:
+            "La foto ha altri dati dopo la fine dell'immagine, ad esempio un'altra immagine, che non vengono inviati, quindi non è stata analizzata.",
+          truncated: "La foto preparata per l'analisi è incompleta, quindi non è stata analizzata.",
+          malformed:
+            "La foto preparata per l'analisi non è un JPEG ben formato, quindi non è stata analizzata.",
+          notJpeg: "La foto preparata per l'analisi non è un JPEG, quindi non è stata analizzata.",
+          invalidInput:
+            "Non è stato possibile controllare la foto preparata per l'analisi, quindi non è stata analizzata.",
+          unknown: "La foto contiene dati che non vengono inviati, quindi non è stata analizzata.",
+        },
+        photo: {
+          loadFailed:
+            "Non è stato possibile caricare la foto per l'analisi. Il file potrebbe mancare o essere danneggiato.",
+          invalidSize:
+            "Non è stato possibile leggere le dimensioni della foto, quindi non è stato possibile prepararla per l'analisi.",
+          unknown: "Non è stato possibile leggere la foto per l'analisi.",
+        },
+        request: {
+          wrong: "L'API di Claude ha rifiutato la richiesta come non valida.",
+          tooLarge: "L'API di Claude ha rifiutato la richiesta come troppo grande.",
+          unknown: "L'API di Claude ha rifiutato la richiesta.",
+        },
+        answer: {
+          notApi:
+            "La risposta non veniva dall'API di Claude, ad esempio una pagina di accesso al Wi-Fi.",
+          cutOff: "La risposta di Claude si è interrotta prima di essere completa.",
+          shape: "La risposta di Claude non aveva la forma che l'app si aspetta.",
+        },
         refused: "Claude ha rifiutato di analizzare questa foto.",
       },
       answerKept: "La nuova analisi non è riuscita. La risposta precedente è mantenuta.",
