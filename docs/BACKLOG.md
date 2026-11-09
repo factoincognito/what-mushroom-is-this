@@ -101,10 +101,10 @@ his Phase 2 test session there. Intent approved by Adam, 2026-11-09
 18:48), unattended. Each item: one PR, test first, CI green, reviewed by
 the role that did not write it.
 
-- **[NOW] PBI-2.1** (the checks Known unknowns 11, 12, 13 and 15 name before the build; the uses go to the product office as escalations under the third-party code and IP policy) — The map provider and library, the Claude API's image limits, the file picker, and Wikidata and Commons: their terms, licences, fees, keys, attribution and caching, checked and written up, with a recommendation for the map provider. Spec 3.9, Known unknowns 11, 12, 13, 15.
-- **[NEXT] PBI-2.2** — The store, schema version 2. The fields of 3.9's "The store", and a migration from version 1 that keeps every Phase 1 find, its photo as its first photo and its answer as it was. Spec 3.9.
+- **[DONE] PBI-2.1** (done 2026-11-09: findings in the product office, `library/designs/what-mushroom-is-this/phase-2-checks.md`; the map and Wikimedia escalations decided by Adam at 21:27; Known unknowns 11 to 13 and 15 updated in #50; what is left of them is checked at the build of PBI-2.6, PBI-2.8 and PBI-2.9) (the checks Known unknowns 11, 12, 13 and 15 name before the build; the uses go to the product office as escalations under the third-party code and IP policy) — The map provider and library, the Claude API's image limits, the file picker, and Wikidata and Commons: their terms, licences, fees, keys, attribution and caching, checked and written up, with a recommendation for the map provider. Spec 3.9, Known unknowns 11, 12, 13, 15.
+- **[DONE] PBI-2.2** (done 2026-11-09 in #49, `bc735f9`, Clead-role review approved round 2; the photos are a JSON array in the find's row, so each write is one statement; answers are stored against the photos their analysis sent; the migration was also run on expo's vendored SQLite 3.50.3 by the reviewer; the Phase 2 methods are in `LookupStore`, beside the unchanged `FindStore`) — The store, schema version 2. The fields of 3.9's "The store", and a migration from version 1 that keeps every Phase 1 find, its photo as its first photo and its answer as it was. Spec 3.9.
 - **[NEXT] PBI-2.3** — The answer's confidence from 1 to 100, a whole number, shown with 3.1's note. The edibility is "unknown" below 70, as configuration. Phase 1 finds keep their level and 3.3's rule. Spec 3.9.
-- **[NEXT] PBI-2.4** — Text lookups and the save setting:
+- **[NEXT] PBI-2.4** (it moves the queue's pick and the Log list to the store's `getStored`, so that a text find is not shown as "could not be read" and is analysed; or it ships with PBI-2.7: the Clead-role review of #49, note 3) — Text lookups and the save setting:
   - the text screen, up to 2,000 characters;
   - the "Save" switch with its starting values in Settings;
   - when a text find is saved, and its position;
@@ -112,7 +112,7 @@ the role that did not write it.
   - "no mushroom" and "cannot tell" for text;
   - the disclaimer for a lookup without photos. Its new sentence replaces only 3.5's second sentence, the one about the photo, and keeps the first; Clead's reading of his own proposal, which Adam approved. The Italian is checked by Jakob.
   Spec 3.9.
-- **[NEXT] PBI-2.5** — Several photos per find:
+- **[NEXT] PBI-2.5** (it sends all of a find's photos and passes all their URIs as `sent` to `setAnswer` and `replaceAnswer`; from the review of #49 round 2, also: read the self-check result by name, not `columns[3]`, and move `outcomeOf`'s doc comment back above it in `queue.ts`) — Several photos per find:
   - batches, and when they complete;
   - completing a batch as a queue trigger;
   - all of a find's photos in one request, labelled;
@@ -120,14 +120,14 @@ the role that did not write it.
   - a new batch on an analysed find, with its three states;
   - removing a photo.
   Spec 3.9.
-- **[NEXT] PBI-2.6** (after PBI-2.1 for the picker) — Photos from the phone's files, images only, without position or time of their own. Spec 3.9, Known unknown 13.
+- **[NEXT] PBI-2.6** (the picker as Known unknown 13 has it, after PBI-2.1) — Photos from the phone's files, images only, without position or time of their own. Spec 3.9, Known unknown 13.
 - **[NEXT] PBI-2.7** — The Library's list, replacing the Log:
   - the species, years and months filters;
   - unreadable finds always listed;
   - the text mark;
   - the Library opens on the list.
   Spec 3.9.
-- **[BLOCKED] PBI-2.8** (needs the product office's answer on the map provider's escalation, from PBI-2.1) — The Library's map:
+- **[NEXT] PBI-2.8** (MapLibre React Native with OpenFreeMap, Adam, 2026-11-09 21:27; the open points of Known unknown 11 are checked first) — The Library's map:
   - the 10 km shorter side;
   - the phone's position, with its limits and the location permission;
   - the fallbacks;
@@ -135,14 +135,14 @@ the role that did not write it.
   - the pins;
   - the attribution.
   Spec 3.9, Known unknown 11.
-- **[BLOCKED] PBI-2.9** (needs the product office's answer on the Wikimedia escalation, from PBI-2.1) — The representative picture for text lookups:
+- **[NEXT] PBI-2.9** (Wikimedia's terms and the licence allowlist, Adam, 2026-11-09 21:27; the open points of Known unknown 15 are checked first) — The representative picture for text lookups:
   - the Wikidata image by Latin name, as a thumbnail;
   - the credit;
   - stored apart from the photos;
   - Wikimedia's failures classed;
   - the picture belongs to an answer from text alone.
   Spec 3.9, Known unknown 15.
-- **[BLOCKED] PBI-2.10** (after PBI-2.9) — The self-check of text lookups:
+- **[NEXT] PBI-2.10** (after PBI-2.9) — The self-check of text lookups:
   - the photo lookup on the picture;
   - the match on genus and species;
   - its outcomes and the edibility "unknown" until it agrees;
