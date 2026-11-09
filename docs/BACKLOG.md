@@ -86,9 +86,10 @@ write it.
   - `android.package` is checked by two constants, in `appName.test.ts` and `easBuild.test.ts` (note 2 on #41);
   - `READ_EXTERNAL_STORAGE`, which only the image picker's media-library functions use and the app does not call, could be blocked; it is limited to Android 12 and below and never requested (#40's review, point 3);
   - a test could pin `owner` and `extra.eas.projectId` in `app.json` (note 3 on #42);
-  - check that the APK's merged release manifest lacks `ACCESS_WIFI_STATE` and `SYSTEM_ALERT_WINDOW`. #40's review checked only the generated main manifest and listed this as not verified, and the first build's log was not read for it.
+  - check that the APK's merged release manifest lacks `ACCESS_WIFI_STATE` and `SYSTEM_ALERT_WINDOW`. #40's review checked only the generated main manifest and listed this as not verified, and the first build's log was not read for it;
+  - the test of #45 checks `expo-font` only; a check for any native module installed twice could follow if it happens again (note 2 on #45).
   Spec 3.6, 3.8.
-- **[NEXT] PBI-1.30** (the first EAS build's `expo doctor` step, from Adam's screenshot of its log, 2026-11-09 18:04; taken up the same day as unattended work, product-office `RULES.md` § 24 (2)) — One copy of `expo-font`. `expo doctor` found two: 57.0.4 under `expo`, and 58.0.11 at the top level, pulled in by `expo-router` → `expo-symbols`, whose peer dependency on `expo-font` is `*`. A native module installed twice may cause build or runtime errors, so the app keeps the SDK 57 version only. Spec 3.8.
+- **[DONE] PBI-1.30** (done 2026-11-09 in #45, `1a9ad61`, Clead-role review approved; `expo-doctor` 21/21 locally; the next EAS build carries it) (the first EAS build's `expo doctor` step, from Adam's screenshot of its log, 2026-11-09 18:04; taken up the same day as unattended work, product-office `RULES.md` § 24 (2)) — One copy of `expo-font`. `expo doctor` found two: 57.0.4 under `expo`, and 58.0.11 at the top level, pulled in by `expo-router` → `expo-symbols`, whose peer dependency on `expo-font` is `*`. A native module installed twice may cause build or runtime errors, so the app keeps the SDK 57 version only. Spec 3.8.
 
 ---
 
