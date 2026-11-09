@@ -450,3 +450,74 @@ describe("analysePhoto, a time limit that is not valid configuration", () => {
     ).rejects.toThrow("timeLimitMs");
   });
 });
+
+describe("analysePhoto, the time access resumes after a spend limit (PBI-1.7)", () => {
+  const spendCap = JSON.stringify({
+    type: "error",
+    error: {
+      type: "rate_limit_error",
+      message:
+        "You have reached your API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+    },
+  });
+  const ownLimit = JSON.stringify({
+    type: "error",
+    error: {
+      type: "invalid_request_error",
+      message:
+        "You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+    },
+  });
+
+  it("gives the time a 429 without retry-after states, for the message only", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(429, spendCap)));
+    await expect(analysePhoto(input, { fetch, now: clock })).resolves.toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+      accessResumesAtMs: Date.UTC(2026, 11, 1),
+    });
+  });
+
+  it("gives the time the 400 of a spend limit the user set states", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(400, ownLimit)));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+      accessResumesAtMs: Date.UTC(2026, 11, 1),
+    });
+  });
+
+  it("gives no such time when the answer has a retry-after", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(429, spendCap, { "retry-after": "30" })));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).not.toHaveProperty("accessResumesAtMs");
+  });
+
+  it("gives no such time when the message states none", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(429, '{"type":"error"}')));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).not.toHaveProperty("accessResumesAtMs");
+  });
+
+  it("gives no such time when a spend limit's message states it in a form the docs do not show", async () => {
+    const otherForm = JSON.stringify({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message:
+          "You have reached your specified API usage limits. Access resumes on December 1, 2026 at midnight.",
+      },
+    });
+    const fetch = jest.fn(() => Promise.resolve(response(400, otherForm)));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).toEqual({ ok: false, error: { kind: "rate-limited", retryAt: null } });
+    expect(result).not.toHaveProperty("accessResumesAtMs");
+  });
+
+  it("gives no such time for another error class", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(402, spendCap)));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).not.toHaveProperty("accessResumesAtMs");
+  });
+});

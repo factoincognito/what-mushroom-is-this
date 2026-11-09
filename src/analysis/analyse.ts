@@ -1,4 +1,5 @@
 import { type AnalysisConfig, analysisConfig } from "../config/analysis";
+import { accessResumesAt } from "./accessResumes";
 import { type AnalysisResult, classifyOutcome, type Outcome } from "./errors";
 import { buildAnalysisRequest, type RequestInput } from "./request";
 
@@ -8,6 +9,13 @@ import { buildAnalysisRequest, type RequestInput } from "./request";
  * queue decides what happens next. Nothing here logs, and no result carries
  * the key or the raw text of a failure.
  */
+
+/**
+ * The result of the call. A rate limit without `retry-after` (a spend limit) also carries the time
+ * access resumes, in ms since the epoch, when the answer's message states one: for the message
+ * only (`accessResumes.ts`).
+ */
+export type AnalysisCallResult = AnalysisResult & { readonly accessResumesAtMs?: number };
 
 export interface AnalysisInput extends RequestInput {
   /** The request's time limit from the config module, in milliseconds. */
@@ -50,7 +58,7 @@ export async function analysePhoto(
   input: AnalysisInput,
   deps: AnalysisDeps = platformDeps,
   config: AnalysisConfig = analysisConfig,
-): Promise<AnalysisResult> {
+): Promise<AnalysisCallResult> {
   const { timeLimitMs } = input;
   if (!Number.isInteger(timeLimitMs) || timeLimitMs < 1 || timeLimitMs > MAX_TIMER_MS) {
     throw new RangeError(`timeLimitMs must be an integer from 1 to ${MAX_TIMER_MS}`);
@@ -97,5 +105,12 @@ export async function analysePhoto(
   } finally {
     clearTimeout(timer);
   }
-  return classifyOutcome(outcome, deps.now(), config.retryAfterMaxMs);
+  const result = classifyOutcome(outcome, deps.now(), config.retryAfterMaxMs);
+  if (outcome.kind === "http" && !result.ok && result.error.kind === "rate-limited") {
+    const resumes = result.error.retryAt === null ? accessResumesAt(outcome.body) : null;
+    if (resumes !== null) {
+      return { ...result, accessResumesAtMs: resumes };
+    }
+  }
+  return result;
 }
