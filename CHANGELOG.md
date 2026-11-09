@@ -67,6 +67,10 @@ All notable changes to What mushroom is this? are documented here.
   build had two (#45).
 - The answer's confidence is a whole number from 1 to 100, and below 70
   the edibility shown is "unknown"; Phase 1 finds keep their level (#52).
+- Text lookups: a description of up to 2,000 characters, saved as a find
+  or analysed unsaved by a "Save" switch whose starting value is in
+  Settings; a text answer's edibility is "unknown" until its self-check
+  agrees (#54).
 
 ## Project created
 
