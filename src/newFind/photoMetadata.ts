@@ -15,10 +15,11 @@
  *   `GPSLongitudeRef` ("E", "W"): unsigned with the letter on iOS, already signed on Android, with
  *   the letter beside them. `GPSHPositioningError`, in metres, when it is a number.
  *
- * A position of exactly 0, 0 is treated as none: Android hides a photo's location from an app
- * without `ACCESS_MEDIA_LOCATION` (the Android Developers page "Access media files from shared
- * storage", read 2026-11-09), and a zeroed position is the form a hidden one can take. That a find
- * is really made at 0° N, 0° E, in the Gulf of Guinea, is not a case this app needs.
+ * A position of exactly 0, 0 is treated as none (accepted by Clead for #14). Android
+ * hides a photo's location from an app without `ACCESS_MEDIA_LOCATION` (the Android Developers
+ * page "Access media files from shared storage", read 2026-11-09); that page does not say in what
+ * form a hidden location reaches the app. That a find is really made at 0° N, 0° E, in the Gulf
+ * of Guinea, is not a case this app needs.
  */
 
 import type { FindTime, Position } from "../store/find";
