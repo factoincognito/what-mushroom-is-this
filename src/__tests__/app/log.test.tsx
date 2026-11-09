@@ -344,7 +344,7 @@ describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
     expect(await screen.findByText("A yellow funnel with false gills.")).toBeOnTheScreen();
   });
 
-  it("is analysed by a queue run by its text, which ends with the answer in the list", async () => {
+  it("is analysed by a queue run by its text, which ends with the answer in the list, its edibility unknown until the self-check agrees (SPEC 3.9)", async () => {
     mockLog.finds.set(1, textFind(1, 0, { state: "waiting" }));
     fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
     Object.defineProperty(AppState, "currentState", { value: "active", configurable: true });
@@ -355,6 +355,12 @@ describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
       type: "text",
       text: "A yellow funnel with false gills.",
     });
+    const row = within(screen.getByTestId("find-row-1"));
+    expect(
+      row.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(row.queryByText(en.find.edibilities.edible, { exact: false })).toBeNull();
+    expect(row.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
   });
 
   it("has a link to the text lookup", async () => {

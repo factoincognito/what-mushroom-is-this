@@ -880,7 +880,7 @@ describe("a text find (SPEC 3.9, PBI-2.4)", () => {
     },
   );
 
-  it("analyses its text through the queue when asked, sending the description and no image", async () => {
+  it("analyses its text through the queue when asked, sending the description and no image, and shows the edibility unknown until the self-check agrees (SPEC 3.9)", async () => {
     mockLog.finds.set(1, aTextFind({ state: "waiting" }));
     fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
     await startApp();
@@ -891,6 +891,14 @@ describe("a text find (SPEC 3.9, PBI-2.4)", () => {
     expect(body.messages[0].content[0]).toEqual({ type: "text", text: DESCRIPTION });
     expect(JSON.stringify(body)).not.toContain('"image"');
     expect(mockLog.finds.get(1)?.analysis.state).toBe("done");
+    const edibility = within(screen.getByTestId("match-edibility"));
+    expect(
+      edibility.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(
+      edibility.queryByText(en.find.edibility.replace("{edibility}", en.find.edibilities.edible)),
+    ).not.toBeOnTheScreen();
+    expect(edibility.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
   });
 
   it("says a refusal in the words of a description", async () => {
