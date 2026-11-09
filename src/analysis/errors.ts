@@ -17,9 +17,11 @@ export type AnalysisError =
   /**
    * 401, 403, a 400 that says the key is not scoped to a workspace (see
    * `NOT_SCOPED_KEY_MESSAGE`), or (`status` null) a key that cannot be sent as a header value,
-   * refused before sending: the queue stops; Settings asks for a key.
+   * refused before sending: the queue stops; Settings asks for a key. `cause` says which:
+   * `not-scoped` for the workspace 400, whose message the queue words apart (PBI-1.21), `refused`
+   * for the rest.
    */
-  | { kind: "key-refused"; status: number | null }
+  | { kind: "key-refused"; status: number | null; cause: "refused" | "not-scoped" }
   /** 402, or a 400 whose error type is `billing_error`: the queue stops. */
   | { kind: "no-credit"; status: number }
   /**
@@ -111,7 +113,7 @@ export function classifyOutcome(
       });
     case 401:
     case 403:
-      return failure({ kind: "key-refused", status });
+      return failure({ kind: "key-refused", status, cause: "refused" });
     case 402:
       return failure({ kind: "no-credit", status });
     case 404:
@@ -173,7 +175,7 @@ function classifyBadRequest(body: string): AnalysisResult {
     error?.type === "invalid_request_error" &&
     error.message?.startsWith(NOT_SCOPED_KEY_MESSAGE)
   ) {
-    return failure({ kind: "key-refused", status: 400 });
+    return failure({ kind: "key-refused", status: 400, cause: "not-scoped" });
   }
   return failure({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" });
 }

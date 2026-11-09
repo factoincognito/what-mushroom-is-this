@@ -154,6 +154,7 @@ describe("the strings of the queue (PBI-1.7)", () => {
       "queue.answerKept",
       "queue.failed.answer",
       "queue.failed.photo",
+      "queue.failed.refused",
       "queue.failed.request",
       "queue.failed.segmentCheck",
       "queue.openSettings",

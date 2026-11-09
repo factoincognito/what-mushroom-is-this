@@ -125,14 +125,14 @@ describe("buildAnalysisRequest, the key", () => {
   ])("refuses a key that holds %s, before any request is built", (_label, apiKey) => {
     expect(buildAnalysisRequest({ ...input, apiKey })).toEqual({
       ok: false,
-      error: { kind: "key-refused", status: null },
+      error: { kind: "key-refused", status: null, cause: "refused" },
     });
   });
 
   it("checks the key before the model", () => {
     expect(buildAnalysisRequest({ ...input, apiKey: "", model: "" })).toEqual({
       ok: false,
-      error: { kind: "key-refused", status: null },
+      error: { kind: "key-refused", status: null, cause: "refused" },
     });
   });
 });
