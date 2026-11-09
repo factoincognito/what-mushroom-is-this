@@ -226,6 +226,16 @@ describe("opening New find from the Log screen", () => {
     expect(ImagePicker.launchCameraAsync).toHaveBeenCalledTimes(1);
   });
 
+  it("with the location allowed, shows neither the refusal text nor the settings button (PBI-1.27)", async () => {
+    await openNewFind();
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: STRINGS.en.newFind.takePhoto })).toBeOnTheScreen();
+    expect(screen.queryByText(STRINGS.en.newFind.locationDenied)).not.toBeOnTheScreen();
+    expect(
+      screen.queryByRole("button", { name: STRINGS.en.newFind.openSettings }),
+    ).not.toBeOnTheScreen();
+  });
+
   it("offers the phone's settings when the location is not allowed", async () => {
     jest
       .mocked(Location.getForegroundPermissionsAsync)

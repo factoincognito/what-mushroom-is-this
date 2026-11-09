@@ -448,6 +448,18 @@ describe("the store's statements on a real SQLite", () => {
   it("says no find has the ID when there is none to delete", async () => {
     await expect(store.delete(99)).rejects.toMatchObject({ code: "not-found" });
   });
+
+  it("of two deletes of one find at once (a double tap), lets one delete the find and its photo, and has the other answer not-found and remove no photo (PBI-1.27)", async () => {
+    const id = await store.add(newFind(1_000));
+    const remove = jest.spyOn(photos, "remove");
+    // Both read the photo's name before either deletes: the second DELETE changes no row.
+    const [first, second] = await Promise.allSettled([store.delete(id), store.delete(id)]);
+    expect(first).toEqual({ status: "fulfilled", value: { photoRemoved: true } });
+    expect(second).toMatchObject({ status: "rejected", reason: { code: "not-found" } });
+    expect(remove).toHaveBeenCalledTimes(1);
+    await expect(store.get(id)).resolves.toBeNull();
+    expect(photos.files.size).toBe(0);
+  });
 });
 
 describe("finds whose ID the store cannot read, on a real SQLite (PBI-1.26)", () => {
@@ -470,7 +482,7 @@ describe("finds whose ID the store cannot read, on a real SQLite (PBI-1.26)", ()
     "lists a find with an ID %s, unreadable, beside the others, and removes it with its photo",
     async (_name, id) => {
       const other = await store.add(newFind(1_000));
-      // Inserted last: after an ID past 2^53, SQLite would give the next find one past it too.
+      // Straight into the table, as a damaged file could hold it.
       const storedId = insertWithId(id, "u1.jpg");
       photos.files.add("u1.jpg");
       await expect(store.list()).resolves.toEqual([
@@ -505,6 +517,67 @@ describe("finds whose ID the store cannot read, on a real SQLite (PBI-1.26)", ()
 
   it("says no find has the ID when none has", async () => {
     await expect(store.deleteUnreadable("0")).rejects.toMatchObject({ code: "not-found" });
+  });
+});
+
+describe("the ID of a new find, on a real SQLite (PBI-1.27)", () => {
+  /** Inserts a waiting find with the ID given, as a damaged file could hold it. */
+  function insertWithId(id: bigint, photo: string): void {
+    sqlite
+      .prepare(
+        `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, photo_file, state)
+          VALUES (?, 9000000, 0, 'saved', ?, 'waiting')`,
+      )
+      .run(id, photo);
+  }
+
+  /** AUTOINCREMENT's high-water mark for the table, as SQLite writes it. */
+  function highWaterMark(): unknown {
+    return sqlite
+      .prepare("SELECT CAST(seq AS TEXT) AS seq FROM sqlite_sequence WHERE name = 'finds'")
+      .get();
+  }
+
+  it("is readable while a find with an ID past 2^53 is in the table, and follows the readable IDs", async () => {
+    const before = await store.add(newFind(1_000));
+    insertWithId(PAST_SAFE, "u1.jpg");
+    expect(highWaterMark()).toEqual({ seq: PAST_SAFE.toString() });
+    const id = await store.add(newFind(2_000));
+    expect(id).toBe(before + 1);
+    await expect(store.get(id)).resolves.toMatchObject({ id, analysis: { state: "waiting" } });
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: false, id: null, storedId: PAST_SAFE.toString() }),
+      expect.objectContaining({ readable: true, id }),
+      expect.objectContaining({ readable: true, id: before }),
+    ]);
+  });
+
+  it("is readable once that find is deleted, though the high-water mark stays past 2^53", async () => {
+    const before = await store.add(newFind(1_000));
+    insertWithId(PAST_SAFE, "u1.jpg");
+    await store.deleteUnreadable(PAST_SAFE.toString());
+    expect(highWaterMark()).toEqual({ seq: PAST_SAFE.toString() });
+    const id = await store.add(newFind(2_000));
+    expect(id).toBe(before + 1);
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id }),
+      expect.objectContaining({ readable: true, id: before }),
+    ]);
+    await expect(store.oldestWaiting()).resolves.toBe(before);
+  });
+
+  it("is 1 for the first find when only IDs of 0 and below are in the table", async () => {
+    insertWithId(-3n, "u3.jpg");
+    insertWithId(0n, "u0.jpg");
+    await expect(store.add(newFind(1_000))).resolves.toBe(1);
+  });
+
+  it("is not the ID of a find deleted before, as AUTOINCREMENT keeps it", async () => {
+    const first = await store.add(newFind(1_000));
+    const second = await store.add(newFind(2_000));
+    await store.delete(second);
+    await expect(store.add(newFind(3_000))).resolves.toBe(second + 1);
+    expect(first).toBe(second - 1);
   });
 });
 

@@ -138,8 +138,10 @@ class FakePhotos implements PhotoFiles {
   }
 }
 
-const INSERT =
-  "INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting')";
+/** One past the highest readable ID, in the table or AUTOINCREMENT's mark (PBI-1.27). */
+const NEXT_ID =
+  "1 + MAX( COALESCE((SELECT MAX(id) FROM finds WHERE id BETWEEN 1 AND 9007199254740991), 0), COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'finds' AND seq BETWEEN 1 AND 9007199254740991), 0))";
+const INSERT = `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state) VALUES (${NEXT_ID}, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting')`;
 /** A time column, given back only within JavaScript's safe-integer range, else as NULL. */
 const safeTime = (column: string) =>
   `CASE WHEN ${column} BETWEEN -9007199254740991 AND 9007199254740991 THEN ${column} END AS ${column}`;
@@ -960,6 +962,15 @@ describe("markWaiting", () => {
 });
 
 describe("delete", () => {
+  it("says no find has the ID when the delete changes no row, and removes no photo (PBI-1.27)", async () => {
+    photos.files.add("p7.jpg");
+    db.reply("first", PHOTO_OF, { photo_file: "p7.jpg" });
+    db.reply("run", DELETE, { changes: 0, lastInsertRowId: 0 });
+    await expect(store.delete(7)).rejects.toMatchObject({ code: "not-found" });
+    expect(events).not.toContainEqual({ photo: "remove p7.jpg" });
+    expect([...photos.files]).toEqual(["p7.jpg"]);
+  });
+
   it("deletes the find first, then its photo", async () => {
     photos.files.add("p7.jpg");
     db.reply("first", PHOTO_OF, { photo_file: "p7.jpg" });
@@ -1030,6 +1041,15 @@ describe("deleteUnreadable (PBI-1.26)", () => {
   it("says no find has the ID, and deletes nothing", async () => {
     await expect(store.deleteUnreadable("-3")).rejects.toMatchObject({ code: "not-found" });
     expect(events).not.toContainEqual(expect.objectContaining({ sql: DELETE_STORED }));
+  });
+
+  it("says no find has the ID when the delete changes no row, and removes no photo (PBI-1.27)", async () => {
+    db.reply("first", PHOTO_OF_STORED, { photo_file: "p7.jpg" });
+    db.reply("run", DELETE_STORED, { changes: 0, lastInsertRowId: 0 });
+    photos.files.add("p7.jpg");
+    await expect(store.deleteUnreadable("0")).rejects.toMatchObject({ code: "not-found" });
+    expect(events).not.toContainEqual({ photo: "remove p7.jpg" });
+    expect([...photos.files]).toEqual(["p7.jpg"]);
   });
 
   it("says when the photo could not be removed", async () => {

@@ -82,13 +82,15 @@ export interface FindStore {
   /**
    * Deletes the find, then its photo. `photoRemoved` is false when the photo could not be
    * removed: the find is gone all the same, and the next opening of the store removes the photo.
+   * A DELETE that changed no row gives `not-found` and removes no photo (PBI-1.27).
    */
   delete(id: number): Promise<{ photoRemoved: boolean }>;
   /**
    * Deletes a find whose ID the store cannot read (an ID of 0 or below, or one past 2^53, which
    * only a damaged file can hold), named by the `storedId` the list gives it, then its photo when
    * its name can be read (PBI-1.26). `photoRemoved` is false when it could not be. A find whose ID
-   * the store can read is never deleted here: for its ID this gives `not-found`.
+   * the store can read is never deleted here: for its ID this gives `not-found`. So does a DELETE
+   * that changed no row, which removes no photo (PBI-1.27).
    */
   deleteUnreadable(storedId: string): Promise<{ photoRemoved: boolean }>;
 }
@@ -98,8 +100,21 @@ export interface StoreOptions {
   newPhotoName: () => string;
 }
 
-const INSERT = `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude,
-  accuracy_m, position_source, photo_file, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting')`;
+/**
+ * A new find's ID, one past the highest ID the store can read, among those in the table and
+ * `AUTOINCREMENT`'s high-water mark (PBI-1.27). Left to SQLite, the ID would be one past the
+ * highest in the table or the mark, so a damaged ID past 2^53 would make every later find's ID
+ * unreadable, even once that find was deleted, since the mark keeps it. The mark is still read
+ * while the store can read it, so a deleted find's ID is not given again; and SQLite still moves
+ * the mark up to an ID given here. Computed within the INSERT, so no other write comes between.
+ */
+const NEXT_ID = `1 + MAX(
+  COALESCE((SELECT MAX(id) FROM finds WHERE id BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER}), 0),
+  COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'finds'
+    AND seq BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER}), 0))`;
+const INSERT = `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, latitude,
+  longitude, accuracy_m, position_source, photo_file, state)
+  VALUES (${NEXT_ID}, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting')`;
 /**
  * A time column, given back only within JavaScript's safe-integer range and otherwise as NULL,
  * which the store reads as a row it cannot read. The schema's CHECK keeps the times in that range;
@@ -296,7 +311,11 @@ export async function createFindStore(
         throw new StoreError("not-found", `no find has the ID ${id}`);
       }
       const name = textOf(record(row), "photo_file");
-      await db.runAsync(DELETE, [id]);
+      // As in `deleteUnreadable`: a DELETE that changed no row leaves the photo (PBI-1.27).
+      const { changes } = await db.runAsync(DELETE, [id]);
+      if (changes === 0) {
+        throw new StoreError("not-found", `no find has the ID ${id}`);
+      }
       return { photoRemoved: removeQuietly(photos, name) };
     },
 
@@ -309,7 +328,12 @@ export async function createFindStore(
         throw new StoreError("not-found", `no find has the ID ${storedId}`);
       }
       const name = record(row).photo_file;
-      await db.runAsync(DELETE_STORED, [storedId]);
+      // A DELETE that changed no row deleted no find (another delete of it came first, say), so
+      // the photo is not its to remove (PBI-1.27).
+      const { changes } = await db.runAsync(DELETE_STORED, [storedId]);
+      if (changes === 0) {
+        throw new StoreError("not-found", `no find has the ID ${storedId}`);
+      }
       return { photoRemoved: typeof name === "string" && removeQuietly(photos, name) };
     },
   };
