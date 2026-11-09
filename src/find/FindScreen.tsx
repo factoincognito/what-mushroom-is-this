@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 
-import { type Answer, type Match, type SpeciesNames, shownEdibility } from "../analysis/answer";
+import type { Answer, Match, SpeciesNames } from "../analysis/answer";
 import { useLanguage } from "../i18n/LanguageContext";
 import { LANGUAGES, type Language } from "../i18n/languages";
 import { STRINGS, type Strings } from "../i18n/strings";
@@ -27,8 +27,9 @@ import {
 import { useQueue } from "../queue/QueueContext";
 import type { QueueNotice, QueueState } from "../queue/queue";
 import { useFindLog } from "../store/FindLogContext";
-import { type Position, type StoredFind, StoreError } from "../store/find";
+import { type Position, type SelfCheck, type StoredFind, StoreError } from "../store/find";
 import {
+  checkedEdibility,
   confidenceText,
   edibilityText,
   fillIn,
@@ -37,6 +38,7 @@ import {
   formatFindTime,
   mapLink,
   positionSourceText,
+  selfCheckReason,
   timeSourceText,
 } from "./display";
 
@@ -70,7 +72,8 @@ type Message =
  * The find is read as `getStored` reads it (PBI-2.4). A text find shows its description, which
  * cannot be edited (SPEC 3.9); without photos, it shows no photo, the disclaimer for a lookup
  * without photos, and "no mushroom" and "cannot tell" in the words of a description. A find with
- * photos shows its first photo, as in Phase 1, until PBI-2.5.
+ * photos shows its first photo, as in Phase 1, until PBI-2.5. An answer from the text alone shows
+ * the edibility "unknown" until its self-check agrees, and says why (SPEC 3.9).
  */
 export function FindScreen({ id }: { readonly id: number | null }) {
   const { language, strings } = useLanguage();
@@ -329,6 +332,7 @@ function AnalysisView({
       return (
         <AnswerView
           answer={analysis.answer}
+          selfCheck={find.selfCheck}
           subject={subject}
           language={language}
           strings={strings}
@@ -339,6 +343,11 @@ function AnalysisView({
 
 type AnswerViewProps = {
   readonly answer: Answer;
+  /**
+   * The self-check of an answer from the text alone; null for any other answer. Until it agrees,
+   * the edibility shown is "unknown", with why (SPEC 3.9).
+   */
+  readonly selfCheck: SelfCheck | null;
   /** What was analysed: for a lookup without photos, the answers speak of the description. */
   readonly subject: LookupSubject;
   readonly language: Language;
@@ -350,7 +359,7 @@ type AnswerViewProps = {
  * disclaimer, or what Claude could not name. The text lookup screen shows an unsaved lookup's
  * answer with it too.
  */
-export function AnswerView({ answer, subject, language, strings }: AnswerViewProps) {
+export function AnswerView({ answer, selfCheck, subject, language, strings }: AnswerViewProps) {
   const t = strings.find;
   const described = subject === "described";
   switch (answer.result) {
@@ -358,6 +367,7 @@ export function AnswerView({ answer, subject, language, strings }: AnswerViewPro
       return (
         <MatchView
           match={answer}
+          selfCheck={selfCheck}
           disclaimer={described ? strings.disclaimerDescribed : strings.disclaimer}
           language={language}
           strings={strings}
@@ -372,15 +382,17 @@ export function AnswerView({ answer, subject, language, strings }: AnswerViewPro
 
 type MatchViewProps = {
   readonly match: Match;
+  readonly selfCheck: SelfCheck | null;
   /** The disclaimer next to the edibility: SPEC 3.5's, or 3.9's for a lookup without photos. */
   readonly disclaimer: string;
   readonly language: Language;
   readonly strings: Strings;
 };
 
-function MatchView({ match, disclaimer, language, strings }: MatchViewProps) {
+function MatchView({ match, selfCheck, disclaimer, language, strings }: MatchViewProps) {
   const t = strings.find;
-  const edibility = edibilityText(shownEdibility(match), strings);
+  const edibility = edibilityText(checkedEdibility(match, selfCheck), strings);
+  const reason = selfCheckReason(selfCheck, match.names, language, strings);
   return (
     <View style={styles.section}>
       <View testID="match-names">
@@ -388,6 +400,7 @@ function MatchView({ match, disclaimer, language, strings }: MatchViewProps) {
       </View>
       <View testID="match-edibility" style={styles.edibility}>
         <Text style={styles.strong}>{fillIn(t.edibility, { edibility })}</Text>
+        {reason !== null && <Text style={styles.text}>{reason}</Text>}
         <Text style={styles.disclaimer}>{disclaimer}</Text>
       </View>
       <Text style={styles.text}>{confidenceText(match.confidence, strings)}</Text>

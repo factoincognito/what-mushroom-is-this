@@ -286,6 +286,17 @@ export type Strings = {
     readonly cannotTellDescribed: string;
     /** The heading of a text find's description. */
     readonly description: string;
+    /**
+     * Why the edibility of an answer from the text alone is shown as unknown, for each state of its
+     * self-check but "agreed" (docs/SPEC.md 3.9). `{matched}` and `{named}` are the two species.
+     */
+    readonly selfCheck: {
+      readonly waiting: string;
+      readonly disagreed: string;
+      readonly noSpecies: string;
+      readonly failed: string;
+      readonly noPicture: string;
+    };
     readonly waiting: string;
     /** A failed find; the cause follows in the queue's words. */
     readonly failed: string;
@@ -620,6 +631,16 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       cannotTellDescribed:
         "Beskrivningen säger inte tillräckligt för att avgöra vilken art det är.",
       description: "Din beskrivning",
+      selfCheck: {
+        waiting:
+          "Ätligheten visas som okänd tills en kontroll mot en bild av arten bekräftar matchningen. Kontrollen har inte gjorts ännu.",
+        disagreed:
+          "Ätligheten visas som okänd: en kontroll mot en bild av {matched} angav en annan art, {named}.",
+        noSpecies:
+          "Ätligheten visas som okänd: en kontroll mot en bild av arten kunde inte ange någon art.",
+        failed: "Ätligheten visas som okänd: kontrollen mot en bild av arten misslyckades.",
+        noPicture: "Ätligheten visas som okänd: ingen bild av arten hittades för kontrollen.",
+      },
       waiting: "Fyndet väntar på analys.",
       failed: "Analysen misslyckades.",
       time: "Taget: {time}",
@@ -881,6 +902,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       noMushroomDescribed: "The description is not of a mushroom.",
       cannotTellDescribed: "The description does not say enough to tell which species it is.",
       description: "Your description",
+      selfCheck: {
+        waiting:
+          "The edibility is shown as unknown until a check on a picture of the species agrees with this match. The check has not been made yet.",
+        disagreed:
+          "The edibility is shown as unknown: a check on a picture of {matched} named another species, {named}.",
+        noSpecies:
+          "The edibility is shown as unknown: a check on a picture of the species could not name a species.",
+        failed: "The edibility is shown as unknown: the check on a picture of the species failed.",
+        noPicture:
+          "The edibility is shown as unknown: no picture of the species was found for the check.",
+      },
       waiting: "This find waits for analysis.",
       failed: "The analysis failed.",
       time: "Taken: {time}",
@@ -1152,6 +1184,18 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       cannotTellDescribed:
         "La descrizione non dice abbastanza per stabilire di quale specie si tratti.",
       description: "La tua descrizione",
+      selfCheck: {
+        waiting:
+          "La commestibilità è indicata come sconosciuta finché un controllo su un'immagine della specie non conferma questa corrispondenza. Il controllo non è ancora stato fatto.",
+        disagreed:
+          "La commestibilità è indicata come sconosciuta: un controllo su un'immagine di {matched} ha indicato un'altra specie, {named}.",
+        noSpecies:
+          "La commestibilità è indicata come sconosciuta: un controllo su un'immagine della specie non ha potuto indicare una specie.",
+        failed:
+          "La commestibilità è indicata come sconosciuta: il controllo su un'immagine della specie non è riuscito.",
+        noPicture:
+          "La commestibilità è indicata come sconosciuta: non è stata trovata nessuna immagine della specie per il controllo.",
+      },
       waiting: "Questo ritrovamento è in attesa di analisi.",
       failed: "L'analisi non è riuscita.",
       time: "Data e ora: {time}",

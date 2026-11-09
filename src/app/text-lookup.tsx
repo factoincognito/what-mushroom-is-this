@@ -27,6 +27,7 @@ import { formatTimeIn } from "../queue/messages";
 import { useQueue } from "../queue/QueueContext";
 import { deviceStore } from "../storage/keyValueStore";
 import { useFindLog } from "../store/FindLogContext";
+import type { SelfCheck } from "../store/find";
 
 /**
  * The text lookup screen (docs/SPEC.md 3.9, Lookups): a description of up to the configured
@@ -177,6 +178,9 @@ export default function TextLookupScreen() {
       {view.outcome?.kind === "answer" && (
         <AnswerView
           answer={view.outcome.answer}
+          // An unsaved lookup's answer is from its text alone, and its self-check is not made
+          // until PBI-2.10: it is shown as one whose check waits (SPEC 3.9).
+          selfCheck={UNSAVED_CHECK}
           subject="described"
           language={language}
           strings={strings}
@@ -209,6 +213,9 @@ export default function TextLookupScreen() {
     </ScrollView>
   );
 }
+
+/** The self-check an unsaved lookup's answer is shown with. */
+const UNSAVED_CHECK: SelfCheck = { state: "waiting" };
 
 function openSettings(): void {
   Linking.openSettings().catch(() => undefined);

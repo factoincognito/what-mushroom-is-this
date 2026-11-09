@@ -4,10 +4,16 @@
  * names of the edibilities and the sources. It renders nothing.
  */
 
-import type { Confidence, Edibility } from "../analysis/answer";
+import {
+  type Confidence,
+  type Edibility,
+  type Match,
+  shownEdibility,
+  type Texts,
+} from "../analysis/answer";
 import type { Language } from "../i18n/languages";
 import type { Strings } from "../i18n/strings";
-import type { FindTime, Position, PositionSource, TimeSource } from "../store/find";
+import type { FindTime, Position, PositionSource, SelfCheck, TimeSource } from "../store/find";
 
 /** The widest UTC offset ISO 8601 allows, in minutes, as the store keeps it. */
 const MAX_OFFSET_MINUTES = 18 * 60;
@@ -154,6 +160,50 @@ export function edibilityText(edibility: Edibility, strings: Strings): string {
     deadly_poisonous: t.deadlyPoisonous,
     unknown: t.unknown,
   }[edibility];
+}
+
+/**
+ * The edibility to show of a match (docs/SPEC.md 3.9): for an answer from the text alone, which
+ * has a self-check, "unknown" until the check agreed; otherwise, and once it agreed, the
+ * answer's own by the confidence line (`shownEdibility`). `selfCheck` is null for any other answer.
+ */
+export function checkedEdibility(
+  match: Pick<Match, "edibility" | "confidence">,
+  selfCheck: SelfCheck | null,
+): Edibility {
+  if (selfCheck !== null && selfCheck.state !== "agreed") {
+    return "unknown";
+  }
+  return shownEdibility(match);
+}
+
+/**
+ * Why the edibility of an answer from the text alone is "unknown" (docs/SPEC.md 3.9), in the
+ * app's language: one sentence for each state of the check but "agreed"; a disagreement names
+ * both species. Null once the check agreed, or for an answer without a check.
+ */
+export function selfCheckReason(
+  selfCheck: SelfCheck | null,
+  matched: Texts,
+  language: Language,
+  strings: Strings,
+): string | null {
+  const t = strings.find.selfCheck;
+  switch (selfCheck?.state) {
+    case undefined:
+    case "agreed":
+      return null;
+    case "waiting":
+      return t.waiting;
+    case "disagreed":
+      return fillIn(t.disagreed, { matched: matched[language], named: selfCheck.names[language] });
+    case "no-species":
+      return t.noSpecies;
+    case "failed":
+      return t.failed;
+    case "no-picture":
+      return t.noPicture;
+  }
 }
 
 /** Where a find's time came from, in the app's language. */

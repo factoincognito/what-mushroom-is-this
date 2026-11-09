@@ -118,6 +118,11 @@ export interface FindSummary {
   photoUri: string | null;
   time: FindTime;
   analysis: SummaryAnalysis;
+  /**
+   * The self-check of an answer from the text alone, or null for any other find: the edibility
+   * shown is "unknown" until it agrees (docs/SPEC.md 3.9).
+   */
+  selfCheck: SelfCheck | null;
 }
 
 /**

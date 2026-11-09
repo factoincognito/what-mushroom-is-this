@@ -10,8 +10,13 @@ import {
   View,
 } from "react-native";
 
-import { shownEdibility } from "../analysis/answer";
-import { edibilityText, fillIn, formatFindTime } from "../find/display";
+import {
+  checkedEdibility,
+  edibilityText,
+  fillIn,
+  formatFindTime,
+  selfCheckReason,
+} from "../find/display";
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Language } from "../i18n/languages";
 import type { Strings } from "../i18n/strings";
@@ -334,7 +339,7 @@ function SummaryView({ find, language, strings }: FindRowProps) {
       return <Text style={styles.text}>{strings.log.waiting}</Text>;
     case "failed":
       return <Text style={styles.text}>{strings.log.failed}</Text>;
-    case "done":
+    case "done": {
       if (analysis.result !== "match") {
         const t = strings.find;
         const said =
@@ -347,19 +352,23 @@ function SummaryView({ find, language, strings }: FindRowProps) {
               : t.cannotTell;
         return <Text style={styles.text}>{said}</Text>;
       }
+      // An answer from the text alone shows "unknown" until its self-check agrees (SPEC 3.9).
+      const reason = selfCheckReason(find.selfCheck, analysis.names, language, strings);
       return (
         <>
           <Text style={styles.name}>{analysis.names[language]}</Text>
           <Text style={styles.text}>
             {fillIn(strings.find.edibility, {
-              edibility: edibilityText(shownEdibility(analysis), strings),
+              edibility: edibilityText(checkedEdibility(analysis, find.selfCheck), strings),
             })}
           </Text>
+          {reason !== null && <Text style={styles.note}>{reason}</Text>}
           <Text style={styles.note}>
             {described ? strings.disclaimerDescribed : strings.disclaimer}
           </Text>
         </>
       );
+    }
   }
 }
 

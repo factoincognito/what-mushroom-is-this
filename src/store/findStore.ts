@@ -994,6 +994,7 @@ function readSummary(row: Row, find: StoredFind): FindSummary {
     photoUri: find.photos[0]?.uri ?? null,
     time: find.time,
     analysis: readSummaryAnalysis(row),
+    selfCheck: find.selfCheck,
   };
 }
 

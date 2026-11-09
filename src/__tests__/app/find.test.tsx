@@ -923,7 +923,11 @@ describe("a text find (SPEC 3.9, PBI-2.4)", () => {
       time: { ...TAKEN, source: "saved" },
       position: null,
     });
-    await real.setAnswer(id, { answer: CHANTERELLE, model: "m", analysedAtMs: 1 }, { photoUris: [] });
+    await real.setAnswer(
+      id,
+      { answer: CHANTERELLE, model: "m", analysedAtMs: 1 },
+      { photoUris: [] },
+    );
     jest.mocked(openFindLog).mockResolvedValueOnce(real);
     await startApp(`/find/${id}`);
     const edibility = within(await screen.findByTestId("match-edibility"));

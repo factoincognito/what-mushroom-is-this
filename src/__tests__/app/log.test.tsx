@@ -450,6 +450,7 @@ describe("a find the store cannot read, in the list (PBI-1.16)", () => {
         photoUri,
         time,
         analysis: { state: "waiting" },
+        selfCheck: null,
       },
     ];
     jest.spyOn(mockLog, "list").mockResolvedValue(entries);
