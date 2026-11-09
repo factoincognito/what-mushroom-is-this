@@ -104,7 +104,7 @@ the role that did not write it.
 - **[DONE] PBI-2.1** (done 2026-11-09: findings in the product office, `library/designs/what-mushroom-is-this/phase-2-checks.md`; the map and Wikimedia escalations decided by Adam at 21:27; Known unknowns 11 to 13 and 15 updated in #50; what is left of them is checked at the build of PBI-2.6, PBI-2.8 and PBI-2.9) (the checks Known unknowns 11, 12, 13 and 15 name before the build; the uses go to the product office as escalations under the third-party code and IP policy) — The map provider and library, the Claude API's image limits, the file picker, and Wikidata and Commons: their terms, licences, fees, keys, attribution and caching, checked and written up, with a recommendation for the map provider. Spec 3.9, Known unknowns 11, 12, 13, 15.
 - **[NEXT] PBI-2.2** — The store, schema version 2. The fields of 3.9's "The store", and a migration from version 1 that keeps every Phase 1 find, its photo as its first photo and its answer as it was. Spec 3.9.
 - **[NEXT] PBI-2.3** — The answer's confidence from 1 to 100, a whole number, shown with 3.1's note. The edibility is "unknown" below 70, as configuration. Phase 1 finds keep their level and 3.3's rule. Spec 3.9.
-- **[NEXT] PBI-2.4** — Text lookups and the save setting:
+- **[NEXT] PBI-2.4** (it moves the queue's pick and the Log list to the store's `getStored`, so that a text find is not shown as "could not be read" and is analysed; or it ships with PBI-2.7: the Clead-role review of #49, note 3) — Text lookups and the save setting:
   - the text screen, up to 2,000 characters;
   - the "Save" switch with its starting values in Settings;
   - when a text find is saved, and its position;
