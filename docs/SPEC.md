@@ -467,10 +467,12 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   (**[Clead]**; Wikimedia rounds a requested width up to a standard one
   itself, and gives the original when it is narrower, but reports the
   width asked for, so the size is read from the picture received, Known
-  unknown 15). The thumbnail, or the original when it is served in its
-  place, is taken in JPEG, PNG, WebP or GIF, the formats the Claude API accepts, its type read from its
-  bytes, not from what Wikimedia says it is (Adam, 2026-11-10 00:10,
-  approving Clead's proposal). Its licence must be CC0, public domain
+  unknown 15). The thumbnail is taken in JPEG, PNG, WebP or GIF, the
+  formats the Claude API accepts, its type read from its bytes, not from
+  what Wikimedia says it is (Adam, 2026-11-10 00:10, approving Clead's
+  proposal). The same holds for the original when Wikimedia serves it in
+  place of a thumbnail, so an SVG or TIFF original gives no picture
+  (**[Clead]**). Its licence must be CC0, public domain
   without a country limit, CC BY or CC BY-SA; any other licence means no
   picture (Adam, 2026-11-09 21:27). A file under several licences is used
   when one of them is on that list, and is credited under the first of
@@ -760,14 +762,15 @@ answers to Clead's questions, 19:05).
     - among the 11,574 fungus species items with an English Wikipedia
       article and an Index Fungorum ID, 19 share their Latin name with
       another item, all fungi of the same genus, which rank and parent do
-      not tell apart; the second mostly has no picture. Names shared with
-      items outside the fungi were not checked, and the search by name
-      covers all of Wikidata;
+      not tell apart; the second mostly has no picture. Within that set
+      no name was shared with an item outside the fungi; fungus items
+      outside the set were not checked, and the search by name covers all
+      of Wikidata;
     - about a third of fungus species with an English Wikipedia article
       have a picture; 20 of 20 common Nordic species sampled do.
     Open for PBI-2.9 (**[Clead]** to settle in its PR): which item when a
-    name has several, also outside the fungi; which picture when an item has several; reading a
-    file's licences and a public-domain mark's country limit from the
+    name has several, also outside the fungi; which picture when an item
+    has several; reading a file's licences and a public-domain mark's country limit from the
     file page, since the metadata gives one licence and only "pd"; and
     naming Wikimedia Commons as the source.
     Before release, the IP lawyer's review covers resizing under CC
