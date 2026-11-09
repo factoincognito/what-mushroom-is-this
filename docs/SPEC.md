@@ -461,10 +461,30 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
 - Pictures from Wikimedia Commons are an exception to 3.7's "pictures
   from outside sources" (**[Clead]**). Their use goes through the IP
   policy before the build (**[not checked]**, Known unknown 15).
-- Adam's self-check, a photo lookup run on that picture and compared with
-  the text lookup's species, is an evaluation Clead runs outside the app
-  (Adam's answer, by 19:03), not a feature of the app; it is tracked in
-  the backlog.
+**The self-check of a text lookup** (Adam, 19:01; at run time, after
+every text lookup, and a mismatch makes the edibility "unknown": his
+answers to Clead's questions, 19:05).
+
+- After a text lookup's answer names a species and its picture is
+  fetched, the app runs a photo lookup on that picture, without the
+  text, and compares the species it names with the text lookup's (Adam).
+  The picture is resized and checked as a photo is in 3.3 (**[Clead]**).
+  The two match when their Latin names are the same, ignoring case and
+  surrounding spaces (**[Clead]**).
+- When they match, the find says the check agreed. When the check names
+  another species, the find says so, names both, and the edibility shown
+  is "unknown" (Adam). A check answer of "no mushroom" or "cannot tell"
+  counts as not matching (**[Clead]**).
+- With no picture, there is no check; the find says it could not be
+  checked, and the edibility is shown as the other rules give it
+  (**[Clead]**).
+- The check is a request of its own, on the user's key. Its error
+  classes are those of 3.3: one that leaves a find waiting leaves the
+  check waiting for the queue on a saved find, or offers "Check again" on
+  an unsaved lookup's screen; any other marks the check failed, and the
+  find says it could not be checked (**[Clead]**).
+- An unsaved lookup runs the check at once after its answer. A new answer
+  to a text find brings a new picture and a new check (**[Clead]**).
 
 **The store** (3.6 for Phase 2; **[Clead]**).
 
@@ -478,7 +498,9 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
     failure;
   - its confidence as a level (Phase 1) or a number from 1 to 100;
   - its representative picture with its author, licence and page, or
-    none.
+    none;
+  - its self-check: waiting, agreed, disagreed with the species the check
+    named, or not checked.
 - The database moves to schema version 2 by a migration that keeps every
   Phase 1 find, its photo as its first photo and its answer as it was.
   Adam's test-session finds are kept.
