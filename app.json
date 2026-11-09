@@ -9,7 +9,10 @@
     "android": {
       "package": "com.factoincognito.whatmushroomisthis",
       "allowBackup": false,
-      "blockedPermissions": ["android.permission.ACCESS_WIFI_STATE"]
+      "blockedPermissions": [
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "ios": {
       "infoPlist": {

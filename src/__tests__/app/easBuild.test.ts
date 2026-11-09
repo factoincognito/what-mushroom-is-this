@@ -16,6 +16,8 @@ const { join } = path;
 const APPLICATION_ID = "com.factoincognito.whatmushroomisthis";
 
 const WIFI_STATE = "android.permission.ACCESS_WIFI_STATE";
+/** "Display over other apps": the app draws over no other app (Clead's decision on #40). */
+const ALERT_WINDOW = "android.permission.SYSTEM_ALERT_WINDOW";
 
 type Permission = { $: Record<string, string> };
 type Manifest = {
@@ -112,8 +114,8 @@ describe("app.json: the Android build (PBI-1.10)", () => {
     expect(manifest.manifest.$.package).toBe(APPLICATION_ID);
   });
 
-  it("blocks ACCESS_WIFI_STATE, which the app does not use (#23), and no other permission", () => {
-    expect(appJson.expo.android?.blockedPermissions).toEqual([WIFI_STATE]);
+  it("blocks ACCESS_WIFI_STATE (#23) and SYSTEM_ALERT_WINDOW (#40), which the app does not use, and no other permission", () => {
+    expect(appJson.expo.android?.blockedPermissions).toEqual([WIFI_STATE, ALERT_WINDOW]);
   });
 
   it("removes ACCESS_WIFI_STATE in the manifest, which expo-network's own manifest adds at the merge", () => {
@@ -122,8 +124,20 @@ describe("app.json: the Android build (PBI-1.10)", () => {
     expect(declared()).not.toContain(WIFI_STATE);
   });
 
-  it("removes only ACCESS_WIFI_STATE and the microphone the image picker's options turn off", () => {
-    expect(removed().sort()).toEqual(["android.permission.RECORD_AUDIO", WIFI_STATE].sort());
+  it("removes SYSTEM_ALERT_WINDOW in the manifest, which the prebuild template's own manifest declares", () => {
+    expect(removed()).toContain(ALERT_WINDOW);
+    expect(declared()).not.toContain(ALERT_WINDOW);
+  });
+
+  it("removes only ACCESS_WIFI_STATE, SYSTEM_ALERT_WINDOW and the microphone the image picker's options turn off", () => {
+    expect(removed().sort()).toEqual(
+      ["android.permission.RECORD_AUDIO", WIFI_STATE, ALERT_WINDOW].sort(),
+    );
+  });
+
+  it("keeps VIBRATE, a normal permission React Native may use", () => {
+    expect(declared()).toContain("android.permission.VIBRATE");
+    expect(removed()).not.toContain("android.permission.VIBRATE");
   });
 
   it("keeps the location, the camera and the network state", () => {
