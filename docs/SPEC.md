@@ -7,7 +7,11 @@
 Intent approved: Adam, 2026-11-08 17:48, in chat ("Apyr mushroom spec"),
 with Clead's recommendations; the licence and the Italian disclaimer
 18:12; the Italian disclaimer checked by an Italian speaker Adam named,
-19:28. The approved text and its decisions are recorded in the product
+19:28. Phase 2 (3.9): intent approved by Adam, 2026-11-09 20:49, in
+chat ("apyr"), with Clead's two proposals (the disclaimer for a lookup
+without photos, and the edibility until the self-check agrees) and the
+choices marked **[Clead]**. The approved text and its decisions are
+recorded in the product
 office (`library/designs/what-mushroom-is-this/design.md` and
 `DECISIONS.md` in `factoincognito/product-office`, private). This file
 carries that specification for the build, with its private parts left
@@ -431,12 +435,11 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   of 3.3 applies to it, until it is analysed again (**[Clead]**).
 - For a text lookup, "no mushroom" means the description is not of a
   mushroom, and "cannot tell" that it does not say enough (**[Clead]**).
-- The disclaimer of 3.5 speaks of "the mushroom in your photo". For a
-  lookup without photos, saved or not, its wording is Adam's to decide
-  (Clead proposes: "There is no guarantee that the mushroom you described
-  is that species", and its Swedish and Italian counterparts, the Italian
-  checked as before). Until then, such a lookup shows the disclaimer of
-  3.5.
+- The disclaimer of 3.5 speaks of "the mushroom in your photo". A lookup
+  without photos, saved or not, shows instead: "There is no guarantee
+  that the mushroom you described is that species", with its Swedish and
+  Italian counterparts; the Italian is checked as before (Adam, 20:49,
+  approving Clead's proposal).
 
 **A representative picture for text lookups** (Adam, 19:01; the source,
 Wikimedia Commons, is his answer to Clead's question, by 19:03).
@@ -515,10 +518,9 @@ answers to Clead's questions, 19:05).
   in 3.4 (**[Clead]**).
 - A check picture that cannot be loaded neither counts toward the count
   of 3.3 (PBI-1.25) nor ends it (**[Clead]**).
-- The edibility shown while the check has not agreed (waiting, failed,
-  or no picture) is Adam's to decide. Clead proposes "unknown" until the
-  check agrees, with the find saying why. Until he decides, Clead's
-  proposal holds.
+- Until the check agrees (while it waits, after it failed, or with no
+  picture) the edibility shown is "unknown", and the find says why
+  (Adam, 20:49, approving Clead's proposal).
 
 **The store** (3.6 for Phase 2; **[Clead]**).
 
