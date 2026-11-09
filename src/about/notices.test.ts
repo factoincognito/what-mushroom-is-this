@@ -193,6 +193,48 @@ describe("the data file against THIRD-PARTY-NOTICES.md", () => {
   });
 });
 
+/** What THIRD-PARTY-NOTICES.md records of a development tool (PBI-1.27). */
+function recordedDevelopmentTools(): { name: string; version: string; licence: string }[] {
+  return tableRows("## Development tools").map(([name = "", version = "", licence = ""]) => ({
+    name: /^`([^`]+)`$/.exec(name)?.[1] ?? name,
+    version,
+    licence,
+  }));
+}
+
+/** The project's `devDependencies`, as `package.json` pins them. */
+function devDependencies(): Record<string, string> {
+  return JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).devDependencies;
+}
+
+describe("the development tools in THIRD-PARTY-NOTICES.md against what is installed (PBI-1.27)", () => {
+  const recorded = recordedDevelopmentTools();
+
+  it("are exactly the project's devDependencies", () => {
+    expect(recorded.map((tool) => tool.name).sort()).toEqual(Object.keys(devDependencies()).sort());
+  });
+
+  it.each(recorded.map((tool) => [tool.name, tool] as const))(
+    "record for %s the version installed, which package.json pins",
+    (name, tool) => {
+      expect(tool.version).toBe(npmPackage(name)?.json.version);
+      expect(tool.version).toBe(devDependencies()[name]);
+    },
+  );
+
+  it.each(recorded.map((tool) => [tool.name, tool] as const))(
+    "record for %s the licence its installed package.json states, and say so when it ships no licence file",
+    (name, tool) => {
+      const installed = npmPackage(name);
+      const note = " (`package.json`; the package ships no licence file)";
+      const shipsLicence =
+        installed !== undefined &&
+        readdirSync(installed.dir).some((file) => /^licen[cs]e/i.test(file));
+      expect(tool.licence).toBe(`${installed?.json.license}${shipsLicence ? "" : note}`);
+    },
+  );
+});
+
 describe("the licence texts", () => {
   const fromNpm = NOTICES.libraries.filter((entry) => npmPackage(entry.name) !== undefined);
 
