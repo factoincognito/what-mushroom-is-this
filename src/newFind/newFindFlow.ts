@@ -33,6 +33,11 @@ export interface NewFindView {
    * photo is taken until one of the two.
    */
   canRetrySave: boolean;
+  /**
+   * The question open on the screen before a kept photo is dropped (docs/SPEC.md 3.1, PBI-1.20):
+   * discard: "Discard the photo" was tapped; leave: the screen is being left. Null when none is.
+   */
+  confirming: "discard" | "leave" | null;
 }
 
 export const INITIAL_VIEW: NewFindView = {
@@ -40,6 +45,7 @@ export const INITIAL_VIEW: NewFindView = {
   message: null,
   location: null,
   canRetrySave: false,
+  confirming: null,
 };
 
 export interface NewFindDeps {
@@ -64,6 +70,8 @@ export class NewFindFlow {
   private pending: Pending | null = null;
   private started = false;
   private closed = false;
+  /** Whether the screen was left during the save under way, so the leave waits for its end. */
+  private leaveWaits = false;
 
   constructor(
     private readonly deps: NewFindDeps,
@@ -134,10 +142,41 @@ export class NewFindFlow {
     }
   }
 
-  /** The user discards the photo whose save failed; a new photo can then be taken. */
-  discardPending(): void {
+  /** "Discard the photo": asks first, while a photo whose save failed is kept. */
+  askToDiscard(): void {
+    this.ask("discard");
+  }
+
+  /**
+   * The screen is about to be left: asks first, while a photo whose save failed is kept. While
+   * the photo is being saved, the first save and Save again alike, it asks nothing yet: the leave
+   * waits for the save, and is asked once the save fails (Clead's fix 1 on #32). Says whether the
+   * leaving waits, for the answer or for the save.
+   */
+  askToLeave(): boolean {
+    if (this.view.phase === "saving") {
+      this.leaveWaits = true;
+      return true;
+    }
+    return this.ask("leave");
+  }
+
+  /** The user answers the question by keeping the photo. */
+  keepPhoto(): void {
+    this.show({ confirming: null });
+  }
+
+  /**
+   * The user confirms the question: the photo whose save failed is dropped, and a new photo can
+   * then be taken. Without an open question nothing is dropped. Says whether the photo was.
+   */
+  discardPending(): boolean {
+    if (this.view.confirming === null) {
+      return false;
+    }
     this.pending = null;
-    this.show({ phase: "ready", message: null, canRetrySave: false });
+    this.show({ phase: "ready", message: null, canRetrySave: false, confirming: null });
+    return true;
   }
 
   /** The screen is gone: stops asking for a position, unless a saved find still waits for a fix. */
@@ -146,6 +185,15 @@ export class NewFindFlow {
     if (!this.trackerHandedOff) {
       this.tracker?.stop();
     }
+  }
+
+  /** Opens a question, only while a kept photo is offered for Save again. */
+  private ask(question: "discard" | "leave"): boolean {
+    if (this.pending === null || !this.view.canRetrySave) {
+      return false;
+    }
+    this.show({ confirming: question });
+    return true;
   }
 
   private async pick(
@@ -170,7 +218,7 @@ export class NewFindFlow {
     // A camera save owns the tracker from its start, before anything is awaited, so that closing
     // the screen meanwhile does not stop it: the find may still need its later fix (SPEC 3.6).
     this.trackerHandedOff = pending.from === "camera";
-    this.show({ phase: "saving", message: null, canRetrySave: false });
+    this.show({ phase: "saving", message: null, canRetrySave: false, confirming: null });
     try {
       const store = await this.deps.findLog();
       const deps = { store, now: this.deps.now };
@@ -182,6 +230,7 @@ export class NewFindFlow {
         this.tracker?.stop();
       }
       this.pending = null;
+      this.leaveWaits = false;
       this.show({ phase: "saved" });
     } catch {
       // Nothing waits for a fix: the tracker goes back to the screen, for Save again, or stops
@@ -190,7 +239,9 @@ export class NewFindFlow {
       if (this.closed) {
         this.tracker?.stop();
       }
-      this.show({ phase: "ready", message: "saveFailed", canRetrySave: true });
+      const confirming = this.leaveWaits ? "leave" : null;
+      this.leaveWaits = false;
+      this.show({ phase: "ready", message: "saveFailed", canRetrySave: true, confirming });
     }
   }
 

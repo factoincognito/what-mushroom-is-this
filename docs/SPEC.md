@@ -84,7 +84,11 @@ There is no server.
    and the find says that they come from the photo; a metadata time
    without a UTC offset is read as the phone's offset on that date, and the
    find marks it so. Without them, the time is that of saving and the find
-   has no position.
+   has no position. A photo whose find could not be saved is kept on the
+   screen until it is saved again or discarded. It is dropped only after a
+   question on the screen, not a system alert: when "Discard the photo" is
+   tapped, and when the screen is left while the photo is kept
+   (**[Clead]**, PBI-1.20, #14).
 3. **Find**: the photo; the species names in all four languages; the
    edibility with the disclaimer; Claude's confidence, with a note that it
    is Claude's own statement, not a measured probability; the general

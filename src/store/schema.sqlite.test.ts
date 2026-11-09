@@ -394,6 +394,50 @@ describe("the store's statements on a real SQLite", () => {
     await expect(store.setPosition(99, position)).rejects.toMatchObject({ code: "not-found" });
   });
 
+  it("adds a fix the phone gave no accuracy for (PBI-1.20)", async () => {
+    const id = await store.add(newFind(1_000));
+    await store.setPosition(id, { ...position, accuracyM: null });
+    await expect(store.get(id)).resolves.toMatchObject({
+      position: { ...position, accuracyM: null },
+    });
+  });
+
+  it.each<[string, (id: number) => Promise<void>]>([
+    ["waiting", async () => undefined],
+    ["done", (id) => store.setAnswer(id, analysed)],
+    ["failed", (id) => store.markFailed(id, { cause: "request", detail: "status 400" })],
+  ])("adds a fix to a %s find and changes nothing else of it (PBI-1.20)", async (_state, into) => {
+    const id = await store.add(newFind(1_000));
+    await into(id);
+    const before = await store.get(id);
+    await store.setPosition(id, position);
+    await expect(store.get(id)).resolves.toEqual({ ...before, position });
+  });
+
+  it("adds the fix to the find given and to no other (PBI-1.20)", async () => {
+    const other = await store.add(newFind(1_000));
+    const id = await store.add(newFind(2_000));
+    await store.setPosition(id, position);
+    await expect(store.get(other)).resolves.toMatchObject({ position: null });
+  });
+
+  it("does not replace the position a gallery photo's metadata gave (PBI-1.20)", async () => {
+    const fromPhoto = { latitude: 1, longitude: 2, accuracyM: null, source: "photo" } as const;
+    const id = await store.add(newFind(1_000, fromPhoto));
+    await expect(store.setPosition(id, position)).rejects.toMatchObject({ code: "wrong-state" });
+    await expect(store.get(id)).resolves.toMatchObject({ position: fromPhoto });
+  });
+
+  it("refuses, as corrupt, a find whose stored position source it does not know, and changes nothing (PBI-1.20)", async () => {
+    const id = insertWaitingWithUnreadablePosition("u1.jpg");
+    await expect(store.setPosition(id, position)).rejects.toMatchObject({ code: "corrupt" });
+    expect(
+      sqlite
+        .prepare("SELECT latitude, longitude, accuracy_m, position_source FROM finds WHERE id = ?")
+        .get(id),
+    ).toEqual({ latitude: 1, longitude: 2, accuracy_m: null, position_source: "gps" });
+  });
+
   it("deletes a find and its photo", async () => {
     const id = await store.add(newFind(1_000));
     await expect(store.delete(id)).resolves.toEqual({ photoRemoved: true });

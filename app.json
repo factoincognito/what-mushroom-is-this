@@ -11,8 +11,14 @@
     },
     "ios": {
       "infoPlist": {
-        "RCTAsyncStorageExcludeFromBackup": true
+        "RCTAsyncStorageExcludeFromBackup": true,
+        "CFBundleAllowMixedLocalizations": true
       }
+    },
+    "locales": {
+      "sv": "./locales/sv.json",
+      "en": "./locales/en.json",
+      "it": "./locales/it.json"
     },
     "plugins": [
       ["expo-router", { "sitemap": false }],

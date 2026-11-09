@@ -1,0 +1,6 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "The camera takes the photo of a mushroom for your find log.",
+    "NSPhotoLibraryUsageDescription": "A photo you pick from your library is saved as a find in your log."
+  }
+}
