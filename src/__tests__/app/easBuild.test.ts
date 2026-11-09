@@ -12,8 +12,11 @@ import { fs, PROJECT_ROOT, path } from "../../testing/projectFiles";
 const { readFileSync } = fs;
 const { join } = path;
 
-/** The Android application ID of this app (SPEC 3.8). */
-const APPLICATION_ID = "com.factoincognito.whatmushroomisthis";
+/**
+ * The Android application ID of this app, independent of its name: Clead's decision, left to
+ * Clead by Adam, recorded in the product office on 2026-11-09 (#40).
+ */
+const APPLICATION_ID = "com.factoincognito.mushroomlog";
 
 const WIFI_STATE = "android.permission.ACCESS_WIFI_STATE";
 /** "Display over other apps": the app draws over no other app (Clead's decision on #40). */
@@ -63,10 +66,16 @@ describe("eas.json: the build profile for the test on Adam's phone (PBI-1.10)", 
     expect(easJson()).toMatchObject({ cli: { appVersionSource: "remote" } });
   });
 
+  it("gives each preview build a new versionCode (autoIncrement, kept on Expo's servers with the remote source), so the phone can tell builds apart", () => {
+    expect(easJson()).toMatchObject({ build: { preview: { autoIncrement: true } } });
+  });
+
   it("holds nothing else: no other profile, no environment variables and no credentials", () => {
     expect(easJson()).toEqual({
       cli: { appVersionSource: "remote" },
-      build: { preview: { distribution: "internal", android: { buildType: "apk" } } },
+      build: {
+        preview: { distribution: "internal", autoIncrement: true, android: { buildType: "apk" } },
+      },
     });
   });
 });
