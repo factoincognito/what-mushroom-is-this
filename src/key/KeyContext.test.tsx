@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react-native";
+import { useEffect } from "react";
 import { Text } from "react-native";
 
 import type { KeyValueStore } from "../storage/keyValueStore";
@@ -211,6 +212,71 @@ describe("KeyProvider", () => {
     });
     expect(errors).not.toHaveBeenCalled();
     errors.mockRestore();
+  });
+});
+
+describe("KeyProvider, the key for analysis (PBI-1.7)", () => {
+  /** Reads the key for analysis in its own mount effect, which React runs before its parent's. */
+  function EarlyReader({ onRead }: { onRead: (result: unknown) => void }) {
+    const { readForAnalysis } = useApiKey();
+    useEffect(() => {
+      readForAnalysis().then(onRead);
+    }, [readForAnalysis, onRead]);
+    return null;
+  }
+
+  it("is not read before the first-start clearing has run, even from a child's mount effect", async () => {
+    // A key left from an earlier install; no marker, so this is the first start after an install.
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: A_KEY });
+    let releaseMarker: (value: string | null) => void = () => undefined;
+    const store: KeyValueStore = {
+      getItem: () =>
+        new Promise<string | null>((resolve) => {
+          releaseMarker = resolve;
+        }),
+      setItem: async () => undefined,
+    };
+    const onRead = jest.fn();
+    await render(
+      <KeyProvider secrets={secrets} store={store}>
+        <EarlyReader onRead={onRead} />
+      </KeyProvider>,
+    );
+    expect(onRead).not.toHaveBeenCalled();
+    await act(async () => {
+      releaseMarker(null);
+    });
+    expect(onRead).toHaveBeenCalledTimes(1);
+    expect(onRead).toHaveBeenCalledWith({ ok: true, key: null });
+  });
+
+  it("gives the saved key once the clearing has run at a later start", async () => {
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: A_KEY });
+    const onRead = jest.fn();
+    await render(
+      <KeyProvider secrets={secrets} store={memoryStore(MARKED)}>
+        <EarlyReader onRead={onRead} />
+      </KeyProvider>,
+    );
+    expect(onRead).toHaveBeenCalledWith({ ok: true, key: A_KEY });
+  });
+
+  it("gives the key saved since the start", async () => {
+    const secrets = memorySecrets();
+    await renderProvider(secrets, memoryStore(MARKED));
+    await act(async () => {
+      await current().save(` ${A_KEY}\n`);
+    });
+    await expect(current().readForAnalysis()).resolves.toEqual({ ok: true, key: A_KEY });
+  });
+
+  it("reports a key store that cannot be read", async () => {
+    const secrets = memorySecrets();
+    await renderProvider(secrets, memoryStore(MARKED));
+    secrets.getItemAsync = async () => {
+      throw new Error("Keystore unavailable");
+    };
+    await expect(current().readForAnalysis()).resolves.toEqual({ ok: false });
   });
 });
 

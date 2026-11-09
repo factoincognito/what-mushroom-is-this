@@ -590,6 +590,29 @@ describe("list", () => {
   });
 });
 
+describe("oldestWaiting (PBI-1.7)", () => {
+  const OLDEST_WAITING = "SELECT id FROM finds WHERE state = 'waiting' ORDER BY id ASC LIMIT 1";
+
+  it("asks for the waiting find saved first, by its ID, and gives its ID", async () => {
+    db.reply("first", OLDEST_WAITING, { id: 4 });
+    await expect(store.oldestWaiting()).resolves.toBe(4);
+    expect(events).toEqual([{ method: "first", sql: OLDEST_WAITING, params: [] }]);
+  });
+
+  it("gives null when no find is waiting", async () => {
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
+  it.each([
+    ["not a whole number", { id: 4.5 }],
+    ["not a number", { id: "4" }],
+    ["missing", {}],
+  ])("refuses a stored ID that is %s as corrupt", async (_name, reply) => {
+    db.reply("first", OLDEST_WAITING, reply);
+    await expect(store.oldestWaiting()).rejects.toMatchObject({ code: "corrupt" });
+  });
+});
+
 describe("setAnswer", () => {
   it("saves the answer as JSON with the Log's fields, for a waiting or failed find", async () => {
     await store.setAnswer(7, analysed);
