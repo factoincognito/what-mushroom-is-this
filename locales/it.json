@@ -1,6 +1,7 @@
 {
   "ios": {
     "NSCameraUsageDescription": "La fotocamera scatta la foto di un fungo per il tuo registro dei ritrovamenti.",
+    "NSLocationWhenInUseUsageDescription": "La tua posizione viene salvata con ogni nuovo ritrovamento, così il tuo registro mostra dove l'hai trovato. Non viene inviata da nessuna parte.",
     "NSPhotoLibraryUsageDescription": "Una foto che scegli dalla tua libreria viene salvata come ritrovamento nel tuo registro."
   }
 }

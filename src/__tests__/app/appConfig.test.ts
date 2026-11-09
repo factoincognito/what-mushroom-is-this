@@ -124,8 +124,15 @@ describe("the expo-image-picker config plugin in app.json (PBI-1.6)", () => {
   });
 });
 
-/** The keys of the texts iOS shows when the app asks for the camera and the photo library. */
-const PERMISSION_KEYS = ["NSCameraUsageDescription", "NSPhotoLibraryUsageDescription"];
+/**
+ * The keys of the texts iOS shows when the app asks for the camera, the location while the app is
+ * in use (PBI-1.19) and the photo library, in sorted order.
+ */
+const PERMISSION_KEYS = [
+  "NSCameraUsageDescription",
+  "NSLocationWhenInUseUsageDescription",
+  "NSPhotoLibraryUsageDescription",
+];
 
 type ResolvedLocales = { localesMap: Record<string, Record<string, unknown>> };
 
@@ -153,7 +160,16 @@ describe("the iOS permission texts in the app's three languages (PBI-1.20)", () 
     expect(appJson.expo.ios?.infoPlist?.CFBundleAllowMixedLocalizations).toBe(true);
   });
 
-  it("are given in Swedish, English and Italian, each with the camera and photo library texts only", () => {
+  it.each(["sv", "en", "it"])(
+    "give in %s the text iOS shows when it asks for the location (PBI-1.19)",
+    (language) => {
+      expect(isPurposeText(ios.localesMap[language]?.NSLocationWhenInUseUsageDescription)).toBe(
+        true,
+      );
+    },
+  );
+
+  it("are given in Swedish, English and Italian, each with the camera, location and photo library texts only", () => {
     expect(Object.keys(ios.localesMap).sort()).toEqual(["en", "it", "sv"]);
     for (const texts of Object.values(ios.localesMap)) {
       expect(Object.keys(texts).sort()).toEqual(PERMISSION_KEYS);
@@ -163,10 +179,12 @@ describe("the iOS permission texts in the app's three languages (PBI-1.20)", () 
     }
   });
 
-  it("are in English those the image picker's plugin writes into the Info.plist itself", () => {
+  it("are in English those the image picker's and the location's plugins write into the Info.plist itself", () => {
     const options = pluginEntry("expo-image-picker")?.[1];
     expect(ios.localesMap.en).toEqual({
       NSCameraUsageDescription: options?.cameraPermission,
+      NSLocationWhenInUseUsageDescription:
+        pluginEntry("expo-location")?.[1].locationWhenInUsePermission,
       NSPhotoLibraryUsageDescription: options?.photosPermission,
     });
   });

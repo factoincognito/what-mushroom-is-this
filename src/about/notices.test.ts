@@ -232,22 +232,45 @@ describe("the licence texts", () => {
       "com.github.bumptech.glide:glide",
       "SDWebImageWebPCoder",
       "com.google.android.gms:play-services-location",
+      "com.google.android.gms:play-services-base",
+      "com.google.android.gms:play-services-basement",
+      "com.google.android.gms:play-services-tasks",
     ]);
   });
 
-  it("name Google's terms for Play services by the address its POM gives, as no text of them ships in a package (PBI-1.19)", () => {
-    const playServices = NOTICES.libraries.find(
-      (entry) => entry.name === "com.google.android.gms:play-services-location",
-    );
-    expect(playServices).toEqual({
-      name: "com.google.android.gms:play-services-location",
-      version: "21.0.1",
-      licence:
-        "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
-      source: "https://dl.google.com/dl/android/maven2/",
-      textId: null,
-    });
-  });
+  /** play-services-location, and the Play services libraries its POM and theirs name. */
+  const PLAY_SERVICES: readonly [string, string][] = [
+    ["play-services-location", "21.0.1"],
+    ["play-services-base", "18.1.0"],
+    ["play-services-basement", "18.1.0"],
+    ["play-services-tasks", "18.0.2"],
+  ];
+
+  it.each(PLAY_SERVICES)(
+    "name Google's terms for %s %s by the address its POM gives, as no text of them ships in a package (PBI-1.19)",
+    (artifact, version) => {
+      const name = `com.google.android.gms:${artifact}`;
+      expect(NOTICES.libraries.find((entry) => entry.name === name)).toEqual({
+        name,
+        version,
+        licence:
+          "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+        source: "https://dl.google.com/dl/android/maven2/",
+        textId: null,
+      });
+    },
+  );
+
+  it.each(PLAY_SERVICES)(
+    "record that the licence of %s %s was read from its own POM on Google's Maven (PBI-1.19)",
+    (artifact, version) => {
+      const row = tableRows("## In the app").find(([name = ""]) =>
+        name.startsWith(`\`com.google.android.gms:${artifact}\``),
+      );
+      const pom = `https://dl.google.com/dl/android/maven2/com/google/android/gms/${artifact}/${version}/${artifact}-${version}.pom`;
+      expect(row?.[5]).toContain(pom);
+    },
+  );
 
   it("name for expo-location the Play services version its Android build files ask for (PBI-1.19)", () => {
     const wanted = "com.google.android.gms:play-services-location:21.0.1";

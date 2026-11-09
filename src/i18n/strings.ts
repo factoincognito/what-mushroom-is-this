@@ -289,9 +289,10 @@ export type Strings = {
  * are kept apart, as each language is checked by its own speaker.
  *
  * No speaker has checked the iOS permission texts in `locales/sv.json` and `locales/it.json`
- * either (`ios.NSCameraUsageDescription` and `ios.NSPhotoLibraryUsageDescription`, four texts in
- * all, PBI-1.20). They are not in this file, so the lists cannot name them; they are recorded
- * here so that a speaker's check finds them too.
+ * either (`ios.NSCameraUsageDescription` and `ios.NSPhotoLibraryUsageDescription`, PBI-1.20, and
+ * `ios.NSLocationWhenInUseUsageDescription`, PBI-1.19; six texts in all). They are not in this
+ * file, so the lists cannot name them; they are recorded here so that a speaker's check finds
+ * them too.
  */
 export const NOT_CHECKED_BY_A_SPEAKER: {
   readonly sv: readonly string[];

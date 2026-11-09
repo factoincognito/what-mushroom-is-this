@@ -159,6 +159,7 @@ function setUpWithLocation(limits: {
   const logOpen = new Promise<void>((resolve) => {
     openLog = resolve;
   });
+  let view: NewFindView = INITIAL_VIEW;
   const flow = new NewFindFlow(
     {
       findLog: async () => {
@@ -189,9 +190,11 @@ function setUpWithLocation(limits: {
       appConfig: limits,
       now: () => new Date(NOW_MS),
     },
-    () => undefined,
+    (shown) => {
+      view = shown;
+    },
   );
-  return { flow, location, added, positions, state, openLog };
+  return { flow, location, added, positions, state, openLog, last: () => view };
 }
 
 /** Lets the promises queued so far run. */
@@ -283,6 +286,48 @@ describe("NewFindFlow: the position of a camera find", () => {
       accuracyM: 9,
       source: "fix",
     });
+    expect(location.stops).toBe(1);
+  });
+
+  it("still gets its later fix when the screen is left during the save, as the leave waits for it (PBI-1.20)", async () => {
+    const { flow, location, positions, openLog, last } = setUpWithLocation({
+      lastKnownPositionMaxAgeMs: 120_000,
+      positionFixWaitMs: 30_000,
+    });
+    const started = flow.start();
+    await settle();
+    expect(last()).toMatchObject({ phase: "saving" });
+    expect(flow.askToLeave()).toBe(true);
+    openLog();
+    await started;
+    expect(last()).toMatchObject({ phase: "saved", confirming: null });
+    // The held leave goes ahead once the save has succeeded, and the screen closes.
+    flow.close();
+    expect(location.stops).toBe(0);
+    location.send(59.66, 17.1, 9);
+    await settle();
+    expect(positions).toEqual([
+      [1, { latitude: 59.66, longitude: 17.1, accuracyM: 9, source: "fix" }],
+    ]);
+    expect(location.stops).toBe(1);
+  });
+
+  it("stops asking for the position when a leave held during a failed save is confirmed (PBI-1.20)", async () => {
+    const { flow, location, added, state, openLog, last } = setUpWithLocation({
+      lastKnownPositionMaxAgeMs: 120_000,
+      positionFixWaitMs: 30_000,
+    });
+    state.addFails = true;
+    const started = flow.start();
+    await settle();
+    expect(flow.askToLeave()).toBe(true);
+    openLog();
+    await started;
+    expect(last()).toMatchObject({ canRetrySave: true, confirming: "leave" });
+    expect(location.stops).toBe(0);
+    expect(flow.discardPending()).toBe(true);
+    flow.close();
+    expect(added).toEqual([]);
     expect(location.stops).toBe(1);
   });
 });

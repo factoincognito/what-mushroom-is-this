@@ -79,27 +79,32 @@ are for the release gate and PBI-1.9.
 | `com.github.bumptech.glide:glide` (Android, through `expo-image-loader`'s `android/build.gradle`) | 5.0.5 | BSD-2-Clause ("Simplified BSD License") and Apache-2.0 | depend | https://github.com/bumptech/glide | version 5.0.5's licences, "Apache 2.0" and "BSD", on https://badges.mvnrepository.com/artifact/com.github.bumptech.glide/glide/5.0.5/changes; their names and URLs from the POM on Maven Central, https://central.sonatype.com/artifact/com.github.bumptech.glide/glide, which shows version 5.0.9, not 5.0.5 |
 | `SDWebImageWebPCoder` (iOS, a CocoaPods dependency in `expo-image-manipulator`'s `ios/ExpoImageManipulator.podspec`) | not pinned: the podspec names no version, so CocoaPods chooses it at the iOS build; the release gate fixes it and reads its licence for that version | MIT ("available under the MIT license") | depend | https://github.com/SDWebImage/SDWebImageWebPCoder | https://www.cocoapods.org/pods/SDWebImageWebPCoder, which shows version 0.15.0 |
 
-### The Android library `expo-location` builds in
+### The Android libraries `expo-location` builds in
 
 Google's vendor SDK, from Google's Maven repository, not npm; read on 2026-11-09. Mode "depend".
-It is not under a permissive licence: its POM names Google's "Android Software Development Kit
-License". The policy escalates a vendor SDK in a product (Appendix A.2, A.3); the Product Office
-decided on 2026-11-09 that `expo-location` may be used with it, under Google's terms, and that the
-IP lawyer's review before release still applies (policy rule 6): `DECISIONS.md` in
-`factoincognito/product-office` (private), row 2026-11-09,
+`play-services-location` and the three Play services libraries its POM and theirs name are not
+under a permissive licence: each POM names Google's "Android Software Development Kit License".
+The policy escalates a vendor SDK in a product (Appendix A.2, A.3); the Product Office decided on
+2026-11-09 that `expo-location` may be used with `play-services-location`, under Google's terms,
+with what it brings in, and that the IP lawyer's review before release still applies (policy
+rule 6): `DECISIONS.md` in `factoincognito/product-office` (private), row 2026-11-09,
 https://github.com/factoincognito/product-office/blob/b4286388dbf779cc039d6b2b8a2028e888f7c0c6/DECISIONS.md?plain=1#L232.
 
-Google's terms are a page at the address the POM gives; no package ships their text. So the About
-view shows the library's name, version, the licence's name with that address, and its source, and
+Google's terms are a page at the address the POMs give; no package ships their text. So the About
+view shows each library's name, version, the licence's name with that address, and its source, and
 says that the licence text is not in the app. Whether the app should carry the terms' text is for
-the release gate (PBI-1.24). Also for PBI-1.24 and the release gate: the POM's own dependencies,
-`play-services-base` 18.1.0, `play-services-basement` 18.1.0 and `play-services-tasks` 18.0.2,
-whose licences were not read; and the `third_party_licenses.txt` the library's AAR carries, the
+the release gate (PBI-1.24). Also for PBI-1.24 and the release gate: the AndroidX libraries the
+POMs of `play-services-base` and `play-services-basement` name (`androidx.collection:collection`
+1.0.0, `androidx.core:core` 1.2.0, `androidx.fragment:fragment` 1.0.0), whose licences were not
+read here; and the `third_party_licenses.txt` that `play-services-location`'s AAR carries, the
 notices of 21 open-source components Google builds into it.
 
 | Library | Version | Licence | Mode | Source | Where the licence was read |
 |---|---|---|---|---|---|
 | `com.google.android.gms:play-services-location` (Android, through `expo-location`'s `android/build.gradle`) | 21.0.1 | Android Software Development Kit License, https://developer.android.com/studio/terms.html (Google's terms, as the POM names them; the page itself was not read) | depend | https://dl.google.com/dl/android/maven2/, `com/google/android/gms/play-services-location/21.0.1` | its 21.0.1 POM on Google's Maven: https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-location/21.0.1/play-services-location-21.0.1.pom |
+| `com.google.android.gms:play-services-base` (Android, a dependency of `play-services-location`) | 18.1.0 | Android Software Development Kit License, https://developer.android.com/studio/terms.html (Google's terms, as the POM names them; the page itself was not read) | depend | https://dl.google.com/dl/android/maven2/, `com/google/android/gms/play-services-base/18.1.0` | its 18.1.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-base/18.1.0/play-services-base-18.1.0.pom |
+| `com.google.android.gms:play-services-basement` (Android, a dependency of `play-services-base` and `play-services-tasks`) | 18.1.0 | Android Software Development Kit License, https://developer.android.com/studio/terms.html (Google's terms, as the POM names them; the page itself was not read) | depend | https://dl.google.com/dl/android/maven2/, `com/google/android/gms/play-services-basement/18.1.0` | its 18.1.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/18.1.0/play-services-basement-18.1.0.pom |
+| `com.google.android.gms:play-services-tasks` (Android, a dependency of `play-services-base`) | 18.0.2 | Android Software Development Kit License, https://developer.android.com/studio/terms.html (Google's terms, as the POM names them; the page itself was not read) | depend | https://dl.google.com/dl/android/maven2/, `com/google/android/gms/play-services-tasks/18.0.2` | its 18.0.2 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/18.0.2/play-services-tasks-18.0.2.pom |
 
 ## Development tools
 

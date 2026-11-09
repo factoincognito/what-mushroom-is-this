@@ -236,6 +236,27 @@
       "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
       "source": "https://dl.google.com/dl/android/maven2/",
       "textId": null
+    },
+    {
+      "name": "com.google.android.gms:play-services-base",
+      "version": "18.1.0",
+      "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": null
+    },
+    {
+      "name": "com.google.android.gms:play-services-basement",
+      "version": "18.1.0",
+      "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": null
+    },
+    {
+      "name": "com.google.android.gms:play-services-tasks",
+      "version": "18.0.2",
+      "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": null
     }
   ],
   "texts": {
