@@ -13,8 +13,10 @@ one, the package's directory in that repository. The mode is "depend" for
 every entry: the project uses the library as a package from npm and copies
 none of its code.
 
-All the libraries below are under permissive licences (Appendix A.3). Their
-copyright and licence texts ship inside each package, in `node_modules/`.
+All the libraries below are under permissive licences (Appendix A.3), except
+Google's `play-services-location`, a vendor SDK under Google's terms, which
+the Product Office allowed by decision (its section below). The copyright and
+licence texts of the npm packages ship inside each package, in `node_modules/`.
 
 Intended use (Appendix A.1, 3): the libraries under "In the app" are built
 into the app, and are recorded as for a commercial product, the stricter
@@ -46,9 +48,9 @@ shipped in the app (internal tooling).
 | `expo-secure-store` | 57.0.4 | MIT | depend | https://github.com/expo/expo, `packages/expo-secure-store` | the API key in the secure store (PBI-1.2) |
 | `expo-image-manipulator` | 57.0.22 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-manipulator` | resizing and re-encoding the photo for analysis as JPEG (PBI-1.6) |
 | `expo-image-loader` | 57.0.1 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-loader` | a dependency of `expo-image-picker` and `expo-image-manipulator`, installed with them (PBI-1.6) |
-| `expo-location` | 57.0.23 | MIT | depend | https://github.com/expo/expo, `packages/expo-location` | the position of a new find (PBI-1.6). **Parked**: its Android side builds in `com.google.android.gms:play-services-location` 21.0.1 from Maven (its `android/build.gradle`), Google's vendor SDK under Google's terms, which the policy escalates (Appendix A.2, A.3); it is not used until the Product Office decides in writing |
 | `expo-image-picker` | 57.0.21 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-picker` | the camera and the gallery of a new find (PBI-1.6). Its Android side builds in the native libraries below, from Maven, not npm (its `android/build.gradle`) |
 | `expo-network` | 57.0.3 | MIT | depend | https://github.com/expo/expo, `packages/expo-network` | the queue's "network is back" trigger (PBI-1.7, Known unknown 6). It builds in no other native library: its `android/build.gradle` adds test-only dependencies, and the POM of its prebuilt Android module names only `kotlin-stdlib-jdk7` 2.1.20, `org.jetbrains:annotations` 23.0.0 and `pika-api` 0.3.2, which the POMs of `expo-secure-store`, `expo-sqlite` and `expo-localization` here already name; on Android it uses the platform's `ConnectivityManager`, on iOS Apple's `Network` and `SystemConfiguration` frameworks (its `ios/ExpoNetwork.podspec` depends only on `ExpoModulesCore`) |
+| `expo-location` | 57.0.23 | MIT | depend | https://github.com/expo/expo, `packages/expo-location` | the phone's position for a new find (PBI-1.19). Its Android side builds in Google's `play-services-location`, below, from Maven, not npm (its `android/build.gradle`, and the POM of its prebuilt Android module, which otherwise names only `kotlin-stdlib-jdk7` 2.1.20, `org.jetbrains:annotations` 23.0.0 and `pika-api` 0.3.2, as for `expo-network`); on iOS its `ios/ExpoLocation.podspec` depends only on `ExpoModulesCore` |
 
 ### The Android libraries `expo-image-picker` builds in
 
@@ -76,6 +78,28 @@ are for the release gate and PBI-1.9.
 |---|---|---|---|---|---|
 | `com.github.bumptech.glide:glide` (Android, through `expo-image-loader`'s `android/build.gradle`) | 5.0.5 | BSD-2-Clause ("Simplified BSD License") and Apache-2.0 | depend | https://github.com/bumptech/glide | version 5.0.5's licences, "Apache 2.0" and "BSD", on https://badges.mvnrepository.com/artifact/com.github.bumptech.glide/glide/5.0.5/changes; their names and URLs from the POM on Maven Central, https://central.sonatype.com/artifact/com.github.bumptech.glide/glide, which shows version 5.0.9, not 5.0.5 |
 | `SDWebImageWebPCoder` (iOS, a CocoaPods dependency in `expo-image-manipulator`'s `ios/ExpoImageManipulator.podspec`) | not pinned: the podspec names no version, so CocoaPods chooses it at the iOS build; the release gate fixes it and reads its licence for that version | MIT ("available under the MIT license") | depend | https://github.com/SDWebImage/SDWebImageWebPCoder | https://www.cocoapods.org/pods/SDWebImageWebPCoder, which shows version 0.15.0 |
+
+### The Android library `expo-location` builds in
+
+Google's vendor SDK, from Google's Maven repository, not npm; read on 2026-11-09. Mode "depend".
+It is not under a permissive licence: its POM names Google's "Android Software Development Kit
+License". The policy escalates a vendor SDK in a product (Appendix A.2, A.3); the Product Office
+decided on 2026-11-09 that `expo-location` may be used with it, under Google's terms, and that the
+IP lawyer's review before release still applies (policy rule 6): `DECISIONS.md` in
+`factoincognito/product-office` (private), row 2026-11-09,
+https://github.com/factoincognito/product-office/blob/b4286388dbf779cc039d6b2b8a2028e888f7c0c6/DECISIONS.md?plain=1#L232.
+
+Google's terms are a page at the address the POM gives; no package ships their text. So the About
+view shows the library's name, version, the licence's name with that address, and its source, and
+says that the licence text is not in the app. Whether the app should carry the terms' text is for
+the release gate (PBI-1.24). Also for PBI-1.24 and the release gate: the POM's own dependencies,
+`play-services-base` 18.1.0, `play-services-basement` 18.1.0 and `play-services-tasks` 18.0.2,
+whose licences were not read; and the `third_party_licenses.txt` the library's AAR carries, the
+notices of 21 open-source components Google builds into it.
+
+| Library | Version | Licence | Mode | Source | Where the licence was read |
+|---|---|---|---|---|---|
+| `com.google.android.gms:play-services-location` (Android, through `expo-location`'s `android/build.gradle`) | 21.0.1 | Android Software Development Kit License, https://developer.android.com/studio/terms.html (Google's terms, as the POM names them; the page itself was not read) | depend | https://dl.google.com/dl/android/maven2/, `com/google/android/gms/play-services-location/21.0.1` | its 21.0.1 POM on Google's Maven: https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-location/21.0.1/play-services-location-21.0.1.pom |
 
 ## Development tools
 

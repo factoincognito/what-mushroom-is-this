@@ -231,7 +231,30 @@ describe("the licence texts", () => {
       "expo-router",
       "com.github.bumptech.glide:glide",
       "SDWebImageWebPCoder",
+      "com.google.android.gms:play-services-location",
     ]);
+  });
+
+  it("name Google's terms for Play services by the address its POM gives, as no text of them ships in a package (PBI-1.19)", () => {
+    const playServices = NOTICES.libraries.find(
+      (entry) => entry.name === "com.google.android.gms:play-services-location",
+    );
+    expect(playServices).toEqual({
+      name: "com.google.android.gms:play-services-location",
+      version: "21.0.1",
+      licence:
+        "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+      source: "https://dl.google.com/dl/android/maven2/",
+      textId: null,
+    });
+  });
+
+  it("name for expo-location the Play services version its Android build files ask for (PBI-1.19)", () => {
+    const wanted = "com.google.android.gms:play-services-location:21.0.1";
+    const gradle = readFileSync(join(MODULES, "expo-location", "android", "build.gradle"), "utf8");
+    expect(gradle).toContain(`'${wanted}'`);
+    const [name, version] = [wanted.slice(0, wanted.lastIndexOf(":")), wanted.split(":")[2]];
+    expect(NOTICES.libraries.find((entry) => entry.name === name)?.version).toBe(version);
   });
 });
 

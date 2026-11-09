@@ -161,6 +161,13 @@
       "textId": "expo"
     },
     {
+      "name": "expo-location",
+      "version": "57.0.23",
+      "licence": "MIT",
+      "source": "https://github.com/expo/expo",
+      "textId": "expo"
+    },
+    {
       "name": "com.vanniktech:android-image-cropper",
       "version": "4.7.0",
       "licence": "Apache-2.0",
@@ -221,6 +228,13 @@
       "version": null,
       "licence": "MIT",
       "source": "https://github.com/SDWebImage/SDWebImageWebPCoder",
+      "textId": null
+    },
+    {
+      "name": "com.google.android.gms:play-services-location",
+      "version": "21.0.1",
+      "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+      "source": "https://dl.google.com/dl/android/maven2/",
       "textId": null
     }
   ],
