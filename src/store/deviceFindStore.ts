@@ -2,12 +2,8 @@ import { openDatabaseAsync } from "expo-sqlite";
 
 import type { FindDatabase } from "./database";
 import { createFindStore, type FindStore } from "./findStore";
+import { DATABASE_NAME, PHOTO_DIRECTORY } from "./locations";
 import { devicePhotoFiles } from "./photoFiles";
-
-/** The one find-log database (docs/SPEC.md 3.6), in expo-sqlite's default directory. */
-const DATABASE_NAME = "finds.db";
-/** The photos' directory, in the app's document directory. */
-const PHOTO_DIRECTORY = "photos";
 
 /** A photo name: the time in base 36, a hyphen and eight random base-36 digits. */
 function newPhotoName(): string {

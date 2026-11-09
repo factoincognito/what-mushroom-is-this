@@ -129,6 +129,21 @@ export type Strings = {
     /** A failed new analysis of a find that has an answer. */
     readonly answerKept: string;
   };
+  /** The About view (docs/SPEC.md 3.1): the licences and the disclaimer. */
+  readonly about: {
+    /** The view's title, which is also the text of its link in Settings. */
+    readonly title: string;
+    readonly appHeading: string;
+    readonly librariesHeading: string;
+    readonly librariesIntro: string;
+    /** In place of the version of a library whose version the build chooses. */
+    readonly versionNotPinned: string;
+    readonly showText: string;
+    readonly hideText: string;
+    /** For a library whose licence text is not in the app yet. */
+    readonly textMissing: string;
+    readonly disclaimerHeading: string;
+  };
 };
 
 /**
@@ -153,6 +168,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "notFound",
     "newFind",
     "queue",
+    "about",
   ],
   it: [
     "languageName",
@@ -165,6 +181,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "notFound",
     "newFind",
     "queue",
+    "about",
   ],
 };
 
@@ -282,6 +299,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       },
       answerKept: "Den nya analysen misslyckades. Det tidigare svaret finns kvar.",
     },
+    about: {
+      title: "Om appen",
+      appHeading: "Appens licens",
+      librariesHeading: "Bibliotek",
+      librariesIntro: "Appen innehåller dessa bibliotek, under deras egna licenser.",
+      versionNotPinned: "väljs när appen byggs",
+      showText: "Visa licenstexten",
+      hideText: "Dölj licenstexten",
+      textMissing: "Licenstexten finns inte i appen ännu.",
+      disclaimerHeading: "Ätlighet",
+    },
   },
   en: {
     languageName: "English",
@@ -390,6 +418,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         refused: "Claude declined to analyse this photo.",
       },
       answerKept: "The new analysis failed. The earlier answer is kept.",
+    },
+    about: {
+      title: "About",
+      appHeading: "The app's licence",
+      librariesHeading: "Libraries",
+      librariesIntro: "The app contains these libraries, under their own licences.",
+      versionNotPinned: "chosen when the app is built",
+      showText: "Show the licence text",
+      hideText: "Hide the licence text",
+      textMissing: "The licence text is not in the app yet.",
+      disclaimerHeading: "Edibility",
     },
   },
   // Not checked by an Italian speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
@@ -505,6 +544,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         refused: "Claude ha rifiutato di analizzare questa foto.",
       },
       answerKept: "La nuova analisi non è riuscita. La risposta precedente è mantenuta.",
+    },
+    about: {
+      title: "Informazioni",
+      appHeading: "La licenza dell'app",
+      librariesHeading: "Librerie",
+      librariesIntro: "L'app contiene queste librerie, con le loro licenze.",
+      versionNotPinned: "scelta quando l'app viene compilata",
+      showText: "Mostra il testo della licenza",
+      hideText: "Nascondi il testo della licenza",
+      textMissing: "Il testo della licenza non è ancora nell'app.",
+      disclaimerHeading: "Commestibilità",
     },
   },
 };

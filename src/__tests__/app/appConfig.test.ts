@@ -27,10 +27,10 @@ describe("the expo-secure-store config plugin in app.json", () => {
     expect(pluginEntry("expo-secure-store")?.[1].faceIDPermission).toBe(false);
   });
 
-  it("keeps the plugin's Android backup rules for the secure store's own data", () => {
+  it("leaves the Android backup rules to the app's own, which keep the secure store's (backupRules.test.ts)", () => {
     const options = pluginEntry("expo-secure-store")?.[1];
     expect(options).toBeDefined();
-    expect(options?.configureAndroidBackup ?? true).toBe(true);
+    expect(options?.configureAndroidBackup).toBe(false);
   });
 
   it("keeps the other libraries' plugins", () => {
