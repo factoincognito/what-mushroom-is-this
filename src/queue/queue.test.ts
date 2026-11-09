@@ -444,6 +444,12 @@ describe("the error classes of SPEC 3.3 in a run", () => {
 
   it.each([
     ["401, 403", { kind: "key-refused", status: 401 }, { reason: "key-refused" }],
+    ["a key that cannot be sent", { kind: "key-refused", status: null }, { reason: "key-refused" }],
+    [
+      "the 400 of a key not scoped to a workspace (PBI-1.13)",
+      { kind: "key-refused", status: 400 },
+      { reason: "key-not-scoped" },
+    ],
     ["402 or a billing error", { kind: "no-credit", status: 402 }, { reason: "no-credit" }],
     ["404", { kind: "model-unknown" }, { reason: "model-unknown" }],
     ["any other status", { kind: "other", status: 418 }, { reason: "other", status: 418 }],
@@ -736,6 +742,7 @@ describe("restarts (SPEC 3.3)", () => {
 
   it.each([
     ["key", { kind: "key-refused", status: 403 }],
+    ["key", { kind: "key-refused", status: 400 }],
     ["model", { kind: "model-unknown" }],
   ] as const)(
     "a change of the %s setting starts the queue stopped for it again",
@@ -761,6 +768,7 @@ describe("restarts (SPEC 3.3)", () => {
 
   it.each([
     ["model", { kind: "key-refused", status: 401 }, { reason: "key-refused" }],
+    ["model", { kind: "key-refused", status: 400 }, { reason: "key-not-scoped" }],
     ["key", { kind: "model-unknown" }, { reason: "model-unknown" }],
     ["key", { kind: "no-credit", status: 402 }, { reason: "no-credit" }],
   ] as const)(

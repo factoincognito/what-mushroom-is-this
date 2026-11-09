@@ -162,6 +162,7 @@ describe("the strings of the queue (PBI-1.7)", () => {
       "queue.running",
       "queue.stopped.answer",
       "queue.stopped.internalError",
+      "queue.stopped.keyNotScoped",
       "queue.stopped.keyRefused",
       "queue.stopped.modelUnknown",
       "queue.stopped.noCredit",

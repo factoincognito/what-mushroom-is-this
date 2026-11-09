@@ -12,6 +12,7 @@ const STOPS: readonly QueueStop[] = [
   { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
   { reason: "no-key" },
   { reason: "key-refused" },
+  { reason: "key-not-scoped" },
   { reason: "no-credit" },
   { reason: "model-unknown" },
   { reason: "answer" },
@@ -151,8 +152,31 @@ describe("the placeholders of the queue's strings", () => {
 describe("stopNeedsSettings", () => {
   it.each(STOPS.map((stop) => [stop.reason, stop] as const))("%s", (reason, stop) => {
     expect(stopNeedsSettings(stop)).toBe(
-      reason === "no-key" || reason === "key-refused" || reason === "model-unknown",
+      reason === "no-key" ||
+        reason === "key-refused" ||
+        reason === "key-not-scoped" ||
+        reason === "model-unknown",
     );
+  });
+});
+
+describe("the message for a key not scoped to a workspace (Clead's decision on #18, note 4)", () => {
+  it.each(LANGUAGES)("is its own in %s, not the message for a refused key", (language) => {
+    const message = noticeMessage(
+      { kind: "stopped", stop: { reason: "key-not-scoped" } },
+      STRINGS[language],
+      formatTime,
+    );
+    expect(message).toBe(STRINGS[language].queue.stopped.keyNotScoped);
+    expect(message).not.toBe(STRINGS[language].queue.stopped.keyRefused);
+  });
+
+  it.each([
+    ["sv", /arbetsyta/],
+    ["en", /workspace/],
+    ["it", /spazio di lavoro/],
+  ] as const)("in %s says the key belongs to no workspace", (language, workspace) => {
+    expect(STRINGS[language].queue.stopped.keyNotScoped).toMatch(workspace);
   });
 });
 

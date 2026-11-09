@@ -283,3 +283,47 @@ describe("a change of the setting named starts the queue again (SPEC 3.3)", () =
     expect(JSON.parse(fetchMock.mock.calls[1]?.[1].body).model).toBe("claude-sonnet-5-5");
   });
 });
+
+describe("a key not scoped to a workspace (Clead's decision on #18, note 4)", () => {
+  const notScoped = answer(
+    400,
+    JSON.stringify({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message:
+          "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header.",
+      },
+    }),
+  );
+
+  it.each(["sv", "en", "it"] as const)(
+    "the Log screen says in %s that the key must be replaced with one in a workspace, and links to Settings",
+    async (language) => {
+      phoneIn(language);
+      const t = STRINGS[language].queue;
+      fetchMock.mockResolvedValueOnce(notScoped);
+      await startApp();
+      expect(await screen.findByText(t.stopped.keyNotScoped)).toBeOnTheScreen();
+      expect(screen.queryByText(t.stopped.keyRefused)).not.toBeOnTheScreen();
+      expect(screen.getByRole("link", { name: t.openSettings })).toBeOnTheScreen();
+      expect(mockFinds.get(1)?.analysis.state).toBe("waiting");
+    },
+  );
+
+  it("saving another key in Settings starts the queue again", async () => {
+    fetchMock.mockResolvedValueOnce(notScoped);
+    await startApp();
+    expect(await screen.findByText(en.stopped.keyNotScoped)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("link", { name: en.openSettings }));
+    fetchMock.mockResolvedValueOnce(ANSWERED);
+    await fireEvent.changeText(
+      await screen.findByLabelText(STRINGS.en.settings.key.input),
+      "sk-ant-api03-workspace",
+    );
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.settings.key.save }));
+    expect(await screen.findByText(STRINGS.en.settings.key.saved)).toBeOnTheScreen();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mockFinds.get(1)?.analysis.state).toBe("done");
+  });
+});
