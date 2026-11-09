@@ -115,7 +115,9 @@ When the queue has stopped (3.3), the Log screen says why and offers
 - On iOS a key in the secure store survives an uninstall when the app is
   reinstalled with the same bundle ID. The app clears the key store on its
   first start after an install, which it tells from a marker in its own
-  storage.
+  storage. If that clearing fails, no key is read for analysis and the key
+  store is shown as unreadable, with Save and Remove; a save runs the
+  clearing again first (**[Clead]**, #29).
 - Without a key, a find is saved and waits; its screen says a key is needed
   and links to Settings.
 
@@ -232,7 +234,9 @@ When the queue has stopped (3.3), the Log screen says why and offers
   run takes the waiting finds one at a time, oldest first, and ends when
   none is left or one stays waiting for want of a network or a fault on
   Anthropic's side. A find can also be analysed at once from its screen.
-  Nothing runs while the app is closed.
+  Nothing runs while the app is closed. A waiting find the store cannot
+  read is passed over and left as it is; the Log shows it as a find that
+  could not be read, and its screen offers only Delete (**[Clead]**, #26).
 - Position works without a network, from the phone's GPS. The map link of
   3.1 needs the map app's own maps.
 
