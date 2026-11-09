@@ -1,23 +1,35 @@
 /**
- * The find log (docs/SPEC.md 3.6): the finds in one SQLite database, their photos as files.
+ * The find log (docs/SPEC.md 3.6, and 3.9 "The store"): the finds in one SQLite database, their
+ * photos and representative pictures as files.
  *
- * No find is left without its photo, and no photo without its find:
- * - adding copies the photo in first and then saves the row; deleting removes the row first and
- *   then the photo. Either way the only thing a crash or an error between the two steps can leave
- *   is a photo no row refers to;
- * - opening the store removes every such photo, before anything can be added.
+ * No find is left without its photos, and no file without its find:
+ * - adding copies the file in first and then saves it to the row; deleting removes the row first
+ *   and then the files. Either way the only thing a crash or an error between the two steps can
+ *   leave is a file no row refers to;
+ * - opening the store removes every such file, before anything can be added.
+ *
+ * Each change is one statement on one row, so it is whole or not made at all, with no
+ * transaction (whose separate connection, in expo-sqlite, would make a write on the store's own
+ * connection fail as locked).
  */
 
-import { CONFIDENCES, EDIBILITIES, parseAnswerText } from "../analysis/answer";
+import { CONFIDENCES, EDIBILITIES, isRecord, parseAnswerText } from "../analysis/answer";
+import { config } from "../config/config";
 import { answerToJson } from "./answerJson";
 import type { FindDatabase } from "./database";
 import {
+  ADDED_PHOTOS_STATES,
+  type AddedPhotosState,
   type AnalysedAnswer,
   type Analysis,
   checkFailure,
   checkId,
   checkNewFind,
+  checkNewPicture,
+  checkNewTextFind,
   checkPosition,
+  checkSelfCheckOutcome,
+  checkUri,
   corrupt,
   FAILURE_CAUSES,
   FIND_STATES,
@@ -30,8 +42,15 @@ import {
   isOneOf,
   type ListedFind,
   type NewFind,
+  type NewPicture,
+  type NewTextFind,
+  type Picture,
   POSITION_SOURCES,
   type Position,
+  SELF_CHECK_STATES,
+  type SelfCheck,
+  type SelfCheckOutcome,
+  type StoredFind,
   StoreError,
   type SummaryAnalysis,
   TIME_SOURCES,
@@ -40,8 +59,8 @@ import type { PhotoFiles } from "./photoFiles";
 import { migrate } from "./schema";
 
 /**
- * The finds. The analysis state changes only as follows; any other change is refused as
- * `wrong-state` and changes nothing:
+ * The finds, as Phase 1 reads and changes them: each find by its first photo. The analysis state
+ * changes only as follows; any other change is refused as `wrong-state` and changes nothing:
  *
  * | Change | From | To |
  * |---|---|---|
@@ -51,6 +70,10 @@ import { migrate } from "./schema";
  * | `markWaiting` | failed | waiting |
  *
  * `setPosition` changes no analysis state: it applies in any state, to a find without a position.
+ *
+ * A find without a photo (a text find, `LookupStore.addText`) has no Phase 1 view: `get` refuses
+ * it as `corrupt`, the list marks it unreadable and `oldestWaiting` passes over it, until the
+ * screens and the queue read it through `getStored` (PBI-2.4, PBI-2.7).
  */
 export interface FindStore {
   /** Saves a new find, waiting for analysis, with a copy of its photo; gives its ID. */
@@ -63,12 +86,19 @@ export interface FindStore {
    */
   list(): Promise<ListedFind[]>;
   /**
-   * The ID of the waiting find saved first, or null when none waits: the queue's "oldest first" is
-   * the order of saving, the find's ID, not the time taken (docs/SPEC.md 3.4). A waiting find
-   * whose row cannot be read is passed over and left as it is, so it does not stop the queue; the
-   * list shows it as unreadable.
+   * The ID of the waiting find saved first whose batch is complete, or null when none waits: the
+   * queue's "oldest first" is the order of saving, the find's ID, not the time taken (docs/SPEC.md
+   * 3.4), and the queue does not take a find while its batch is open (3.9). A waiting find whose
+   * row cannot be read is passed over and left as it is, so it does not stop the queue; the list
+   * shows it as unreadable.
    */
   oldestWaiting(): Promise<number | null>;
+  /**
+   * Stores the first answer. Every answer write also marks the photos added since as analysed,
+   * drops the find's representative picture and self-check (its picture's file goes at the next
+   * opening), and starts a new self-check, waiting, when the answer names a species and the find
+   * has text and no photo, so the answer is from the text alone (docs/SPEC.md 3.9).
+   */
   setAnswer(id: number, analysed: AnalysedAnswer): Promise<void>;
   replaceAnswer(id: number, analysed: AnalysedAnswer): Promise<void>;
   markFailed(id: number, failure: FindFailure): Promise<void>;
@@ -80,19 +110,66 @@ export interface FindStore {
    */
   setPosition(id: number, position: Position): Promise<void>;
   /**
-   * Deletes the find, then its photo. `photoRemoved` is false when the photo could not be
-   * removed: the find is gone all the same, and the next opening of the store removes the photo.
-   * A DELETE that changed no row gives `not-found` and removes no photo (PBI-1.27).
+   * Deletes the find, then its photos and its picture. `photoRemoved` is false when a file could
+   * not be removed, or not be named from what is stored: the find is gone all the same, and the
+   * next opening of the store removes the file. A DELETE that changed no row gives `not-found` and
+   * removes no file (PBI-1.27).
    */
   delete(id: number): Promise<{ photoRemoved: boolean }>;
   /**
    * Deletes a find whose ID the store cannot read (an ID of 0 or below, or one past 2^53, which
-   * only a damaged file can hold), named by the `storedId` the list gives it, then its photo when
-   * its name can be read (PBI-1.26). `photoRemoved` is false when it could not be. A find whose ID
-   * the store can read is never deleted here: for its ID this gives `not-found`. So does a DELETE
-   * that changed no row, which removes no photo (PBI-1.27).
+   * only a damaged file can hold), named by the `storedId` the list gives it, then the files it
+   * can name (PBI-1.26). `photoRemoved` is false when one could not be. A find whose ID the store
+   * can read is never deleted here: for its ID this gives `not-found`. So does a DELETE that
+   * changed no row, which removes no file (PBI-1.27).
    */
   deleteUnreadable(storedId: string): Promise<{ photoRemoved: boolean }>;
+}
+
+/**
+ * What the store holds for Phase 2 (docs/SPEC.md 3.9, "The store"), besides `FindStore`. A change
+ * the find's state does not allow is refused as `wrong-state` and changes nothing; a file copied
+ * in for it is removed again.
+ */
+export interface LookupStore {
+  /** Saves a new text find, waiting, without photos and with no batch open; gives its ID. */
+  addText(find: NewTextFind): Promise<number>;
+  /**
+   * Saves a new photo lookup's find, waiting, with a copy of its first photo in batch 1 and the
+   * batch open, so the queue does not take it until `completeBatch`; gives its ID.
+   */
+  addWithOpenBatch(find: NewFind): Promise<number>;
+  /**
+   * Adds a copy of a photo to the find: to its open batch, or as the first of a new batch it
+   * opens, numbered one past the last begun. A find holds up to `config.maxPhotosPerFind` photos.
+   */
+  addPhoto(id: number, photoUri: string): Promise<void>;
+  /**
+   * Completes the find's open batch. A find without an answer then waits for the queue, a failed
+   * one too; a find with an answer keeps it, and the photos added since wait (docs/SPEC.md 3.9).
+   * Opening the store completes every batch still open, as the app starts.
+   */
+  completeBatch(id: number): Promise<void>;
+  /**
+   * Removes the find's photo with the number given, 1 for the first, then its file; the others
+   * keep their order and batches, and the find its time, position and analysis. The last photo
+   * of a find without text is not removed.
+   */
+  removePhoto(id: number, photoNumber: number): Promise<{ photoRemoved: boolean }>;
+  /**
+   * The state of the photos added since the answer: from waiting to not yet analysed after a
+   * failure, or back to waiting when the user asks. Only an answer makes them analysed.
+   */
+  setAddedPhotos(id: number, state: "waiting" | "not-analysed"): Promise<void>;
+  /** Stores a copy of the representative picture, with its credit, on a find whose check waits. */
+  setPicture(id: number, picture: NewPicture): Promise<void>;
+  /**
+   * Stores what the self-check came to, on a find whose check waits: an outcome of the check on
+   * its picture, or "no-picture" on a find that has none.
+   */
+  setSelfCheck(id: number, outcome: SelfCheckOutcome): Promise<void>;
+  /** Everything the store holds of the find with the ID, or null when there is none. */
+  getStored(id: number): Promise<StoredFind | null>;
 }
 
 export interface StoreOptions {
@@ -114,9 +191,16 @@ const NEXT_ID = `1 + MAX(
   COALESCE((SELECT MAX(id) FROM finds WHERE id BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER}), 0),
   COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'finds'
     AND seq BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER}), 0))`;
-const INSERT = `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, latitude,
-  longitude, accuracy_m, position_source, photo_file, state)
-  VALUES (${NEXT_ID}, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting')`;
+/** A new photo find, its photo the first, in batch 1, the batch complete or open. */
+const insertPhotoFind = (batchOpen: 0 | 1) => `INSERT INTO finds (id, taken_at_ms,
+  utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photos, batches,
+  batch_open, state) VALUES (${NEXT_ID}, ?, ?, ?, ?, ?, ?, ?,
+  json_array(json_object('file', ?, 'batch', 1)), 1, ${batchOpen}, 'waiting')`;
+const INSERT = insertPhotoFind(0);
+const INSERT_OPEN = insertPhotoFind(1);
+const INSERT_TEXT = `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, latitude,
+  longitude, accuracy_m, position_source, text, photos, batches, batch_open, state)
+  VALUES (${NEXT_ID}, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 0, 0, 'waiting')`;
 /**
  * A time column, given back only within JavaScript's safe-integer range and otherwise as NULL,
  * which the store reads as a row it cannot read. The schema's CHECK keeps the times in that range;
@@ -138,10 +222,18 @@ const SAFE_OFFSET = `CASE WHEN utc_offset_min BETWEEN -1080 AND 1080 THEN utc_of
  * past 2^53 (PBI-1.26). Such a find is still named by its ID as SQLite writes it (`STORED_ID`).
  */
 const SAFE_ID = `CASE WHEN id BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER} THEN id END AS id`;
-/** Every column of a find, as `get`, the queue's pick and the list all read it. */
+/** The number of batches begun and the open-batch flag, given back only in range, as above. */
+const SAFE_BATCHES = `CASE WHEN batches BETWEEN 0 AND ${Number.MAX_SAFE_INTEGER} THEN batches END
+  AS batches`;
+const SAFE_BATCH_OPEN = "CASE WHEN batch_open IN (0, 1) THEN batch_open END AS batch_open";
+/** The number of the find's photos, or NULL when the stored list is not JSON. */
+const PHOTO_COUNT = "(CASE WHEN json_valid(photos) THEN json_array_length(photos) END)";
+/** Every column of a find, as `get`, `getStored`, the queue's pick and the list all read it. */
 const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source,
-  latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause,
-  failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}`;
+  latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES},
+  ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model,
+  ${safeTime("analysed_at_ms")}, added_photos, picture_file, picture_author, picture_licence,
+  picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
 /**
  * The finds, the latest taken first, by the stored time and ID (`finds.`, not the columns read),
@@ -151,24 +243,30 @@ const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, resul
   name_en, name_it, edibility, confidence FROM finds
   ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /**
- * The waiting find saved first after a given ID, among the IDs the store can read: one past 2^53
- * could not be passed over, since JavaScript cannot hold it to ask for the next (PBI-1.26).
+ * The waiting find saved first after a given ID whose batch is complete, among the IDs the store
+ * can read: one past 2^53 could not be passed over, since JavaScript cannot hold it to ask for the
+ * next (PBI-1.26).
  */
-const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting'
+const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND batch_open = 0
   AND finds.id > ? AND finds.id <= ${Number.MAX_SAFE_INTEGER} ORDER BY finds.id ASC LIMIT 1`;
 /**
  * The IDs the store cannot read, those `SAFE_ID` gives back as NULL: `deleteUnreadable` matches
  * only these, so it never deletes a find whose ID the store can read, which `delete` is for.
  */
 const UNREADABLE_ID = `(id < 1 OR id > ${Number.MAX_SAFE_INTEGER})`;
-/** The photo of, and the deletion of, a find named by its ID as SQLite writes it. */
-const PHOTO_OF_STORED = `SELECT photo_file FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
+/** The files of, and the deletion of, a find named by its ID as SQLite writes it. */
+const FILES_OF_STORED = `SELECT photos, picture_file FROM finds WHERE CAST(id AS TEXT) = ?
+  AND ${UNREADABLE_ID}`;
 const DELETE_STORED = `DELETE FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
 /** An SQLite integer's decimal form, as CAST(… AS TEXT) writes it: at most 19 digits. */
 const STORED_ID = /^(0|-?[1-9][0-9]{0,18})$/;
 const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL,
   answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?,
-  name_it = ?, edibility = ?, confidence = ?`;
+  name_it = ?, edibility = ?, confidence = ?, added_photos = 'analysed', picture_file = NULL,
+  picture_author = NULL, picture_licence = NULL, picture_page = NULL,
+  self_check = CASE WHEN ? = 'match' AND text IS NOT NULL AND ${PHOTO_COUNT} = 0
+    THEN 'waiting' END,
+  check_name_sv = NULL, check_name_en = NULL, check_name_la = NULL, check_name_it = NULL`;
 const SET_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state IN ('waiting', 'failed')`;
 const REPLACE_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state = 'done'`;
 const MARK_FAILED = `UPDATE finds SET state = 'failed', failure_cause = ?, failure_detail = ?
@@ -179,35 +277,84 @@ const SET_POSITION = `UPDATE finds SET latitude = ?, longitude = ?, accuracy_m =
   position_source = ? WHERE id = ? AND position_source IS NULL`;
 const POSITION_SOURCE_OF = "SELECT position_source FROM finds WHERE id = ?";
 const STATE_OF = "SELECT state FROM finds WHERE id = ?";
-const PHOTO_OF = "SELECT photo_file FROM finds WHERE id = ?";
+const FILES_OF = "SELECT photos, picture_file FROM finds WHERE id = ?";
 const DELETE = "DELETE FROM finds WHERE id = ?";
-const ALL_PHOTOS = "SELECT photo_file FROM finds";
+const ALL_FILES = "SELECT photos, picture_file FROM finds";
+/**
+ * Completing a batch (docs/SPEC.md 3.9): a failed find waits again, without why it failed; a done
+ * find's new photos wait. SQLite reads every column on the right as it was before the UPDATE.
+ */
+const COMPLETE_SET = `batch_open = 0,
+  state = CASE WHEN state = 'failed' THEN 'waiting' ELSE state END,
+  failure_cause = CASE WHEN state = 'failed' THEN NULL ELSE failure_cause END,
+  failure_detail = CASE WHEN state = 'failed' THEN NULL ELSE failure_detail END,
+  added_photos = CASE WHEN state = 'done' THEN 'waiting' ELSE added_photos END`;
+const COMPLETE_BATCH = `UPDATE finds SET ${COMPLETE_SET} WHERE id = ? AND batch_open = 1`;
+const COMPLETE_OPEN_BATCHES = `UPDATE finds SET ${COMPLETE_SET} WHERE batch_open = 1`;
+const BATCH_OPEN_OF = `SELECT ${SAFE_BATCH_OPEN} FROM finds WHERE id = ?`;
+/** The batch a photo added now comes in: the open one, or a new one past the last begun. */
+const NEXT_BATCH = "CASE WHEN batch_open = 1 THEN batches ELSE batches + 1 END";
+const ADD_PHOTO = `UPDATE finds SET photos = json_insert(photos, '$[#]',
+  json_object('file', ?, 'batch', ${NEXT_BATCH})), batches = ${NEXT_BATCH}, batch_open = 1
+  WHERE id = ? AND ${PHOTO_COUNT} < ?`;
+const PHOTOS_OF = `SELECT text, photos, ${SAFE_BATCHES} FROM finds WHERE id = ?`;
+/**
+ * Removes the photo at a JSON path, only while that photo is the one read and it is not the last
+ * of a find without text, so a change between the read and this leaves the photos as they are.
+ */
+const REMOVE_PHOTO = `UPDATE finds SET photos = json_remove(photos, ?) WHERE id = ?
+  AND json_extract(photos, ?) = ? AND (text IS NOT NULL OR ${PHOTO_COUNT} > 1)`;
+const SET_ADDED_PHOTOS = "UPDATE finds SET added_photos = ? WHERE id = ? AND added_photos = ?";
+const ADDED_PHOTOS_OF = "SELECT added_photos FROM finds WHERE id = ?";
+const SET_PICTURE = `UPDATE finds SET picture_file = ?, picture_author = ?, picture_licence = ?,
+  picture_page = ? WHERE id = ? AND self_check = 'waiting' AND picture_file IS NULL`;
+const SELF_CHECK_OF = "SELECT self_check FROM finds WHERE id = ?";
+const SET_SELF_CHECK = `UPDATE finds SET self_check = ?, check_name_sv = ?, check_name_en = ?,
+  check_name_la = ?, check_name_it = ? WHERE id = ? AND self_check = 'waiting'
+  AND picture_file IS NOT NULL`;
+const SET_NO_PICTURE = `UPDATE finds SET self_check = 'no-picture' WHERE id = ?
+  AND self_check = 'waiting' AND picture_file IS NULL`;
+
+type Params = (string | number | null)[];
 
 /**
  * Opens the store on a database and a photo directory: brings the database to the current
- * schema, makes the directory, and removes the photos no find refers to.
+ * schema, completes every batch still open (docs/SPEC.md 3.9: "a batch still open when the app
+ * starts is complete then"), makes the directory, and removes the files no find refers to.
  */
 export async function createFindStore(
   db: FindDatabase,
   photos: PhotoFiles,
   options: StoreOptions,
-): Promise<FindStore> {
+): Promise<FindStore & LookupStore> {
   await migrate(db);
+  await db.runAsync(COMPLETE_OPEN_BATCHES, []);
   photos.prepare();
   await removeOrphans(db, photos);
 
+  /** Throws `not-found` when no find has the ID, or else what `otherwise` gives. */
+  async function refusal(
+    id: number,
+    sql: string,
+    otherwise: (row: Row) => StoreError,
+  ): Promise<never> {
+    const row = await db.getFirstAsync(sql, [id]);
+    if (row === null) {
+      throw new StoreError("not-found", `no find has the ID ${id}`);
+    }
+    throw otherwise(record(row));
+  }
+
   /** Runs an update that applies only in some states; says why when it changed nothing. */
-  async function update(id: number, sql: string, params: (string | number | null)[]) {
+  async function update(id: number, sql: string, params: Params) {
     const { changes } = await db.runAsync(sql, [...params, id]);
     if (changes > 0) {
       return;
     }
-    const row = await db.getFirstAsync(STATE_OF, [id]);
-    if (row === null) {
-      throw new StoreError("not-found", `no find has the ID ${id}`);
-    }
-    const state = enumOf(record(row), "state", FIND_STATES);
-    throw new StoreError("wrong-state", `find ${id} is ${state}; the change does not apply`);
+    await refusal(id, STATE_OF, (row) => {
+      const state = enumOf(row, "state", FIND_STATES);
+      return new StoreError("wrong-state", `find ${id} is ${state}; the change does not apply`);
+    });
   }
 
   async function answer(id: number, analysed: AnalysedAnswer, sql: string): Promise<void> {
@@ -215,33 +362,86 @@ export async function createFindStore(
     await update(id, sql, answerColumns(analysed));
   }
 
+  /** Copies a file in, then runs `save` with its name; removes the copy when `save` fails. */
+  async function withCopy<T>(uri: string, save: (name: string) => Promise<T>): Promise<T> {
+    const name = await photos.copyIn(uri, options.newPhotoName());
+    try {
+      return await save(name);
+    } catch (error) {
+      removeQuietly(photos, name);
+      throw error;
+    }
+  }
+
+  async function addPhotoFind(find: NewFind, sql: string): Promise<number> {
+    checkNewFind(find);
+    return withCopy(find.photoUri, async (name) => {
+      const { lastInsertRowId } = await db.runAsync(sql, [...timeAndPosition(find), name]);
+      return lastInsertRowId;
+    });
+  }
+
+  /** Deletes a find by a statement after reading its files, then removes them. */
+  async function deleteWith(
+    filesOf: string,
+    remove: string,
+    key: number | string,
+  ): Promise<{ photoRemoved: boolean }> {
+    const row = await db.getFirstAsync(filesOf, [key]);
+    if (row === null) {
+      throw new StoreError("not-found", `no find has the ID ${key}`);
+    }
+    const files = namedFiles(row);
+    // A DELETE that changed no row deleted no find (another delete of it came first, say), so the
+    // files are not its to remove (PBI-1.27).
+    const { changes } = await db.runAsync(remove, [key]);
+    if (changes === 0) {
+      throw new StoreError("not-found", `no find has the ID ${key}`);
+    }
+    let removed = files.complete;
+    for (const name of files.names) {
+      removed = removeQuietly(photos, name) && removed;
+    }
+    return { photoRemoved: removed };
+  }
+
+  /** Why a change of the self-check or the picture applied to no row. */
+  function selfCheckRefusal(id: number): Promise<never> {
+    return refusal(id, SELF_CHECK_OF, (row) => {
+      const check = row.self_check === null ? null : enumOf(row, "self_check", SELF_CHECK_STATES);
+      return new StoreError(
+        "wrong-state",
+        check === null
+          ? `find ${id} has no self-check`
+          : `find ${id}'s self-check is ${check}, or its picture does not fit the change`,
+      );
+    });
+  }
+
   return {
-    async add(find) {
-      checkNewFind(find);
-      const name = await photos.copyIn(find.photoUri, options.newPhotoName());
-      const { time, position } = find;
-      try {
-        const { lastInsertRowId } = await db.runAsync(INSERT, [
-          time.takenAtMs,
-          time.utcOffsetMinutes,
-          time.source,
-          position?.latitude ?? null,
-          position?.longitude ?? null,
-          position?.accuracyM ?? null,
-          position?.source ?? null,
-          name,
-        ]);
-        return lastInsertRowId;
-      } catch (error) {
-        removeQuietly(photos, name);
-        throw error;
-      }
+    add: (find) => addPhotoFind(find, INSERT),
+
+    addWithOpenBatch: (find) => addPhotoFind(find, INSERT_OPEN),
+
+    async addText(find) {
+      checkNewTextFind(find);
+      const { lastInsertRowId } = await db.runAsync(INSERT_TEXT, [
+        ...timeAndPosition(find),
+        find.text,
+      ]);
+      return lastInsertRowId;
     },
 
     async get(id) {
       checkId(id);
       const row = await db.getFirstAsync(GET, [id]);
       return row === null ? null : readFind(record(row), photos);
+    },
+
+    async getStored(id) {
+      checkId(id);
+      const row = await db.getFirstAsync(GET, [id]);
+      return row === null ? null : readStored(record(row), photos);
     },
 
     async list() {
@@ -298,63 +498,161 @@ export async function createFindStore(
       if (changes > 0) {
         return;
       }
-      const row = await db.getFirstAsync(POSITION_SOURCE_OF, [id]);
-      if (row === null) {
-        throw new StoreError("not-found", `no find has the ID ${id}`);
-      }
-      const had = enumOf(record(row), "position_source", POSITION_SOURCES);
-      throw new StoreError("wrong-state", `find ${id} already has a position (${had})`);
+      await refusal(id, POSITION_SOURCE_OF, (row) => {
+        const had = enumOf(row, "position_source", POSITION_SOURCES);
+        return new StoreError("wrong-state", `find ${id} already has a position (${had})`);
+      });
     },
 
-    async delete(id) {
+    async addPhoto(id, photoUri) {
       checkId(id);
-      const row = await db.getFirstAsync(PHOTO_OF, [id]);
+      checkUri(photoUri, "the photo URI");
+      const max = config.maxPhotosPerFind;
+      await withCopy(photoUri, async (name) => {
+        const { changes } = await db.runAsync(ADD_PHOTO, [name, id, max]);
+        if (changes > 0) {
+          return;
+        }
+        await refusal(id, PHOTOS_OF, (row) => {
+          const count = readPhotoNames(row).length;
+          return new StoreError("wrong-state", `find ${id} holds ${count} photos, the most it may`);
+        });
+      });
+    },
+
+    async completeBatch(id) {
+      checkId(id);
+      const { changes } = await db.runAsync(COMPLETE_BATCH, [id]);
+      if (changes > 0) {
+        return;
+      }
+      await refusal(id, BATCH_OPEN_OF, (row) => {
+        flagOf(row, "batch_open");
+        return new StoreError("wrong-state", `find ${id} has no open batch`);
+      });
+    },
+
+    async removePhoto(id, photoNumber) {
+      checkId(id);
+      if (!Number.isSafeInteger(photoNumber) || photoNumber < 1) {
+        throw invalid("the photo number is not a positive whole number");
+      }
+      const row = await db.getFirstAsync(PHOTOS_OF, [id]);
       if (row === null) {
         throw new StoreError("not-found", `no find has the ID ${id}`);
       }
-      const name = textOf(record(row), "photo_file");
-      // As in `deleteUnreadable`: a DELETE that changed no row leaves the photo (PBI-1.27).
-      const { changes } = await db.runAsync(DELETE, [id]);
+      const stored = record(row);
+      const names = readPhotoNames(stored);
+      const name = names[photoNumber - 1];
+      if (name === undefined) {
+        throw invalid(`find ${id} has no photo ${photoNumber}`);
+      }
+      if (stored.text === null && names.length === 1) {
+        throw new StoreError("wrong-state", `find ${id} has no text, so keeps its last photo`);
+      }
+      const at = `$[${photoNumber - 1}]`;
+      const { changes } = await db.runAsync(REMOVE_PHOTO, [at, id, `${at}.file`, name]);
       if (changes === 0) {
-        throw new StoreError("not-found", `no find has the ID ${id}`);
+        throw new StoreError("wrong-state", `find ${id}'s photos changed since they were read`);
       }
       return { photoRemoved: removeQuietly(photos, name) };
+    },
+
+    async setAddedPhotos(id, state) {
+      checkId(id);
+      if (state !== "waiting" && state !== "not-analysed") {
+        throw invalid("the photos added since the answer are set only to waiting or not-analysed");
+      }
+      const from = state === "waiting" ? "not-analysed" : "waiting";
+      const { changes } = await db.runAsync(SET_ADDED_PHOTOS, [state, id, from]);
+      if (changes > 0) {
+        return;
+      }
+      await refusal(id, ADDED_PHOTOS_OF, (row) => {
+        const had: AddedPhotosState | null =
+          row.added_photos === null ? null : enumOf(row, "added_photos", ADDED_PHOTOS_STATES);
+        return new StoreError(
+          "wrong-state",
+          `find ${id}'s added photos are ${had ?? "none, as it has no answer"}, not ${from}`,
+        );
+      });
+    },
+
+    async setPicture(id, picture) {
+      checkId(id);
+      checkNewPicture(picture);
+      const { author, licence, page } = picture;
+      await withCopy(picture.sourceUri, async (name) => {
+        const { changes } = await db.runAsync(SET_PICTURE, [name, author, licence, page, id]);
+        if (changes === 0) {
+          await selfCheckRefusal(id);
+        }
+      });
+    },
+
+    async setSelfCheck(id, outcome) {
+      checkId(id);
+      checkSelfCheckOutcome(outcome);
+      const { changes } =
+        outcome.state === "no-picture"
+          ? await db.runAsync(SET_NO_PICTURE, [id])
+          : await db.runAsync(SET_SELF_CHECK, [...selfCheckColumns(outcome), id]);
+      if (changes === 0) {
+        await selfCheckRefusal(id);
+      }
+    },
+
+    delete(id) {
+      checkId(id);
+      return deleteWith(FILES_OF, DELETE, id);
     },
 
     async deleteUnreadable(storedId) {
       if (typeof storedId !== "string" || !STORED_ID.test(storedId)) {
         throw invalid("the stored ID is not an SQLite integer's decimal form");
       }
-      const row = await db.getFirstAsync(PHOTO_OF_STORED, [storedId]);
-      if (row === null) {
-        throw new StoreError("not-found", `no find has the ID ${storedId}`);
-      }
-      const name = record(row).photo_file;
-      // A DELETE that changed no row deleted no find (another delete of it came first, say), so
-      // the photo is not its to remove (PBI-1.27).
-      const { changes } = await db.runAsync(DELETE_STORED, [storedId]);
-      if (changes === 0) {
-        throw new StoreError("not-found", `no find has the ID ${storedId}`);
-      }
-      return { photoRemoved: typeof name === "string" && removeQuietly(photos, name) };
+      return deleteWith(FILES_OF_STORED, DELETE_STORED, storedId);
     },
   };
 }
 
+/** The time and position columns of a new find, in the order of the INSERTs. */
+function timeAndPosition({ time, position }: { time: FindTime; position: Position | null }) {
+  return [
+    time.takenAtMs,
+    time.utcOffsetMinutes,
+    time.source,
+    position?.latitude ?? null,
+    position?.longitude ?? null,
+    position?.accuracyM ?? null,
+    position?.source ?? null,
+  ];
+}
+
+/** The self-check's state and the names of the species it named, for `SET_SELF_CHECK`. */
+function selfCheckColumns(outcome: SelfCheckOutcome): Params {
+  if (outcome.state !== "disagreed") {
+    return [outcome.state, null, null, null, null];
+  }
+  const { sv, en, la, it } = outcome.names;
+  return ["disagreed", sv, en, la, it];
+}
+
 /**
- * Removes the photos no find refers to. When a find's photo name cannot be read (a damaged file),
- * that find's photo could be any of them, so none is removed; the store opens all the same
- * (PBI-1.26).
+ * Removes the files no find refers to. When a find's files cannot all be named (a damaged file),
+ * that find's could be any of them, so none is removed; the store opens all the same (PBI-1.26).
  */
 async function removeOrphans(db: FindDatabase, photos: PhotoFiles): Promise<void> {
-  const rows = await db.getAllAsync(ALL_PHOTOS, []);
-  const names = rows.map((row) => record(row).photo_file);
+  const rows = await db.getAllAsync(ALL_FILES, []);
   const kept = new Set<string>();
-  for (const name of names) {
-    if (typeof name !== "string") {
+  for (const row of rows) {
+    const files = namedFiles(row);
+    if (!files.complete) {
       return;
     }
-    kept.add(name);
+    for (const name of files.names) {
+      kept.add(name);
+    }
   }
   for (const name of photos.list()) {
     if (!kept.has(name)) {
@@ -363,7 +661,36 @@ async function removeOrphans(db: FindDatabase, photos: PhotoFiles): Promise<void
   }
 }
 
-/** Removes a photo; says whether that worked. One left behind is removed at the next opening. */
+/**
+ * The names of a find's photos and picture, as far as they can be read: a row damaged past
+ * reading still has its find deleted, and the names it does give are its own. `complete` is false
+ * when one could not be read. A row that is not an object is refused as corrupt.
+ */
+function namedFiles(stored: unknown): { names: string[]; complete: boolean } {
+  const row = record(stored);
+  const names: string[] = [];
+  let complete = true;
+  const list = parseJson(row.photos);
+  if (Array.isArray(list)) {
+    for (const photo of list) {
+      if (isRecord(photo) && typeof photo.file === "string") {
+        names.push(photo.file);
+      } else {
+        complete = false;
+      }
+    }
+  } else {
+    complete = false;
+  }
+  if (typeof row.picture_file === "string") {
+    names.push(row.picture_file);
+  } else if (row.picture_file !== null) {
+    complete = false;
+  }
+  return { names, complete };
+}
+
+/** Removes a file; says whether that worked. One left behind is removed at the next opening. */
 function removeQuietly(photos: PhotoFiles, name: string): boolean {
   try {
     photos.remove(name);
@@ -374,7 +701,7 @@ function removeQuietly(photos: PhotoFiles, name: string): boolean {
 }
 
 /** The values of `ANSWER_COLUMNS`, from an answer checked against the shape. */
-function answerColumns(analysed: AnalysedAnswer): (string | number | null)[] {
+function answerColumns(analysed: AnalysedAnswer): Params {
   const { answer, model, analysedAtMs } = analysed;
   if (typeof model !== "string" || model.trim().length === 0) {
     throw invalid("the model ID is empty");
@@ -394,10 +721,22 @@ function answerColumns(analysed: AnalysedAnswer): (string | number | null)[] {
   }
   const valid = checked.answer;
   if (valid.result !== "match") {
-    return [json, model, analysedAtMs, valid.result, null, null, null, null, null];
+    const { result } = valid;
+    return [json, model, analysedAtMs, result, null, null, null, null, null, result];
   }
   const { sv, en, it } = valid.names;
-  return [json, model, analysedAtMs, "match", sv, en, it, valid.edibility, valid.confidence];
+  return [
+    json,
+    model,
+    analysedAtMs,
+    "match",
+    sv,
+    en,
+    it,
+    valid.edibility,
+    valid.confidence,
+    "match",
+  ];
 }
 
 type Row = Record<string, unknown>;
@@ -409,13 +748,135 @@ function record(row: unknown): Row {
   return Object.fromEntries(Object.entries(row));
 }
 
+/** Phase 1's view of a find: by its first photo. A find without one has none (`FindStore`). */
 function readFind(row: Row, photos: PhotoFiles): Find {
+  const { id, photos: stored, time, position, analysis } = readStored(row, photos);
+  const first = stored[0];
+  if (first === undefined) {
+    throw corrupt(`find ${id} has no photo, by which Phase 1's view shows a find`);
+  }
+  return { id, photoUri: first.uri, time, position, analysis };
+}
+
+/** Everything the store holds of a find, each column checked against what the store writes. */
+function readStored(row: Row, photos: PhotoFiles): StoredFind {
+  const id = idOf(row);
+  const text = row.text === null ? null : nonEmptyTextOf(row, "text");
+  const batches = integerOf(row, "batches");
+  const found = readPhotos(row, batches).map(({ name, batch }) => ({
+    uri: photos.uriOf(name),
+    batch,
+  }));
+  if (text === null && found.length === 0) {
+    throw corrupt(`find ${id} has neither text nor a photo`);
+  }
+  const batchOpen = flagOf(row, "batch_open");
+  const analysis = readAnalysis(row);
+  const addedPhotos =
+    analysis.state === "done"
+      ? enumOf(row, "added_photos", ADDED_PHOTOS_STATES)
+      : none(row, "added_photos");
+  const selfCheck = readSelfCheck(row, analysis, text);
   return {
-    id: idOf(row),
-    photoUri: photos.uriOf(textOf(row, "photo_file")),
+    id,
+    text,
+    photos: found,
+    batchOpen,
     time: readTime(row),
     position: readPosition(row),
-    analysis: readAnalysis(row),
+    analysis,
+    addedPhotos,
+    picture: readPicture(row, selfCheck, photos),
+    selfCheck,
+  };
+}
+
+/** The stored photo list: `{"file", "batch"}` objects, their batches in order, none past `batches`. */
+function readPhotos(row: Row, batches: number): { name: string; batch: number }[] {
+  const list = parseJson(row.photos);
+  if (!Array.isArray(list)) {
+    throw corrupt("the stored photos are not a JSON array");
+  }
+  let last = 1;
+  return list.map((photo: unknown) => {
+    if (!isRecord(photo) || Object.keys(photo).some((key) => key !== "file" && key !== "batch")) {
+      throw corrupt("a stored photo is not an object of its file and batch");
+    }
+    const { file, batch } = photo;
+    if (typeof file !== "string" || file.length === 0) {
+      throw corrupt("a stored photo's file is not a name");
+    }
+    if (
+      typeof batch !== "number" ||
+      !Number.isSafeInteger(batch) ||
+      batch < last ||
+      batch > batches
+    ) {
+      throw corrupt("a stored photo's batch is not one begun, in the order of the photos");
+    }
+    last = batch;
+    return { name: file, batch };
+  });
+}
+
+/** The names of the stored photos, in order, read as `readPhotos` reads them. */
+function readPhotoNames(row: Row): string[] {
+  return readPhotos(row, integerOf(row, "batches")).map(({ name }) => name);
+}
+
+function readSelfCheck(row: Row, analysis: Analysis, text: string | null): SelfCheck | null {
+  if (row.self_check === null) {
+    noCheckNames(row);
+    return null;
+  }
+  const state = enumOf(row, "self_check", SELF_CHECK_STATES);
+  if (analysis.state !== "done" || analysis.answer.result !== "match" || text === null) {
+    throw corrupt("a self-check is stored on a find without a text answer naming a species");
+  }
+  if (state !== "disagreed") {
+    noCheckNames(row);
+    return { state };
+  }
+  return {
+    state,
+    names: {
+      sv: nonEmptyTextOf(row, "check_name_sv"),
+      en: nonEmptyTextOf(row, "check_name_en"),
+      la: nonEmptyTextOf(row, "check_name_la"),
+      it: nonEmptyTextOf(row, "check_name_it"),
+    },
+  };
+}
+
+function noCheckNames(row: Row): void {
+  for (const column of ["check_name_sv", "check_name_en", "check_name_la", "check_name_it"]) {
+    none(row, column);
+  }
+}
+
+/**
+ * The picture, all four of its columns or none. It is stored only beside a self-check that waits
+ * or has an outcome from it; the outcomes of a check other than "no-picture" need it.
+ */
+function readPicture(row: Row, selfCheck: SelfCheck | null, photos: PhotoFiles): Picture | null {
+  const state = selfCheck?.state ?? null;
+  if (row.picture_file === null) {
+    for (const column of ["picture_author", "picture_licence", "picture_page"]) {
+      none(row, column);
+    }
+    if (state !== null && state !== "waiting" && state !== "no-picture") {
+      throw corrupt(`a self-check that is ${state} is stored without its picture`);
+    }
+    return null;
+  }
+  if (state === null || state === "no-picture") {
+    throw corrupt("a picture is stored without a self-check that has one");
+  }
+  return {
+    uri: photos.uriOf(nonEmptyTextOf(row, "picture_file")),
+    author: nonEmptyTextOf(row, "picture_author"),
+    licence: nonEmptyTextOf(row, "picture_licence"),
+    page: nonEmptyTextOf(row, "picture_page"),
   };
 }
 
@@ -440,8 +901,8 @@ function readsAsFind(row: Row, photos: PhotoFiles): boolean {
 function listed(stored: unknown, photos: PhotoFiles): ListedFind {
   try {
     const row = record(stored);
-    readFind(row, photos);
-    return { readable: true, ...readSummary(row, photos) };
+    const find = readFind(row, photos);
+    return { readable: true, ...readSummary(row, find) };
   } catch (error) {
     if (!isCorrupt(error)) {
       throw error;
@@ -472,11 +933,11 @@ function isCorrupt(error: unknown): boolean {
   return error instanceof StoreError && error.code === "corrupt";
 }
 
-function readSummary(row: Row, photos: PhotoFiles): FindSummary {
+function readSummary(row: Row, find: Find): FindSummary {
   return {
-    id: idOf(row),
-    photoUri: photos.uriOf(textOf(row, "photo_file")),
-    time: readTime(row),
+    id: find.id,
+    photoUri: find.photoUri,
+    time: find.time,
     analysis: readSummaryAnalysis(row),
   };
 }
@@ -552,12 +1013,39 @@ function readFailure(row: Row): FindFailure {
   };
 }
 
+function parseJson(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function textOf(row: Row, column: string): string {
   const value = row[column];
   if (typeof value !== "string") {
     throw corrupt(`the stored ${column} is not text`);
   }
   return value;
+}
+
+function nonEmptyTextOf(row: Row, column: string): string {
+  const value = textOf(row, column);
+  if (value.trim().length === 0) {
+    throw corrupt(`the stored ${column} is empty`);
+  }
+  return value;
+}
+
+/** A column that is to hold nothing; null, as the caller needs it. */
+function none(row: Row, column: string): null {
+  if (row[column] !== null) {
+    throw corrupt(`the stored ${column} is set where it has no place`);
+  }
+  return null;
 }
 
 function numberOf(row: Row, column: string): number {
@@ -591,4 +1079,13 @@ function enumOf<T extends string>(row: Row, column: string, values: readonly T[]
     throw corrupt(`the stored ${column} is not one the store knows`);
   }
   return value;
+}
+
+/** A flag stored as 0 or 1. */
+function flagOf(row: Row, column: string): boolean {
+  const value = row[column];
+  if (value !== 0 && value !== 1) {
+    throw corrupt(`the stored ${column} is not 0 or 1`);
+  }
+  return value === 1;
 }
