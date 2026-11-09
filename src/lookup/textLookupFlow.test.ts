@@ -5,8 +5,10 @@ import type { NewTextFind, Position } from "../store/find";
 import { INITIAL_TEXT_LOOKUP_VIEW, TextLookupFlow, type TextLookupView } from "./textLookupFlow";
 
 const NOW = new Date(Date.UTC(2026, 10, 9, 21, 0, 0));
-const TEXT = "A yellow funnel with false gills, in moss under spruce.";
-const FIX = { coords: { latitude: 59.64, longitude: 17.08, accuracy: 6 }, timestamp: NOW.getTime() };
+const FIX = {
+  coords: { latitude: 59.64, longitude: 17.08, accuracy: 6 },
+  timestamp: NOW.getTime(),
+};
 const POSITION: Position = { latitude: 59.64, longitude: 17.08, accuracyM: 6, source: "fix" };
 const MATCH: Answer = {
   result: "match",
@@ -22,13 +24,14 @@ const undetermined = { status: "undetermined", canAskAgain: true };
 const denied = { status: "denied", canAskAgain: true };
 
 /** The flow with stand-ins for the store, the queue, the setting and the phone's location. */
-function setup(options: { saveAtStart?: boolean; permission?: unknown } = {}) {
+function setup(options: { saveAtStart?: boolean; permission?: unknown; lastKnown?: unknown } = {}) {
   const added: NewTextFind[] = [];
   const positions: [number, Position][] = [];
   const lookups: string[] = [];
   const replies: (AnalyseLookupResult | Error)[] = [];
   const views: TextLookupView[] = [];
   let addError: Error | null = null;
+  let addHold: Promise<void> | null = null;
   let onFix: ((reading: unknown) => void) | null = null;
   let watchStopped = 0;
   let permissionAsked = 0;
@@ -38,6 +41,9 @@ function setup(options: { saveAtStart?: boolean; permission?: unknown } = {}) {
     {
       findLog: async () => ({
         async addText(find: NewTextFind) {
+          if (addHold !== null) {
+            await addHold;
+          }
           if (addError !== null) {
             throw addError;
           }
@@ -73,10 +79,14 @@ function setup(options: { saveAtStart?: boolean; permission?: unknown } = {}) {
               watchStopped += 1;
             };
           },
-          lastKnown: async () => null,
+          lastKnown: async () => options.lastKnown ?? null,
         },
       },
-      appConfig: { lastKnownPositionMaxAgeMs: 120_000, positionFixWaitMs: 30_000, lookupTextMaxLength: 20 },
+      appConfig: {
+        lastKnownPositionMaxAgeMs: 120_000,
+        positionFixWaitMs: 30_000,
+        lookupTextMaxLength: 20,
+      },
       now: () => NOW,
     },
     (view) => views.push(view),
@@ -93,6 +103,14 @@ function setup(options: { saveAtStart?: boolean; permission?: unknown } = {}) {
     permissionAsked: () => permissionAsked,
     failAdds: (error: Error | null) => {
       addError = error;
+    },
+    /** Holds the saves open until the function it gives is called. */
+    holdAdds: () => {
+      let release: () => void = () => undefined;
+      addHold = new Promise((resolve) => {
+        release = resolve;
+      });
+      return release;
     },
   };
 }
@@ -235,7 +253,11 @@ describe("a saved lookup (Save on)", () => {
     t.failAdds(new Error("database is locked"));
     t.flow.askToLeave();
     await flush();
-    expect(t.view()).toMatchObject({ message: "saveFailed", confirming: "leave", holdsLeave: true });
+    expect(t.view()).toMatchObject({
+      message: "saveFailed",
+      confirming: "leave",
+      holdsLeave: true,
+    });
     t.flow.stay();
     expect(t.view()).toMatchObject({ confirming: null, holdsLeave: true });
     t.flow.askToLeave();
@@ -288,21 +310,24 @@ describe("an unsaved lookup (Save off)", () => {
       "an answer not of the shape, which stops the queue",
       { kind: "find-failed", failure: { cause: "answer", detail: "bad" } },
     ],
-  ] as const)("%s: shows it, offers no Save, and Analyse can be tapped again", async (_, notice) => {
-    const t = setup();
-    await t.flow.start();
-    t.flow.setText(SHORT);
-    t.replies.push({ ok: false, notice });
-    await t.flow.analyse();
-    expect(t.view()).toMatchObject({
-      phase: "ready",
-      outcome: { kind: "notice", notice },
-      offerSave: false,
-    });
-    await t.flow.analyse();
-    expect(t.lookups).toEqual([SHORT, SHORT]);
-    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH });
-  });
+  ] as const)(
+    "%s: shows it, offers no Save, and Analyse can be tapped again",
+    async (_, notice) => {
+      const t = setup();
+      await t.flow.start();
+      t.flow.setText(SHORT);
+      t.replies.push({ ok: false, notice });
+      await t.flow.analyse();
+      expect(t.view()).toMatchObject({
+        phase: "ready",
+        outcome: { kind: "notice", notice },
+        offerSave: false,
+      });
+      await t.flow.analyse();
+      expect(t.lookups).toEqual([SHORT, SHORT]);
+      expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH });
+    },
+  );
 
   it("an error in the app: says the analysis could not run, and keeps the lookup", async () => {
     const t = setup();
@@ -356,5 +381,115 @@ describe("an unsaved lookup (Save off)", () => {
     t.flow.close();
     await pending;
     expect(t.view()).toBe(before);
+  });
+});
+
+describe("the edges of the flow", () => {
+  it("does nothing when started again, and asks for nothing when closed while it starts", async () => {
+    const t = setup({ permission: undetermined });
+    const starting = t.flow.start();
+    t.flow.close();
+    await starting;
+    await t.flow.start();
+    expect(t.permissionAsked()).toBe(0);
+    expect(t.view().phase).toBe("starting");
+  });
+
+  it("saves the phone's last known position when no fix has come and it is recent, marked as such", async () => {
+    const t = setup({
+      saveAtStart: true,
+      lastKnown: {
+        coords: { latitude: 59.6, longitude: 17.1, accuracy: 20 },
+        timestamp: NOW.getTime() - 60_000,
+      },
+    });
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    await t.flow.analyse();
+    expect(t.added[0]?.position).toEqual({
+      latitude: 59.6,
+      longitude: 17.1,
+      accuracyM: 20,
+      source: "last-known",
+    });
+  });
+
+  it("keeps the Save switch as it is while an unsaved lookup is analysed", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    const pending = t.flow.analyse();
+    t.flow.setSave(true);
+    expect(t.view().save).toBe(false);
+    await pending;
+    expect(t.added).toEqual([]);
+  });
+
+  it("drops an answer that comes after the text changed, as it is not the answer to the text shown", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    const pending = t.flow.analyse();
+    t.flow.setText(`${SHORT} Red`);
+    await pending;
+    expect(t.view()).toMatchObject({ phase: "ready", outcome: null, text: `${SHORT} Red` });
+  });
+
+  it("shows no new view when the text set is the text it holds", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    const shown = t.view();
+    t.flow.setText(SHORT);
+    expect(t.view()).toBe(shown);
+  });
+
+  it("holds a leave during the save under way, and lets it go once the lookup is saved", async () => {
+    const t = setup({ saveAtStart: true });
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    const release = t.holdAdds();
+    const saving = t.flow.analyse();
+    expect(t.view().phase).toBe("saving");
+    expect(t.flow.askToLeave()).toBe(true);
+    release();
+    await saving;
+    expect(t.view()).toMatchObject({ saved: { id: 41, by: "leave" }, holdsLeave: false });
+  });
+
+  it("asks the leave question once a save under way fails, when the screen was left during it", async () => {
+    const t = setup({ saveAtStart: true });
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    const release = t.holdAdds();
+    t.failAdds(new Error("database is locked"));
+    const saving = t.flow.analyse();
+    t.flow.askToLeave();
+    release();
+    await saving;
+    expect(t.view()).toMatchObject({ message: "saveFailed", confirming: "leave" });
+  });
+
+  it("drops nothing when no leave question is open", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    expect(t.flow.discardAndLeave()).toBe(false);
+    expect(t.view().holdsLeave).toBe(true);
+  });
+
+  it("stops asking for a position when a save fails after the screen was closed", async () => {
+    const t = setup({ saveAtStart: true });
+    await t.flow.start();
+    await flush();
+    t.flow.setText(SHORT);
+    const release = t.holdAdds();
+    t.failAdds(new Error("database is locked"));
+    const saving = t.flow.analyse();
+    t.flow.close();
+    expect(t.watchStopped()).toBe(0);
+    release();
+    await saving;
+    expect(t.watchStopped()).toBe(1);
   });
 });

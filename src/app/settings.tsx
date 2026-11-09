@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -16,6 +17,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import { LANGUAGES } from "../i18n/languages";
 import { STRINGS, type Strings } from "../i18n/strings";
 import { useApiKey } from "../key/KeyContext";
+import { readTextLookupSave, saveTextLookupSave } from "../lookup/saveSetting";
 import { useQueue } from "../queue/QueueContext";
 import { deviceStore } from "../storage/keyValueStore";
 
@@ -43,7 +45,8 @@ const MODEL_REFUSALS: { readonly [R in "empty" | "invalid" | "store-failed"]: Mo
 
 /**
  * The Settings screen (docs/SPEC.md 3.1): the API key (entered, replaced or removed, and never
- * shown once saved), the model, the app's language, and the link to About.
+ * shown once saved), the model, the starting value of a text lookup's "Save" switch (3.9), the
+ * app's language, and the link to About.
  */
 export default function SettingsScreen() {
   const { language, strings, chooseLanguage } = useLanguage();
@@ -51,6 +54,7 @@ export default function SettingsScreen() {
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <KeySection />
       <ModelSection />
+      <LookupsSection />
       <Text accessibilityRole="header" style={styles.heading}>
         {strings.settings.languageHeading}
       </Text>
@@ -230,6 +234,63 @@ function ModelSection() {
       {message !== null && (
         <Text accessibilityLiveRegion="polite" style={styles.text}>
           {t[message]}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/**
+ * The starting value of a text lookup's "Save" switch (docs/SPEC.md 3.9): read from the plain
+ * store, and saved there when changed. A value that cannot be saved is said so, and the switch
+ * keeps the value saved before.
+ */
+function LookupsSection() {
+  const { strings } = useLanguage();
+  const t = strings.settings.lookups;
+  const [textSave, setTextSave] = useState<boolean | null>(null);
+  const [failed, setFailed] = useState(false);
+  const mounted = useMounted();
+
+  useEffect(() => {
+    readTextLookupSave(deviceStore).then((on) => {
+      if (mounted.current) {
+        setTextSave(on);
+      }
+    });
+  }, [mounted]);
+
+  const change = async (on: boolean) => {
+    const result = await saveTextLookupSave(deviceStore, on);
+    if (!mounted.current) {
+      return;
+    }
+    setFailed(!result.ok);
+    if (result.ok) {
+      setTextSave(on);
+    }
+  };
+
+  return (
+    <View style={styles.section}>
+      <Text accessibilityRole="header" style={styles.heading}>
+        {t.heading}
+      </Text>
+      {textSave === null ? (
+        <ActivityIndicator testID="lookups-loading" />
+      ) : (
+        <View style={styles.row}>
+          <Switch
+            accessibilityLabel={t.textSave}
+            value={textSave}
+            onValueChange={(on) => void change(on)}
+          />
+          <Text style={styles.text}>{t.textSave}</Text>
+        </View>
+      )}
+      {failed && (
+        <Text accessibilityLiveRegion="polite" style={styles.text}>
+          {t.saveFailed}
         </Text>
       )}
     </View>

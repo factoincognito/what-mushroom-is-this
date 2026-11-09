@@ -1,8 +1,8 @@
 import { createContext, type ReactNode, useCallback, useContext, useRef } from "react";
 
-import type { FindStore } from "./findStore";
+import type { FindLog } from "./findStore";
 
-type OpenFindLog = () => Promise<FindStore>;
+type OpenFindLog = () => Promise<FindLog>;
 
 const FindLogContext = createContext<OpenFindLog | null>(null);
 
@@ -12,8 +12,8 @@ const FindLogContext = createContext<OpenFindLog | null>(null);
  * tried again at the next ask.
  */
 export function FindLogProvider({ open, children }: { open: OpenFindLog; children: ReactNode }) {
-  const opened = useRef<Promise<FindStore> | null>(null);
-  const findLog = useCallback((): Promise<FindStore> => {
+  const opened = useRef<Promise<FindLog> | null>(null);
+  const findLog = useCallback((): Promise<FindLog> => {
     if (opened.current === null) {
       opened.current = open().catch((error: unknown) => {
         opened.current = null;

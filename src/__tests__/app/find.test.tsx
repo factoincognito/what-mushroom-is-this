@@ -855,24 +855,30 @@ describe("a text find (SPEC 3.9, PBI-2.4)", () => {
     expect(screen.getByText("Claude's confidence in the match: 90 of 100")).toBeOnTheScreen();
   });
 
-  it.each(["sv", "it"] as const)("shows the disclaimer for a lookup without photos in %s", async (lang) => {
-    phoneIn(lang);
-    mockLog.finds.set(1, aTextFind(done(CHANTERELLE)));
-    await startApp();
-    const edibility = within(await screen.findByTestId("match-edibility"));
-    expect(edibility.getByText(STRINGS[lang].disclaimerDescribed)).toBeOnTheScreen();
-  });
+  it.each(["sv", "it"] as const)(
+    "shows the disclaimer for a lookup without photos in %s",
+    async (lang) => {
+      phoneIn(lang);
+      mockLog.finds.set(1, aTextFind(done(CHANTERELLE)));
+      await startApp();
+      const edibility = within(await screen.findByTestId("match-edibility"));
+      expect(edibility.getByText(STRINGS[lang].disclaimerDescribed)).toBeOnTheScreen();
+    },
+  );
 
   it.each([
     ["no_mushroom", en.find.noMushroomDescribed, en.find.noMushroom],
     ["cannot_tell", en.find.cannotTellDescribed, en.find.cannotTell],
-  ] as const)("says %s in the words of a description, not of a photo", async (result, text, photoText) => {
-    mockLog.finds.set(1, aTextFind(done({ result })));
-    await startApp();
-    expect(await screen.findByText(text)).toBeOnTheScreen();
-    expect(screen.queryByText(photoText)).not.toBeOnTheScreen();
-    expect(screen.queryByTestId("match-edibility")).not.toBeOnTheScreen();
-  });
+  ] as const)(
+    "says %s in the words of a description, not of a photo",
+    async (result, text, photoText) => {
+      mockLog.finds.set(1, aTextFind(done({ result })));
+      await startApp();
+      expect(await screen.findByText(text)).toBeOnTheScreen();
+      expect(screen.queryByText(photoText)).not.toBeOnTheScreen();
+      expect(screen.queryByTestId("match-edibility")).not.toBeOnTheScreen();
+    },
+  );
 
   it("analyses its text through the queue when asked, sending the description and no image", async () => {
     mockLog.finds.set(1, aTextFind({ state: "waiting" }));
@@ -912,7 +918,11 @@ describe("a text find (SPEC 3.9, PBI-2.4)", () => {
     const real = await createFindStore(sqliteDatabase(sqlite), memoryPhotos(), {
       newPhotoName: () => "p1",
     });
-    const id = await real.addText({ text: DESCRIPTION, time: { ...TAKEN, source: "saved" }, position: null });
+    const id = await real.addText({
+      text: DESCRIPTION,
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
     jest.mocked(openFindLog).mockResolvedValueOnce(real);
     await startApp(`/find/${id}`);
     expect(await screen.findByText(DESCRIPTION)).toBeOnTheScreen();

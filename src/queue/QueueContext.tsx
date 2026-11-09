@@ -11,10 +11,16 @@ import { AppState } from "react-native";
 
 import { useApiKey } from "../key/KeyContext";
 import { FindLogProvider, useFindLog } from "../store/FindLogContext";
-import type { FindStore } from "../store/findStore";
+import type { FindLog } from "../store/findStore";
 import { createDeviceQueue } from "./deviceQueue";
 import { type NetworkSource, watchNetworkBack } from "./networkState";
-import type { AnalyseFindResult, AnalysisQueue, QueueDeps, QueueState } from "./queue";
+import type {
+  AnalyseFindResult,
+  AnalyseLookupResult,
+  AnalysisQueue,
+  QueueDeps,
+  QueueState,
+} from "./queue";
 
 /** The part of React Native's `AppState` the provider uses. */
 export interface AppStateSource {
@@ -30,6 +36,8 @@ export interface QueueContextValue {
   readonly settingChanged: (setting: "key" | "model") => void;
   /** Analyses one find at once, from its screen. */
   readonly analyseFind: (id: number) => Promise<AnalyseFindResult>;
+  /** Analyses an unsaved text lookup at once, from its screen (docs/SPEC.md 3.9). */
+  readonly analyseLookup: (text: string) => Promise<AnalyseLookupResult>;
 }
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -46,7 +54,7 @@ type QueueProviderProps = {
 /**
  * Runs the analysis queue (docs/SPEC.md 3.4) on its triggers: when the app comes to the front (and
  * at the start, when it starts in front), when a find is saved through the find log it gives the
- * screens, and when the phone reports that the network is back. The key is the one KeyProvider
+ * screens, a text find too (3.9), and when the phone reports that the network is back. The key is the one KeyProvider
  * reads only after the first-start clearing. A run that rejects, with an error the queue does not
  * handle, is caught here and stops the queue with an internal error, which the Log screen shows
  * without the error itself (Clead's decision on #17); "analyse now" tries again.
@@ -93,12 +101,17 @@ export function QueueProvider({
 
   useEffect(() => () => queue.dispose(), [queue]);
 
-  const screensLog = useCallback(async (): Promise<FindStore> => {
+  const screensLog = useCallback(async (): Promise<FindLog> => {
     const store = await findLog();
     return {
       ...store,
       async add(find) {
         const id = await store.add(find);
+        caught(queue, queue.trigger());
+        return id;
+      },
+      async addText(find) {
+        const id = await store.addText(find);
         caught(queue, queue.trigger());
         return id;
       },
@@ -113,6 +126,11 @@ export function QueueProvider({
       // The screen that asked still gets the rejection, to say that its analysis did not run.
       analyseFind: (id) =>
         queue.analyseFind(id).catch((error: unknown) => {
+          queue.stopForInternalError();
+          throw error;
+        }),
+      analyseLookup: (text) =>
+        queue.analyseLookup(text).catch((error: unknown) => {
           queue.stopForInternalError();
           throw error;
         }),

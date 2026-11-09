@@ -1530,10 +1530,7 @@ describe("list", () => {
     ["a latitude without a longitude (fix 1)", summaryRow({ longitude: null })],
     ["an accuracy stored as text (fix 1)", summaryRow({ accuracy_m: "12" })],
     ["a photo name stored as a number", summaryRow({ photos: '[{"file":7,"batch":1}]' })],
-    [
-      "neither text nor a photo (PBI-2.4)",
-      summaryRow({ text: null, photos: "[]", batches: 0 }),
-    ],
+    ["neither text nor a photo (PBI-2.4)", summaryRow({ text: null, photos: "[]", batches: 0 })],
     ["a text that is blank (PBI-2.4)", summaryRow({ text: "  ", photos: "[]", batches: 0 })],
     ["a photo list that is not JSON (PBI-2.2)", summaryRow({ photos: "[" })],
     ["an unknown self-check state (PBI-2.2)", summaryRow({ self_check: "maybe" })],

@@ -1398,7 +1398,10 @@ describe("a text find in the queue (SPEC 3.9, PBI-2.4)", () => {
       fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
     );
     await t.queue.trigger();
-    expect(t.log.changes).toEqual(["markFailed 1 request: request-wrong (status 400)", "setAnswer 2"]);
+    expect(t.log.changes).toEqual([
+      "markFailed 1 request: request-wrong (status 400)",
+      "setAnswer 2",
+    ]);
   });
 
   it("no network leaves a text find waiting and ends the run", async () => {
@@ -1412,7 +1415,12 @@ describe("a text find in the queue (SPEC 3.9, PBI-2.4)", () => {
 
   it("analyses a text find from its screen by its text, also while the queue is stopped", async () => {
     const t = setup();
-    t.log.addTextFind(1, DESCRIPTION, { state: "done", answer: OTHER_ANSWER, model: "m", analysedAtMs: 1 });
+    t.log.addTextFind(1, DESCRIPTION, {
+      state: "done",
+      answer: OTHER_ANSWER,
+      model: "m",
+      analysedAtMs: 1,
+    });
     t.queue.stopForInternalError();
     await expect(t.queue.analyseFind(1)).resolves.toEqual({ ok: true });
     expect(t.calls.map((call) => call.text)).toEqual([DESCRIPTION]);
@@ -1537,7 +1545,10 @@ describe("an unsaved lookup, analysed from its screen (SPEC 3.9, Lookups)", () =
     [
       "429 without retry-after",
       fail({ kind: "rate-limited", retryAt: null }),
-      { kind: "stopped", stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null } },
+      {
+        kind: "stopped",
+        stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
+      },
       { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
     ],
     [

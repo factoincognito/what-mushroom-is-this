@@ -1,7 +1,7 @@
 import { openDatabaseAsync } from "expo-sqlite";
 
 import type { FindDatabase } from "./database";
-import { createFindStore, type FindStore } from "./findStore";
+import { createFindStore, type FindLog } from "./findStore";
 import { DATABASE_NAME, PHOTO_DIRECTORY } from "./locations";
 import { devicePhotoFiles } from "./photoFiles";
 
@@ -12,7 +12,7 @@ function newPhotoName(): string {
 }
 
 /** The opening of the find log, once it has started; null before it, and after one that failed. */
-let opening: Promise<FindStore> | null = null;
+let opening: Promise<FindLog> | null = null;
 
 /**
  * The find log on the phone: one store, however often it is asked for (PBI-1.16). It is opened at
@@ -20,7 +20,7 @@ let opening: Promise<FindStore> | null = null;
  * and removes nothing, so it cannot remove the photo of a find being added. An opening that fails
  * is tried again at the next call.
  */
-export function openFindLog(): Promise<FindStore> {
+export function openFindLog(): Promise<FindLog> {
   if (opening === null) {
     opening = open().catch((error: unknown) => {
       opening = null;
@@ -30,7 +30,7 @@ export function openFindLog(): Promise<FindStore> {
   return opening;
 }
 
-async function open(): Promise<FindStore> {
+async function open(): Promise<FindLog> {
   const db: FindDatabase = await openDatabaseAsync(DATABASE_NAME);
   return createFindStore(db, devicePhotoFiles(PHOTO_DIRECTORY), { newPhotoName });
 }

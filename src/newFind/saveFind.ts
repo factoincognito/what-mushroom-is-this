@@ -5,11 +5,18 @@
 
 import type { PositionTracker } from "../position/positionTracker";
 import type { FindTime, Position } from "../store/find";
-import type { FindStore } from "../store/findStore";
+import type { FindLog, FindStore } from "../store/findStore";
 import { phoneTimeAt, readPhotoMetadata } from "./photoMetadata";
 
 export interface SaveDeps {
   store: Pick<FindStore, "add" | "setPosition">;
+  /** The phone's clock. */
+  now: () => Date;
+}
+
+/** What saving a text find uses (docs/SPEC.md 3.9). */
+export interface TextSaveDeps {
+  store: Pick<FindLog, "addText" | "setPosition">;
   /** The phone's clock. */
   now: () => Date;
 }
@@ -58,6 +65,29 @@ export async function saveCameraFind(
 }
 
 /**
+ * Saves a text lookup as a find (docs/SPEC.md 3.9): its text, at the moment of saving, with the
+ * position taken as for a camera find (`saveCameraFind`), so the first fix after the save is
+ * added to it when the tracker had none. When the save fails, the tracker is left running so the
+ * save can be tried again.
+ */
+export async function saveTextFind(
+  text: string,
+  tracker: PositionTracker | null,
+  deps: TextSaveDeps,
+): Promise<CameraFindSaved> {
+  const position = tracker === null ? null : await positionNow(tracker);
+  const id = await deps.store.addText({ text, time: phoneTimeNow(deps.now()), position });
+  if (tracker === null) {
+    return { id, positionLater: null };
+  }
+  if (position !== null) {
+    tracker.stop();
+    return { id, positionLater: null };
+  }
+  return { id, positionLater: addFirstFix(id, tracker, deps) };
+}
+
+/**
  * Saves a photo from the gallery with the time and position its own metadata holds. Without a
  * time there, the time is that of saving; without a position there, the find has none: the
  * phone's own position is not where a gallery photo was taken.
@@ -82,7 +112,7 @@ async function positionNow(tracker: PositionTracker): Promise<Position | null> {
 async function addFirstFix(
   id: number,
   tracker: PositionTracker,
-  deps: SaveDeps,
+  deps: { store: Pick<FindStore, "setPosition"> },
 ): Promise<Position | null> {
   try {
     const fix = await tracker.firstFix();

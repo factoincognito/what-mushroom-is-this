@@ -1,12 +1,15 @@
 import { type AnalysisConfig, analysisConfig } from "../config/analysis";
+import { config as appConfig } from "../config/config";
 import { checkModelId } from "../config/modelSetting";
 import type { AnalysisError } from "./errors";
-import { ANALYSIS_PROMPT } from "./prompt";
+import { ANALYSIS_PROMPT, TEXT_ANALYSIS_PROMPT } from "./prompt";
 
 /**
  * The Messages API request for one photo (docs/SPEC.md 3.3): one user message
  * with the photo as a base64 image block, followed by the text prompt. Only
- * the photo and the prompt are sent.
+ * the photo and the prompt are sent. For a text lookup (3.9), the description
+ * as a text block of its own, followed by the text lookup's prompt: only the
+ * description and the prompt are sent.
  */
 
 /**
@@ -40,15 +43,31 @@ export function isSendableKey(key: string): boolean {
   return SENDABLE_KEY.test(key);
 }
 
-export interface RequestInput {
+interface RequestBase {
   /** The API address from the config module, such as `https://api.anthropic.com`. */
   apiAddress: string;
   /** The model ID of the model setting. */
   model: string;
   apiKey: string;
-  /** The JPEG to send, base64, already resized and checked by the image module. */
-  imageBase64: string;
 }
+
+/** What is analysed: a photo, or the description of a text lookup (docs/SPEC.md 3.9). */
+export type RequestInput = RequestBase &
+  (
+    | {
+        /** The JPEG to send, base64, already resized and checked by the image module. */
+        imageBase64: string;
+        text?: undefined;
+      }
+    | {
+        /**
+         * The description, as written: not blank, and at most the configured length in code
+         * points, as the screen and the store keep it.
+         */
+        text: string;
+        imageBase64?: undefined;
+      }
+  );
 
 export interface AnalysisRequest {
   url: string;
@@ -63,9 +82,11 @@ export type BuildResult =
 
 /**
  * Builds the request, after checking what goes into it. An API address that is not valid is a
- * programming error (it is configuration) and throws a RangeError. A key that cannot be sent as
- * a header value, after the trim, gives `key-refused` with `status: null`; a model ID that is
- * not valid, after the trim, gives `model-unknown`. Either way nothing is built.
+ * programming error (it is configuration) and throws a RangeError; so does an input with both a
+ * photo and a text, or neither, or a text that is blank or longer than the configured length,
+ * which the screen and the store never give. A key that cannot be sent as a header value, after
+ * the trim, gives `key-refused` with `status: null`; a model ID that is not valid, after the
+ * trim, gives `model-unknown`. Either way nothing is built.
  */
 export function buildAnalysisRequest(
   input: RequestInput,
@@ -76,6 +97,7 @@ export function buildAnalysisRequest(
   if (address === null || (port !== undefined && !isPort(Number(port)))) {
     throw new RangeError("apiAddress must be an https address with a host and no path");
   }
+  const content = contentOf(input);
   const apiKey = input.apiKey.trim();
   if (!isSendableKey(apiKey)) {
     return { ok: false, error: { kind: "key-refused", status: null, cause: "refused" } };
@@ -97,21 +119,37 @@ export function buildAnalysisRequest(
       body: JSON.stringify({
         model: model.id,
         max_tokens: config.maxTokens,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: { type: "base64", media_type: "image/jpeg", data: input.imageBase64 },
-              },
-              { type: "text", text: ANALYSIS_PROMPT },
-            ],
-          },
-        ],
+        messages: [{ role: "user", content }],
       }),
     },
   };
+}
+
+type ContentBlock =
+  | { type: "image"; source: { type: "base64"; media_type: "image/jpeg"; data: string } }
+  | { type: "text"; text: string };
+
+/** The user message's blocks: the photo or the description first, then its prompt. */
+function contentOf(input: RequestInput): ContentBlock[] {
+  const { imageBase64, text } = input;
+  if (typeof imageBase64 === "string" && text === undefined) {
+    return [
+      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } },
+      { type: "text", text: ANALYSIS_PROMPT },
+    ];
+  }
+  if (imageBase64 !== undefined || typeof text !== "string") {
+    throw new RangeError("the input must hold either a photo or a text");
+  }
+  if (text.trim().length === 0 || [...text].length > appConfig.lookupTextMaxLength) {
+    throw new RangeError(
+      `the text must not be blank, and at most ${appConfig.lookupTextMaxLength} characters`,
+    );
+  }
+  return [
+    { type: "text", text },
+    { type: "text", text: TEXT_ANALYSIS_PROMPT },
+  ];
 }
 
 function isPort(value: number): boolean {

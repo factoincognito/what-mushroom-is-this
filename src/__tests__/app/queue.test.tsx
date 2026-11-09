@@ -15,6 +15,7 @@ import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { formatTimeIn } from "../../queue/messages";
 import type { Find } from "../../store/find";
+import { storedOf } from "../../testing/memoryFindLog";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
@@ -56,7 +57,11 @@ const mockLog = {
       .filter((find) => find.analysis.state === "waiting")
       .map((find) => find.id)
       .sort((a, b) => a - b)[0] ?? null,
-  get: async (id: number) => mockFinds.get(id) ?? null,
+  // The queue reads a find as the store reads it in full (PBI-2.4).
+  getStored: async (id: number) => {
+    const find = mockFinds.get(id);
+    return find === undefined ? null : storedOf(find);
+  },
   list: async () => [],
   setAnswer: async (id: number, analysed: object) => {
     const find = mockFinds.get(id);

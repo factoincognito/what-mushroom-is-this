@@ -254,8 +254,8 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       "find.deleteConfirm",
       "find.deleteConfirmDescribed",
       "find.deleteFailed",
-      "find.description",
       "find.deleteYes",
+      "find.description",
       "find.edibilities.deadlyPoisonous",
       "find.edibilities.edible",
       "find.edibilities.edibleAfterPreparation",
@@ -373,28 +373,34 @@ describe("the strings of the text lookup (PBI-2.4)", () => {
     );
   });
 
-  it.each(LANGUAGES)("speak in %s of a description, not a photo, where a lookup has none", (language) => {
-    const t = STRINGS[language];
-    for (const text of [
-      t.find.noMushroomDescribed,
-      t.find.cannotTellDescribed,
-      t.find.deleteConfirmDescribed,
-      t.queue.failed.refusedDescribed,
-    ]) {
-      expect(text).not.toMatch(/photo|foto/i);
-    }
-  });
+  it.each(LANGUAGES)(
+    "speak in %s of a description, not a photo, where a lookup has none",
+    (language) => {
+      const t = STRINGS[language];
+      for (const text of [
+        t.find.noMushroomDescribed,
+        t.find.cannotTellDescribed,
+        t.find.deleteConfirmDescribed,
+        t.queue.failed.refusedDescribed,
+      ]) {
+        expect(text).not.toMatch(/photo|foto/i);
+      }
+    },
+  );
 });
 
 describe("the disclaimer for a lookup without photos (SPEC 3.9, Answers)", () => {
   /** A disclaimer's first sentence: up to and including its first full stop and the space after it. */
   const firstSentence = (text: string) => text.slice(0, text.indexOf(". ") + 2);
 
-  it.each(LANGUAGES)("keeps the first sentence of SPEC 3.5 in %s, and replaces only the second", (language) => {
-    const { disclaimer, disclaimerDescribed } = STRINGS[language];
-    expect(firstSentence(disclaimerDescribed)).toBe(firstSentence(disclaimer));
-    expect(disclaimerDescribed).not.toBe(disclaimer);
-  });
+  it.each(LANGUAGES)(
+    "keeps the first sentence of SPEC 3.5 in %s, and replaces only the second",
+    (language) => {
+      const { disclaimer, disclaimerDescribed } = STRINGS[language];
+      expect(firstSentence(disclaimerDescribed)).toBe(firstSentence(disclaimer));
+      expect(disclaimerDescribed).not.toBe(disclaimer);
+    },
+  );
 
   it("is the English text of SPEC 3.9 as its second sentence", () => {
     expect(STRINGS.en.disclaimerDescribed).toBe(

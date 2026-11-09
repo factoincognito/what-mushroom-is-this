@@ -390,9 +390,16 @@ describe("a saved lookup (Save on)", () => {
     const find = onlyFind();
     expect(find.text).toBe(DESCRIPTION);
     expect(find.photos).toEqual([]);
-    expect(find.position).toEqual({ latitude: 59.66, longitude: 17.1, accuracyM: 9, source: "fix" });
+    expect(find.position).toEqual({
+      latitude: 59.66,
+      longitude: 17.1,
+      accuracyM: 9,
+      source: "fix",
+    });
     expect(find.time.source).toBe("saved");
-    expect(find.time.utcOffsetMinutes).toBe(phoneTimeNow(new Date(find.time.takenAtMs)).utcOffsetMinutes);
+    expect(find.time.utcOffsetMinutes).toBe(
+      phoneTimeNow(new Date(find.time.takenAtMs)).utcOffsetMinutes,
+    );
     expect(app.pathname()).toBe(`/find/${find.id}`);
     expect(await screen.findByText(DESCRIPTION)).toBeOnTheScreen();
     expect(screen.getByText(en.find.waiting)).toBeOnTheScreen();
@@ -414,14 +421,19 @@ describe("a saved lookup (Save on)", () => {
     await openLookup();
     await setSave(true);
     await describe_(DESCRIPTION);
+    // No timers are run here: the 30-second wait for the first fix is one of them.
     await analyse();
-    await runTimers();
     await settle();
     expect(onlyFind().position).toBeNull();
     expect(watchRemoved).toBe(0);
     await act(async () => sendFix?.(fix(59.66, 17.1, 9)));
     await settle();
-    expect(onlyFind().position).toEqual({ latitude: 59.66, longitude: 17.1, accuracyM: 9, source: "fix" });
+    expect(onlyFind().position).toEqual({
+      latitude: 59.66,
+      longitude: 17.1,
+      accuracyM: 9,
+      source: "fix",
+    });
     expect(watchRemoved).toBe(1);
   });
 
@@ -447,7 +459,10 @@ describe("the starting value in Settings (SPEC 3.9)", () => {
     await fireEvent(setting, "valueChange", true);
     await settle();
     expect(await AsyncStorage.getItem(TEXT_LOOKUP_SAVE_KEY)).toBe("on");
-    expect(screen.getByRole("switch", { name: en.settings.lookups.textSave })).toHaveProp("value", true);
+    expect(screen.getByRole("switch", { name: en.settings.lookups.textSave })).toHaveProp(
+      "value",
+      true,
+    );
     await act(async () => {
       router.replace("/text-lookup");
     });
@@ -463,7 +478,10 @@ describe("the starting value in Settings (SPEC 3.9)", () => {
     await fireEvent(setting, "valueChange", true);
     await settle();
     expect(screen.getByText(en.settings.lookups.saveFailed)).toBeOnTheScreen();
-    expect(screen.getByRole("switch", { name: en.settings.lookups.textSave })).toHaveProp("value", false);
+    expect(screen.getByRole("switch", { name: en.settings.lookups.textSave })).toHaveProp(
+      "value",
+      false,
+    );
   });
 });
 

@@ -2,11 +2,11 @@ import { render, renderHook } from "@testing-library/react-native";
 import type { ReactNode } from "react";
 
 import { FindLogProvider, useFindLog } from "./FindLogContext";
-import type { FindStore } from "./findStore";
+import type { FindLog } from "./findStore";
 
-const fakeStore = { list: async () => [] } as unknown as FindStore;
+const fakeStore = { list: async () => [] } as unknown as FindLog;
 
-function wrapper(open: () => Promise<FindStore>) {
+function wrapper(open: () => Promise<FindLog>) {
   return ({ children }: { children: ReactNode }) => (
     <FindLogProvider open={open}>{children}</FindLogProvider>
   );
@@ -26,7 +26,7 @@ describe("FindLogProvider", () => {
 
   it("opens it again on the next ask after an opening failed", async () => {
     const open = jest
-      .fn<Promise<FindStore>, []>()
+      .fn<Promise<FindLog>, []>()
       .mockRejectedValueOnce(new Error("disk full"))
       .mockResolvedValue(fakeStore);
     const { result } = await renderHook(() => useFindLog(), { wrapper: wrapper(open) });

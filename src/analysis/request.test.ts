@@ -270,10 +270,13 @@ describe("TEXT_ANALYSIS_PROMPT (SPEC 3.9)", () => {
   /** The part of a prompt from the match form to its end: the answer's shape and its rules. */
   const shapeOf = (prompt: string) => prompt.slice(prompt.indexOf('{\n  "result": "match"'));
 
-  it("asks for the same answer shape and rules as the photo prompt", () => {
+  it("asks for the same answer shape and rules as the photo prompt, of the mushroom described", () => {
     expect(shapeOf(TEXT_ANALYSIS_PROMPT)).toContain(shapeOf(ANALYSIS_PROMPT).split("\n\n")[0]);
     expect(TEXT_ANALYSIS_PROMPT).toContain(
-      ANALYSIS_PROMPT.slice(ANALYSIS_PROMPT.indexOf("Rules for the match form:")),
+      ANALYSIS_PROMPT.slice(ANALYSIS_PROMPT.indexOf("Rules for the match form:")).replace(
+        "the mushroom in the photo",
+        "the mushroom described",
+      ),
     );
   });
 
