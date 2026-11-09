@@ -19,7 +19,9 @@ import { STRINGS } from "../../i18n/strings";
 import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { answerToJson } from "../../store/answerJson";
+import { openFindLog } from "../../store/deviceFindStore";
 import { type Find, StoreError } from "../../store/find";
+import { createFindStore } from "../../store/findStore";
 import {
   analysisFailure,
   encoderOf,
@@ -31,6 +33,7 @@ import {
   unloadableEncoder,
 } from "../../testing/failureDetails";
 import { memoryFindLog } from "../../testing/memoryFindLog";
+import { memoryPhotos, memorySqlite, sqliteDatabase } from "../../testing/sqliteDatabase";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
@@ -675,6 +678,28 @@ describe("delete (SPEC 3.1, 3.6)", () => {
     expect(screen.queryByText(/locked/)).not.toBeOnTheScreen();
     expect(app.pathname()).toBe("/find/1");
     expect(screen.getByText(PORCINI.generalInformation.en)).toBeOnTheScreen();
+  });
+
+  it("removes the find's photo too, through the real store on a real SQLite (PBI-1.26)", async () => {
+    const sqlite = memorySqlite();
+    const photos = memoryPhotos();
+    const real = await createFindStore(sqliteDatabase(sqlite), photos, {
+      newPhotoName: () => "p1",
+    });
+    const id = await real.add({
+      photoUri: "file:///cache/camera.jpg",
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
+    expect([...photos.files]).toEqual(["p1.jpg"]);
+    jest.mocked(openFindLog).mockResolvedValueOnce(real);
+    const app = await startApp(`/find/${id}`);
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.delete }));
+    await fireEvent.press(screen.getByRole("button", { name: en.find.deleteYes }));
+    expect(app.pathname()).toBe("/");
+    expect([...photos.files]).toEqual([]);
+    await expect(real.get(id)).resolves.toBeNull();
+    sqlite.close();
   });
 
   it("goes back to the Log when the find was deleted already", async () => {

@@ -1,5 +1,5 @@
 import { act, render, screen, waitFor } from "@testing-library/react-native";
-import { useEffect } from "react";
+import { StrictMode, useEffect } from "react";
 import { Text } from "react-native";
 
 import type { KeyValueStore } from "../storage/keyValueStore";
@@ -447,6 +447,74 @@ describe("KeyProvider, the order of effects (PBI-1.17)", () => {
     expect(onSaved).toHaveBeenCalledWith({ ok: true });
     expect(secrets.values.get(API_KEY_STORE_KEY)).toBe(A_KEY);
     expect(screen.getByTestId("status")).toHaveTextContent("stored");
+  });
+});
+
+describe("KeyProvider, its startup run once (PBI-1.26)", () => {
+  /**
+   * A store whose marker reads wait until released, each giving the marker as it was when read,
+   * and which counts them.
+   */
+  function slowMarkerStore() {
+    const store = memoryStore();
+    const pending: (() => void)[] = [];
+    let reads = 0;
+    store.getItem = (key) =>
+      new Promise<string | null>((resolve) => {
+        reads += 1;
+        const value = store.values.get(key) ?? null;
+        pending.push(() => resolve(value));
+      });
+    return {
+      store,
+      reads: () => reads,
+      releaseOne: () => pending.shift()?.(),
+      releaseAll: () => {
+        while (pending.length > 0) {
+          pending.shift()?.();
+        }
+      },
+    };
+  }
+
+  it("clears once when React runs the effect twice (StrictMode), so a key saved after the startup is kept", async () => {
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: "sk-ant-left-over" });
+    const marker = slowMarkerStore();
+    await render(
+      <StrictMode>
+        <KeyProvider secrets={secrets} store={marker.store}>
+          <Probe />
+        </KeyProvider>
+      </StrictMode>,
+    );
+    await act(async () => {
+      marker.releaseOne();
+    });
+    expect(await screen.findByText("none")).toBeOnTheScreen();
+    await act(async () => {
+      await expect(current().save(A_KEY)).resolves.toEqual({ ok: true });
+    });
+    // A second startup, had it begun, read the marker before the first one set it.
+    await act(async () => {
+      marker.releaseAll();
+    });
+    expect(marker.reads()).toBe(1);
+    expect(secrets.values.get(API_KEY_STORE_KEY)).toBe(A_KEY);
+    expect(screen.getByTestId("status")).toHaveTextContent("stored");
+  });
+
+  it("still reports the startup's outcome after React has run the effect's cleanup once (StrictMode)", async () => {
+    await render(
+      <StrictMode>
+        <KeyProvider
+          secrets={memorySecrets({ [API_KEY_STORE_KEY]: A_KEY })}
+          store={memoryStore(MARKED)}
+        >
+          <Probe />
+        </KeyProvider>
+      </StrictMode>,
+    );
+    expect(await screen.findByText("stored")).toBeOnTheScreen();
   });
 });
 

@@ -406,6 +406,64 @@ describe("the store's statements on a real SQLite", () => {
   });
 });
 
+describe("finds whose ID the store cannot read, on a real SQLite (PBI-1.26)", () => {
+  /** Inserts a waiting find with the ID given, taken latest; gives that ID as SQLite writes it. */
+  function insertWithId(id: bigint, photo: string): string {
+    sqlite
+      .prepare(
+        `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, photo_file, state)
+          VALUES (?, 9000000, 0, 'saved', ?, 'waiting')`,
+      )
+      .run(id, photo);
+    return id.toString();
+  }
+
+  it.each([
+    ["past 2^53", PAST_SAFE],
+    ["of 0", 0n],
+    ["below 0", -3n],
+  ])(
+    "lists a find with an ID %s, unreadable, beside the others, and removes it with its photo",
+    async (_name, id) => {
+      const other = await store.add(newFind(1_000));
+      // Inserted last: after an ID past 2^53, SQLite would give the next find one past it too.
+      const storedId = insertWithId(id, "u1.jpg");
+      photos.files.add("u1.jpg");
+      await expect(store.list()).resolves.toEqual([
+        { readable: false, id: null, storedId },
+        expect.objectContaining({ readable: true, id: other }),
+      ]);
+      await expect(store.deleteUnreadable(storedId)).resolves.toEqual({ photoRemoved: true });
+      expect(photos.files.has("u1.jpg")).toBe(false);
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: other }),
+      ]);
+    },
+  );
+
+  it("passes over a waiting find with an ID past 2^53, which stays waiting", async () => {
+    const other = await store.add(newFind(1_000));
+    const storedId = insertWithId(PAST_SAFE, "u1.jpg");
+    await expect(store.oldestWaiting()).resolves.toBe(other);
+    await store.markFailed(other, { cause: "photo", detail: "gone" });
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+    expect(
+      sqlite.prepare("SELECT state FROM finds WHERE CAST(id AS TEXT) = ?").get(storedId),
+    ).toEqual({ state: "waiting" });
+  });
+
+  it("removes only the find of the ID given", async () => {
+    insertWithId(0n, "u0.jpg");
+    insertWithId(-3n, "u3.jpg");
+    await store.deleteUnreadable("-3");
+    await expect(store.list()).resolves.toEqual([{ readable: false, id: null, storedId: "0" }]);
+  });
+
+  it("says no find has the ID when none has", async () => {
+    await expect(store.deleteUnreadable("0")).rejects.toMatchObject({ code: "not-found" });
+  });
+});
+
 describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
   it("lists the finds it can read and marks the one it cannot, in its place", async () => {
     const before = await store.add(newFind(1_000));
@@ -467,6 +525,8 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
       "a UTC offset past 18 hours (round 2, item 2)",
       (photo) => insertWaitingWithOffset(1081, photo),
     ],
+    ["a UTC offset below -18 hours (PBI-1.26)", (photo) => insertWaitingWithOffset(-1081, photo)],
+    ["a UTC offset below -2^53 (PBI-1.26)", (photo) => insertWaitingWithOffset(-PAST_SAFE, photo)],
   ];
 
   it.each(unreadableWaiting)(

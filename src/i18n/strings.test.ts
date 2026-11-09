@@ -148,6 +148,19 @@ describe("the strings of the new find", () => {
   });
 });
 
+describe("the photo load-failure sentence (PBI-1.26)", () => {
+  it.each([
+    ["sv", /minne/],
+    ["en", /memory/],
+    ["it", /memoria/],
+  ] as const)(
+    "names in %s a phone short of memory beside a missing or damaged file, as Android gives no reason",
+    (language, memory) => {
+      expect(STRINGS[language].queue.failed.photo.loadFailed).toMatch(memory);
+    },
+  );
+});
+
 describe("the strings of the queue (PBI-1.7)", () => {
   it.each(LANGUAGES)("are all there in %s", (language) => {
     expect(keyPaths(STRINGS[language]).filter((path) => path.startsWith("queue."))).toEqual([

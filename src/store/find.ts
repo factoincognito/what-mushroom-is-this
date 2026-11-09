@@ -96,11 +96,13 @@ export interface FindSummary {
  * An entry of the Log list (PBI-1.16): a find the store could read, with what the Log shows of
  * it, or a find whose row it could not read, which is listed in its place so that it does not hide
  * the others. An unreadable find's `id` is null only when the ID itself cannot be read; with an
- * ID, the find can still be deleted.
+ * ID, the find can still be deleted. Without one, `storedId` is its ID as SQLite writes it, by
+ * which `deleteUnreadable` still deletes it, or null when even that cannot be read (PBI-1.26).
  */
 export type ListedFind =
   | ({ readable: true } & FindSummary)
-  | { readable: false; id: number | null };
+  | { readable: false; id: number }
+  | { readable: false; id: null; storedId: string | null };
 
 /** A new find: its photo where the camera or the gallery left it, its time and its position. */
 export interface NewFind {

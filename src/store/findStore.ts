@@ -84,6 +84,12 @@ export interface FindStore {
    * removed: the find is gone all the same, and the next opening of the store removes the photo.
    */
   delete(id: number): Promise<{ photoRemoved: boolean }>;
+  /**
+   * Deletes a find whose ID the store cannot read (an ID of 0 or below, or one past 2^53, which
+   * only a damaged file can hold), named by the `storedId` the list gives it, then its photo when
+   * its name can be read (PBI-1.26). `photoRemoved` is false when it could not be.
+   */
+  deleteUnreadable(storedId: string): Promise<{ photoRemoved: boolean }>;
 }
 
 export interface StoreOptions {
@@ -108,17 +114,35 @@ const safeTime = (column: string) =>
  */
 const SAFE_OFFSET = `CASE WHEN utc_offset_min BETWEEN -1080 AND 1080 THEN utc_offset_min END
   AS utc_offset_min`;
+/**
+ * The ID, given back only as a positive safe integer and otherwise as NULL, which the store reads
+ * as a find whose ID it cannot read; as `safeTime` does, so that no driver has to hand back an ID
+ * past 2^53 (PBI-1.26). Such a find is still named by its ID as SQLite writes it (`STORED_ID`).
+ */
+const SAFE_ID = `CASE WHEN id BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER} THEN id END AS id`;
 /** Every column of a find, as `get`, the queue's pick and the list all read it. */
-const FIND_COLUMNS = `id, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude,
-  longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail,
-  answer_json, model, ${safeTime("analysed_at_ms")}`;
-const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE id = ?`;
-/** The finds, the latest taken first, by the stored time (`finds.`, not the column read). */
-const LIST = `SELECT ${FIND_COLUMNS}, result, name_sv, name_en, name_it, edibility, confidence
-  FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
-/** The waiting find saved first after a given ID. */
-const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND id > ?
-  ORDER BY id ASC LIMIT 1`;
+const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source,
+  latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause,
+  failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}`;
+const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
+/**
+ * The finds, the latest taken first, by the stored time and ID (`finds.`, not the columns read),
+ * each also with its ID as SQLite writes it, exactly, whatever the ID.
+ */
+const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv,
+  name_en, name_it, edibility, confidence FROM finds
+  ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
+/**
+ * The waiting find saved first after a given ID, among the IDs the store can read: one past 2^53
+ * could not be passed over, since JavaScript cannot hold it to ask for the next (PBI-1.26).
+ */
+const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting'
+  AND finds.id > ? AND finds.id <= ${Number.MAX_SAFE_INTEGER} ORDER BY finds.id ASC LIMIT 1`;
+/** The photo of, and the deletion of, a find named by its ID as SQLite writes it. */
+const PHOTO_OF_STORED = "SELECT photo_file FROM finds WHERE CAST(id AS TEXT) = ?";
+const DELETE_STORED = "DELETE FROM finds WHERE CAST(id AS TEXT) = ?";
+/** An SQLite integer's decimal form, as CAST(… AS TEXT) writes it: at most 19 digits. */
+const STORED_ID = /^(0|-?[1-9][0-9]{0,18})$/;
 const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL,
   answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?,
   name_it = ?, edibility = ?, confidence = ?`;
@@ -269,12 +293,37 @@ export async function createFindStore(
       await db.runAsync(DELETE, [id]);
       return { photoRemoved: removeQuietly(photos, name) };
     },
+
+    async deleteUnreadable(storedId) {
+      if (typeof storedId !== "string" || !STORED_ID.test(storedId)) {
+        throw invalid("the stored ID is not an SQLite integer's decimal form");
+      }
+      const row = await db.getFirstAsync(PHOTO_OF_STORED, [storedId]);
+      if (row === null) {
+        throw new StoreError("not-found", `no find has the ID ${storedId}`);
+      }
+      const name = record(row).photo_file;
+      await db.runAsync(DELETE_STORED, [storedId]);
+      return { photoRemoved: typeof name === "string" && removeQuietly(photos, name) };
+    },
   };
 }
 
+/**
+ * Removes the photos no find refers to. When a find's photo name cannot be read (a damaged file),
+ * that find's photo could be any of them, so none is removed; the store opens all the same
+ * (PBI-1.26).
+ */
 async function removeOrphans(db: FindDatabase, photos: PhotoFiles): Promise<void> {
   const rows = await db.getAllAsync(ALL_PHOTOS, []);
-  const kept = new Set(rows.map((row) => textOf(record(row), "photo_file")));
+  const names = rows.map((row) => record(row).photo_file);
+  const kept = new Set<string>();
+  for (const name of names) {
+    if (typeof name !== "string") {
+      return;
+    }
+    kept.add(name);
+  }
   for (const name of photos.list()) {
     if (!kept.has(name)) {
       removeQuietly(photos, name);
@@ -365,14 +414,26 @@ function listed(stored: unknown, photos: PhotoFiles): ListedFind {
     if (!isCorrupt(error)) {
       throw error;
     }
-    return { readable: false, id: storedId(stored) };
+    const id = readableId(stored);
+    return id === null
+      ? { readable: false, id: null, storedId: storedIdOf(stored) }
+      : { readable: false, id };
   }
 }
 
 /** The ID of a row that cannot be read, when the ID itself can be; otherwise null. */
-function storedId(stored: unknown): number | null {
+function readableId(stored: unknown): number | null {
   const id = typeof stored === "object" && stored !== null && "id" in stored ? stored.id : null;
   return typeof id === "number" && Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+/** A row's ID as SQLite writes it, when it is an SQLite integer's decimal form; otherwise null. */
+function storedIdOf(stored: unknown): string | null {
+  const value =
+    typeof stored === "object" && stored !== null && "stored_id" in stored
+      ? stored.stored_id
+      : null;
+  return typeof value === "string" && STORED_ID.test(value) ? value : null;
 }
 
 function isCorrupt(error: unknown): boolean {
