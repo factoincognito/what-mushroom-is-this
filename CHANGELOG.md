@@ -43,8 +43,9 @@ All notable changes to What mushroom is this? are documented here.
 - `expo` and `jest-expo` at the versions SDK 57 expects (#31).
 - New find: the photo is not dropped without a question, and the iOS
   permission texts are in the three languages (#32).
-- Follow-ups from the reviews: an unreadable find can be deleted from its
-  Log row, and damaged rows no longer fail the list (#33).
+- Follow-ups from the reviews: a find whose ID cannot be read can be
+  deleted from its Log row, and a damaged ID or photo name no longer fails
+  the list or the opening (#33).
 
 ## Project created
 

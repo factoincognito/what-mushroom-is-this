@@ -349,6 +349,7 @@ this?" app.
 10. Whether the phone's position fixes arrive on Android while the camera
     app is in front: `expo-location` stops its updates when the app goes
     to the background (the Clead-role reviewer's reading of its source for
-    #16); if not, a camera find gets its position only once the app is
-    back in front, within the 30 seconds of 3.6 or not at all. Checked in
-    Adam's test session (PBI-1.11).
+    #16). If they do not, a camera find takes its position more often
+    from a fix the app had before the camera opened, or from the last
+    known position (3.6); a fix after the camera closes still counts
+    within the 30 seconds. Checked in Adam's test session (PBI-1.11).
