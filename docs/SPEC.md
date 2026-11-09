@@ -15,9 +15,12 @@ choices marked **[Clead]** at that time (#47). Of the choices marked
 chat ("apyr"), answering Clead's list of them: Wikimedia's standard
 thumbnail widths, the map's credit folding to "(i)" and listed in
 About, no offline map downloads, the library's own location engine,
-and the rule for a picture under several licences. The other choices
-marked **[Clead]** in #50 are proposals until he confirms them
-(`RULES.md` § 7 (3)). The approved text and its decisions are
+and the rule for a picture under several licences. He confirmed the
+others at 22:05 ("apyr", to Clead's recommendation of 22:05): the
+map's own User-Agent, the file picker's settings, the Wikimedia lookup
+with its rank check, the Wikimedia User-Agent and one request at a
+time, and the credit for a picture under several listed licences. The
+approved text and its decisions are
 recorded in the product
 office (`library/designs/what-mushroom-is-this/design.md` and
 `DECISIONS.md` in `factoincognito/product-office`, private). This file
