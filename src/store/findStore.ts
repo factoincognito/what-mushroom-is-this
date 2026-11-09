@@ -88,7 +88,8 @@ export interface FindStore {
    * Deletes a find whose ID the store cannot read (an ID of 0 or below, or one past 2^53, which
    * only a damaged file can hold), named by the `storedId` the list gives it, then its photo when
    * its name can be read (PBI-1.26). `photoRemoved` is false when it could not be. A find whose ID
-   * the store can read is never deleted here: for its ID this gives `not-found`.
+   * the store can read is never deleted here: for its ID this gives `not-found`. So does a DELETE
+   * that changed no row, which removes no photo (PBI-1.27).
    */
   deleteUnreadable(storedId: string): Promise<{ photoRemoved: boolean }>;
 }
@@ -309,7 +310,12 @@ export async function createFindStore(
         throw new StoreError("not-found", `no find has the ID ${storedId}`);
       }
       const name = record(row).photo_file;
-      await db.runAsync(DELETE_STORED, [storedId]);
+      // A DELETE that changed no row deleted no find (another delete of it came first, say), so
+      // the photo is not its to remove (PBI-1.27).
+      const { changes } = await db.runAsync(DELETE_STORED, [storedId]);
+      if (changes === 0) {
+        throw new StoreError("not-found", `no find has the ID ${storedId}`);
+      }
       return { photoRemoved: typeof name === "string" && removeQuietly(photos, name) };
     },
   };

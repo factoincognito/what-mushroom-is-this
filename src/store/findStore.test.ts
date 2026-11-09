@@ -1032,6 +1032,15 @@ describe("deleteUnreadable (PBI-1.26)", () => {
     expect(events).not.toContainEqual(expect.objectContaining({ sql: DELETE_STORED }));
   });
 
+  it("says no find has the ID when the delete changes no row, and removes no photo (PBI-1.27)", async () => {
+    db.reply("first", PHOTO_OF_STORED, { photo_file: "p7.jpg" });
+    db.reply("run", DELETE_STORED, { changes: 0, lastInsertRowId: 0 });
+    photos.files.add("p7.jpg");
+    await expect(store.deleteUnreadable("0")).rejects.toMatchObject({ code: "not-found" });
+    expect(events).not.toContainEqual({ photo: "remove p7.jpg" });
+    expect([...photos.files]).toEqual(["p7.jpg"]);
+  });
+
   it("says when the photo could not be removed", async () => {
     db.reply("first", PHOTO_OF_STORED, { photo_file: "p7.jpg" });
     photos.files.add("p7.jpg");
