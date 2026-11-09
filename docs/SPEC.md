@@ -10,9 +10,10 @@ with Clead's recommendations; the licence and the Italian disclaimer
 19:28. Phase 2 (3.9): intent approved by Adam, 2026-11-09 20:49, in
 chat ("apyr"), with Clead's two proposals (the disclaimer for a lookup
 without photos, and the edibility until the self-check agrees) and the
-choices marked **[Clead]** at that time (#47). Choices marked
-**[Clead]** later (#50) are proposals until Adam confirms them
-(`RULES.md` § 7 (3)). The approved text and its decisions are
+choices marked **[Clead]** at that time (#47). The choices marked
+**[Clead]** later (#50) Adam confirmed on 2026-11-09 at 21:36, in chat
+("apyr"), answering Clead's list of them. The approved text and its
+decisions are
 recorded in the product
 office (`library/designs/what-mushroom-is-this/design.md` and
 `DECISIONS.md` in `factoincognito/product-office`, private). This file
