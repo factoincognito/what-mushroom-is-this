@@ -448,8 +448,11 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   representative picture of that species from Wikimedia Commons (Adam).
   It is the picture that Wikidata gives as the image of the species'
   item, found by its Latin name, fetched as a JPEG or PNG thumbnail at
-  the width the resize of 3.3 needs (**[Clead]**, **[not checked]**:
-  Known unknown 15).
+  the smallest of Wikimedia's standard widths at or above the width the
+  resize of 3.3 needs, then resized on the phone (**[Clead]**; Known
+  unknown 15). Its licence must be CC0, public domain without a country
+  limit, CC BY or CC BY-SA; any other licence means no picture (Adam,
+  2026-11-09 21:27).
 - The picture, and the check below, belong to an answer from text alone.
   When a text find gets photos, it keeps its answer, its picture and its
   check, with the check's outcome for the edibility shown, until an answer
@@ -479,8 +482,8 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   them, are an exception to 3.7's "pictures from outside sources" and
   "species data from outside sources" (**[Clead]**). The licence of each
   picture must allow it to be shown with credit, resized, and sent to
-  Anthropic for the check; their use goes through the IP policy before
-  the build (**[not checked]**, Known unknown 15).
+  Anthropic for the check. Their use was escalated under the IP policy,
+  and Adam decided it on 2026-11-09 at 21:27 (Known unknown 15).
 
 **The self-check of a text lookup** (Adam, 19:01; at run time, after
 every text lookup, and a mismatch makes the edibility "unknown": his
@@ -581,11 +584,15 @@ answers to Clead's questions, 19:05).
   map opens on it and which areas the user looks at, and the phone's IP
   address; the finds' details are not sent to it (**[Clead]**). Tiles
   from the provider are an exception to 3.7's "pictures from outside
-  sources" (**[Clead]**). The provider and the map library are chosen
-  under the third-party code and IP policy; their terms count as terms of
-  service under its Appendix A, so their use is escalated to the product
-  office before the build, and the map shows the attribution the terms
-  require (**[not checked]**, Known unknown 11).
+  sources" (**[Clead]**). The map is MapLibre React Native with
+  OpenFreeMap's vector tiles; the style URL is configuration (the
+  escalation under the IP policy, decided by Adam, 2026-11-09 21:27).
+  The map shows the attribution OpenFreeMap's terms and OpenStreetMap's
+  guidelines require: OpenStreetMap, with a link to its copyright page,
+  and OpenMapTiles. It may collapse to an "(i)" button and is also listed
+  in About (**[Clead]**). Requests carry the app's own User-Agent
+  (**[Clead]**). No offline areas are downloaded; the map uses what its
+  cache holds (**[Clead]**).
 
 ---
 
@@ -633,36 +640,57 @@ answers to Clead's questions, 19:05).
     from a fix the app had before the camera opened, or from the last
     known position (3.6); a fix after the camera closes still counts
     within the 30 seconds. Checked in Adam's test session (PBI-1.11).
-11. Phase 2's map provider and map library (3.9):
-    - which ones, and whether their terms allow this use without a fee;
-    - whether a key is needed;
-    - what the library sends besides tile requests;
-    - the attribution the terms require;
-    - whether, and on what terms, tiles may be cached, and so what the map
-      shows without a network.
-    A library that builds in Google's Maps SDK on Android brings Google's
-    terms, like `play-services-location`.
+11. Phase 2's map (3.9). Settled by PBI-2.1, whose findings are in the
+    product office (`library/designs/what-mushroom-is-this/phase-2-checks.md`).
+    The choice is MapLibre React Native (MIT), on MapLibre Native
+    (BSD-2-Clause), with OpenFreeMap's tiles. OpenFreeMap needs no key and
+    charges no fee; its terms allow apps and caching; it has no SLA.
+    Left for the build:
+    - whether it builds on SDK 57;
+    - whether it sends telemetry;
+    - the licence of the style;
+    - the default cache size and attribution;
+    - its User-Agent on Android.
 12. Phase 2's request with several photos and text (3.9). Per the Claude
-    API's "Vision" page, as the Crog-role reviewer of #47 read it on
-    2026-11-09:
+    API's "Vision" page, read for PBI-2.1 on 2026-11-09:
     - 100 images per request on models with a 200k context window, and 600
       on the others;
-    - above 20 images, at most 3,000 px a side;
-    - 10 MB per image, base64;
-    - 128 MB per request;
-    - each image labelled "Image 1:" and so on.
-    Five photos at 3.3's sizes are within these. Checked again against
-    the page before the build.
-13. Phase 2's library for picking from the phone's files (3.9), most
-    likely `expo-document-picker`, and whether its images load in
-    `expo-image-manipulator` as gallery photos do.
+    - above 20 images, a stricter limit per image, whose value the page
+      does not give; it advises at most 3,000 px a side;
+    - 10 MB per image, base64, and 128 MB per request;
+    - at most 8,000 × 8,000 px;
+    - JPEG, PNG, GIF or WebP;
+    - each image introduced by "Image 1:" and so on, the images before the
+      text.
+    Five photos at 3.3's sizes are within these. Settled.
+13. Phase 2's library for picking from the phone's files (3.9):
+    `expo-document-picker`, with `type: 'image/*'` and
+    `copyToCacheDirectory` on, so that `expo-image-manipulator` reads a
+    local file; the copy then goes into the app's photo store. Its
+    `lastModified` is never used as the photo's time. To be checked on the
+    phone: `content://` sources, and HEIC files (PBI-2.1).
 14. Whether resizing up to five photos for one request (one at a time,
     3.9) brings back the low-memory load failures PBI-1.25 was written
     for, on Adam's phone.
-15. Phase 2's representative picture (3.9):
-    - how Wikidata and Commons are queried by Latin name, and how often
-      a species has an image there;
-    - the licences of those images, and which of them the IP policy
-      allows for showing unchanged with credit;
-    - the terms of Wikimedia's APIs for an app, including the User-Agent
-      they ask for, which must not carry a personal email address.
+15. Phase 2's representative picture (3.9). PBI-2.1's findings, which
+    Adam decided on 2026-11-09 21:27:
+    - Wikimedia's API terms are accepted.
+    - The pictures are limited to CC0, public domain without a country
+      limit, CC BY and CC BY-SA.
+    - The lookup: the Wikidata item by P225 (taxon name), with rank P105
+      species; its image, P18; then the Commons file's thumbnail URL,
+      author, licence and page.
+    - Thumbnails come at Wikimedia's standard widths only.
+    - The User-Agent names the app, its version and the repository's URL.
+    - The limits are a few hundred requests an hour per phone, one at a
+      time.
+    Left for the build:
+    - Wikimedia's policy pages, read again on the original sites (PBI-2.1
+      read some of them only through copies);
+    - the metadata field names;
+    - whether `fetch` on Android sends the User-Agent unchanged;
+    - the thumbnail formats;
+    - species with the same name;
+    - how often a species has a picture.
+    Before release, the IP lawyer's review covers resizing under CC
+    2.x/3.0 and sending pictures to Anthropic (policy rule 6).

@@ -101,7 +101,7 @@ his Phase 2 test session there. Intent approved by Adam, 2026-11-09
 18:48), unattended. Each item: one PR, test first, CI green, reviewed by
 the role that did not write it.
 
-- **[NOW] PBI-2.1** (the checks Known unknowns 11, 12, 13 and 15 name before the build; the uses go to the product office as escalations under the third-party code and IP policy) — The map provider and library, the Claude API's image limits, the file picker, and Wikidata and Commons: their terms, licences, fees, keys, attribution and caching, checked and written up, with a recommendation for the map provider. Spec 3.9, Known unknowns 11, 12, 13, 15.
+- **[DONE] PBI-2.1** (done 2026-11-09: findings in the product office, `library/designs/what-mushroom-is-this/phase-2-checks.md`; the map and Wikimedia escalations decided by Adam at 21:27; Known unknowns 11 to 13 and 15 updated in #50; what is left of them is checked at the build of PBI-2.6, PBI-2.8 and PBI-2.9) (the checks Known unknowns 11, 12, 13 and 15 name before the build; the uses go to the product office as escalations under the third-party code and IP policy) — The map provider and library, the Claude API's image limits, the file picker, and Wikidata and Commons: their terms, licences, fees, keys, attribution and caching, checked and written up, with a recommendation for the map provider. Spec 3.9, Known unknowns 11, 12, 13, 15.
 - **[NEXT] PBI-2.2** — The store, schema version 2. The fields of 3.9's "The store", and a migration from version 1 that keeps every Phase 1 find, its photo as its first photo and its answer as it was. Spec 3.9.
 - **[NEXT] PBI-2.3** — The answer's confidence from 1 to 100, a whole number, shown with 3.1's note. The edibility is "unknown" below 70, as configuration. Phase 1 finds keep their level and 3.3's rule. Spec 3.9.
 - **[NEXT] PBI-2.4** — Text lookups and the save setting:
@@ -127,7 +127,7 @@ the role that did not write it.
   - the text mark;
   - the Library opens on the list.
   Spec 3.9.
-- **[BLOCKED] PBI-2.8** (needs the product office's answer on the map provider's escalation, from PBI-2.1) — The Library's map:
+- **[NEXT] PBI-2.8** (MapLibre React Native with OpenFreeMap, Adam, 2026-11-09 21:27; the open points of Known unknown 11 are checked first) — The Library's map:
   - the 10 km shorter side;
   - the phone's position, with its limits and the location permission;
   - the fallbacks;
@@ -135,14 +135,14 @@ the role that did not write it.
   - the pins;
   - the attribution.
   Spec 3.9, Known unknown 11.
-- **[BLOCKED] PBI-2.9** (needs the product office's answer on the Wikimedia escalation, from PBI-2.1) — The representative picture for text lookups:
+- **[NEXT] PBI-2.9** (Wikimedia's terms and the licence allowlist, Adam, 2026-11-09 21:27; the open points of Known unknown 15 are checked first) — The representative picture for text lookups:
   - the Wikidata image by Latin name, as a thumbnail;
   - the credit;
   - stored apart from the photos;
   - Wikimedia's failures classed;
   - the picture belongs to an answer from text alone.
   Spec 3.9, Known unknown 15.
-- **[BLOCKED] PBI-2.10** (after PBI-2.9) — The self-check of text lookups:
+- **[NEXT] PBI-2.10** (after PBI-2.9) — The self-check of text lookups:
   - the photo lookup on the picture;
   - the match on genus and species;
   - its outcomes and the edibility "unknown" until it agrees;
