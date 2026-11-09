@@ -47,8 +47,8 @@ Testing Library, the 80% line coverage gate. Libraries are added with
 `npx expo install`, and each is recorded under the third-party code and IP
 policy when it is added. Expected: `expo-image-picker`,
 `expo-image-manipulator`, `expo-location`, `expo-sqlite`,
-`expo-file-system`, `expo-secure-store`, `expo-localization`, `expo-router`
-(its routes under `src/app/`, so they count as code for the test-change
+`expo-file-system`, `expo-secure-store`, `expo-localization`, `expo-network`
+(Known unknown 6), `expo-router` (its routes under `src/app/`, so they count as code for the test-change
 check and the coverage gate). Not checked yet: an SDK 57 version of each
 (`npx expo install --check` settles it).
 
@@ -195,8 +195,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   | an answer whose `stop_reason` is `refusal` | Claude declined to answer (**[Clead]**, PBI-1.13) | that find is marked failed; the queue goes on with the next |
   | an answer that does not fit the shape, is cut off (`stop_reason` `max_tokens` or `model_context_window_exceeded`), or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops |
   | any other status | | the queue stops; the message gives the status |
-  | the find's photo cannot be loaded, decoded or sized | the photo itself is the problem (**[Clead]**, #17, PBI-1.21) | that find is marked failed; the queue goes on with the next |
-  | any other error in the app while a find is analysed (for example, full storage) | (**[Clead]**, #17, PBI-1.21) | the find stays waiting; the queue stops and the Log screen says so, without the error's text; "analyse now" starts it again |
+  | the find's photo cannot be loaded, decoded or sized | the photo itself is the problem (**[Clead]**, #17, PBI-1.21; until PBI-1.21 is merged, any error while the photo is prepared fails the find) | that find is marked failed; the queue goes on with the next |
+  | any other error in the app while the queue runs (for example, full storage) | (**[Clead]**, #17, PBI-1.21) | the find stays waiting; the queue stops and the Log screen says so, without the error's text; "analyse now" starts it again |
 
   **[Clead]**, both: a billing error is told apart from other 400 answers
   by the error type in the answer's body, and a `retry-after` value that
@@ -313,7 +313,7 @@ this?" app.
    links the project.
 6. A library for the network state, which the queue's "network is back"
    trigger needs (3.4); not in the expected list above. Settled for #17:
-   `expo-network`, not NetInfo, whose default reachability check sends a
+   `expo-network`, not NetInfo, whose reachability check can send a
    request to a Google server, against section 2 (**[Clead]**).
 7. Whether a gallery photo's position arrives on Android. Android's
    documentation says reading it needs the `ACCESS_MEDIA_LOCATION`
