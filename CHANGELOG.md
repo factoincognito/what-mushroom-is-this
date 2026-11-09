@@ -28,6 +28,11 @@ All notable changes to What mushroom is this? are documented here.
   profile for an installable APK, with the backup excludes marked for
   lint and the unused Wi-Fi state and overlay permissions blocked (#39,
   #40, #42).
+- Phase 2's specification, approved by Adam: text lookup, several photos
+  per find, a 1–100 confidence, the Library with a map, a Wikimedia
+  picture and a self-check for text lookups (#47, #50).
+- The store at schema version 2, with a migration that keeps every
+  Phase 1 find (#49).
 
 ### Changed
 
