@@ -202,9 +202,11 @@ When the queue has stopped (3.3), the Log screen says why and offers
   precedence over the "400, 413" row; it matches only when both the type
   and the start of the message match.
   A failed find is tried again only when the user asks. When a new
-  analysis of a find that already has an answer fails, the find keeps
-  its answer and the failure is shown in the message only (**[Clead]**,
-  #11). A stopped queue
+  analysis of a find that already has an answer fails, whatever the
+  error class, the find keeps its answer and stays analysed, the failure
+  is not stored and is shown in the message only, and the table's outcome
+  for the queue or Settings (the queue stops, Settings asks for a key or a
+  model) still applies (**[Clead]**, #11). A stopped queue
   starts again when the user changes the setting named or taps "analyse
   now".
 - The cost falls on the key's owner; the app shows no prices.
