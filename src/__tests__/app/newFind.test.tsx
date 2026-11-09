@@ -53,6 +53,9 @@ const mockLog = {
   async setPosition(id: number, position: Position): Promise<void> {
     mockLog.positions.push([id, position]);
   },
+  async list() {
+    return [];
+  },
 };
 jest.mock("../../store/deviceFindStore", () => ({
   openFindLog: jest.fn(async () => mockLog),

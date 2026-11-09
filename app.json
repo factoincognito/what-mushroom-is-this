@@ -6,11 +6,19 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "android": {
+      "allowBackup": false
+    },
+    "ios": {
+      "infoPlist": {
+        "RCTAsyncStorageExcludeFromBackup": true
+      }
+    },
     "plugins": [
       ["expo-router", { "sitemap": false }],
       "expo-localization",
       "expo-sqlite",
-      ["expo-secure-store", { "faceIDPermission": false }],
+      ["expo-secure-store", { "faceIDPermission": false, "configureAndroidBackup": false }],
       [
         "expo-image-picker",
         {
@@ -23,6 +31,16 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Your location is saved with each new find, so your log shows where you found it. It is not sent anywhere."
+        }
+      ],
+      [
+        "./plugins/withBackupRules",
+        {
+          "exclude": [
+            { "domain": "file", "path": "SQLite" },
+            { "domain": "file", "path": "photos" },
+            { "domain": "database", "path": "." }
+          ]
         }
       ]
     ]

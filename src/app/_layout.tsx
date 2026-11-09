@@ -5,13 +5,15 @@ import { DisclaimerGate } from "../disclaimer/DisclaimerGate";
 import { LanguageProvider, useLanguage } from "../i18n/LanguageContext";
 import { KeyProvider } from "../key/KeyContext";
 import { deviceSecretStore } from "../key/secureStore";
+import { QueueProvider } from "../queue/QueueContext";
 import { deviceStore } from "../storage/keyValueStore";
 import { openFindLog } from "../store/deviceFindStore";
 import { FindLogProvider } from "../store/FindLogContext";
 
 /**
  * The root layout: the language, the key (whose first-start clearing runs at once), the find
- * log (opened when a screen first needs it), then the first-start disclaimer, then the screens.
+ * log (opened when a screen first needs it), then the first-start disclaimer, then the analysis
+ * queue, which runs only once the disclaimer is accepted, then the screens.
  */
 export default function RootLayout() {
   return (
@@ -19,7 +21,9 @@ export default function RootLayout() {
       <KeyProvider secrets={deviceSecretStore} store={deviceStore}>
         <FindLogProvider open={openFindLog}>
           <DisclaimerGate store={deviceStore}>
-            <Screens />
+            <QueueProvider>
+              <Screens />
+            </QueueProvider>
           </DisclaimerGate>
         </FindLogProvider>
       </KeyProvider>
@@ -35,6 +39,7 @@ function Screens() {
       <Stack.Screen name="index" options={{ title: strings.log.title }} />
       <Stack.Screen name="new-find" options={{ title: strings.newFind.title }} />
       <Stack.Screen name="settings" options={{ title: strings.settings.title }} />
+      <Stack.Screen name="about" options={{ title: strings.about.title }} />
       <Stack.Screen name="+not-found" options={{ title: strings.notFound.title }} />
     </Stack>
   );

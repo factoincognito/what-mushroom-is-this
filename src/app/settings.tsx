@@ -1,3 +1,4 @@
+import { Link } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,6 +16,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import { LANGUAGES } from "../i18n/languages";
 import { STRINGS, type Strings } from "../i18n/strings";
 import { useApiKey } from "../key/KeyContext";
+import { useQueue } from "../queue/QueueContext";
 import { deviceStore } from "../storage/keyValueStore";
 
 type KeyMessage = keyof Pick<
@@ -41,7 +43,7 @@ const MODEL_REFUSALS: { readonly [R in "empty" | "invalid" | "store-failed"]: Mo
 
 /**
  * The Settings screen (docs/SPEC.md 3.1): the API key (entered, replaced or removed, and never
- * shown once saved), the model, and the app's language. "About" comes in PBI-1.9.
+ * shown once saved), the model, the app's language, and the link to About.
  */
 export default function SettingsScreen() {
   const { language, strings, chooseLanguage } = useLanguage();
@@ -65,6 +67,9 @@ export default function SettingsScreen() {
           </Pressable>
         ))}
       </View>
+      <Link href="/about" accessibilityRole="link" style={styles.text}>
+        {strings.about.title}
+      </Link>
     </ScrollView>
   );
 }
@@ -73,12 +78,16 @@ function KeySection() {
   const { strings } = useLanguage();
   const t = strings.settings.key;
   const { status, save, remove } = useApiKey();
+  const { settingChanged } = useQueue();
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState<KeyMessage | null>(null);
   const mounted = useMounted();
 
   const onSave = async () => {
     const result = await save(draft);
+    if (result.ok) {
+      settingChanged("key");
+    }
     if (!mounted.current) {
       return;
     }
@@ -121,7 +130,8 @@ function KeySection() {
       <Pressable accessibilityRole="button" onPress={onSave} style={styles.button}>
         <Text style={styles.optionText}>{t.save}</Text>
       </Pressable>
-      {status === "stored" && (
+      {/* A key store that cannot be read may still hold a key: Remove is offered for it too. */}
+      {(status === "stored" || status === "unreadable") && (
         <Pressable accessibilityRole="button" onPress={onRemove} style={styles.button}>
           <Text style={styles.optionText}>{t.remove}</Text>
         </Pressable>
@@ -138,6 +148,7 @@ function KeySection() {
 function ModelSection() {
   const { strings } = useLanguage();
   const t = strings.settings.model;
+  const { settingChanged } = useQueue();
   const [modelId, setModelId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState<ModelMessage | null>(null);
@@ -153,6 +164,9 @@ function ModelSection() {
 
   const choose = async (raw: string, fromField: boolean) => {
     const result = await saveModelId(deviceStore, raw);
+    if (result.ok) {
+      settingChanged("model");
+    }
     if (!mounted.current) {
       return;
     }

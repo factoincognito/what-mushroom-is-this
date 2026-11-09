@@ -20,9 +20,10 @@ export type FindState = (typeof FIND_STATES)[number];
 
 /**
  * Why an analysis failed: the photo failed the segment check, the API refused the request
- * (400, 413), or the answer did not fit the shape or was not from the API.
+ * (400, 413), the answer did not fit the shape or was not from the API, the photo could not be
+ * loaded, decoded or sized (PBI-1.7, PBI-1.21), or Claude declined to answer (PBI-1.21).
  */
-export const FAILURE_CAUSES = ["segment-check", "request", "answer"] as const;
+export const FAILURE_CAUSES = ["segment-check", "request", "answer", "photo", "refused"] as const;
 export type FailureCause = (typeof FAILURE_CAUSES)[number];
 
 /** The time a find was taken, as an instant, with the UTC offset it was taken at. */
@@ -90,6 +91,16 @@ export interface FindSummary {
   time: FindTime;
   analysis: SummaryAnalysis;
 }
+
+/**
+ * An entry of the Log list (PBI-1.16): a find the store could read, with what the Log shows of
+ * it, or a find whose row it could not read, which is listed in its place so that it does not hide
+ * the others. An unreadable find's `id` is null only when the ID itself cannot be read; with an
+ * ID, the find can still be deleted.
+ */
+export type ListedFind =
+  | ({ readable: true } & FindSummary)
+  | { readable: false; id: number | null };
 
 /** A new find: its photo where the camera or the gallery left it, its time and its position. */
 export interface NewFind {

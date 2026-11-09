@@ -117,6 +117,7 @@ describe("preparePhotoForAnalysis", () => {
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
     ).resolves.toEqual({
       ok: false,
+      loaded: true,
       failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
     });
     expect(encoder.released).toBe(1);
@@ -126,7 +127,11 @@ describe("preparePhotoForAnalysis", () => {
     encoder.bytes = CLEAN.slice(0, CLEAN.length - 2);
     await expect(
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
-    ).resolves.toEqual({ ok: false, failure: { cause: "segment-check", detail: "truncated" } });
+    ).resolves.toEqual({
+      ok: false,
+      loaded: true,
+      failure: { cause: "segment-check", detail: "truncated" },
+    });
   });
 
   it("fails the find on the segment check when bytes follow the end of the image", async () => {
@@ -135,6 +140,7 @@ describe("preparePhotoForAnalysis", () => {
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
     ).resolves.toEqual({
       ok: false,
+      loaded: true,
       failure: { cause: "segment-check", detail: "trailing-data" },
     });
   });
@@ -143,19 +149,25 @@ describe("preparePhotoForAnalysis", () => {
     ["no width", 0, 3024],
     ["no height", 4032, 0],
     ["a width that is not whole", 4032.5, 3024],
-  ])("refuses a decoded photo with %s, and releases it", async (_, width, height) => {
-    encoder.width = width;
-    encoder.height = height;
-    const preparing = preparePhotoForAnalysis(
-      "file:///doc/photos/p1.jpg",
-      "claude-opus-5-5",
-      encoder,
-    );
-    await expect(preparing).rejects.toBeInstanceOf(PhotoPreparationError);
-    await expect(preparing).rejects.toMatchObject({ code: "invalid-size" });
-    expect(encoder.encoded).toEqual([]);
-    expect(encoder.released).toBe(1);
-  });
+  ])(
+    "fails the find (photo) for a decoded photo with %s, naming the size, and says the photo loaded (PBI-1.25), and releases it",
+    async (_, width, height) => {
+      encoder.width = width;
+      encoder.height = height;
+      await expect(
+        preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
+      ).resolves.toEqual({
+        ok: false,
+        loaded: true,
+        failure: {
+          cause: "photo",
+          detail: `invalid-size: the photo of ${width} x ${height} px cannot be sized for claude-opus-5-5`,
+        },
+      });
+      expect(encoder.encoded).toEqual([]);
+      expect(encoder.released).toBe(1);
+    },
+  );
 
   it("refuses limits in the config that are not whole numbers", async () => {
     const custom: AppConfig = {
@@ -175,18 +187,57 @@ describe("preparePhotoForAnalysis", () => {
     expect(encoder.loaded).toEqual([]);
   });
 
-  it("passes on a photo that cannot be decoded", async () => {
+  it("fails the find (photo) for a photo that cannot be loaded or decoded, with the reason, and says the photo did not load (PBI-1.21, PBI-1.25)", async () => {
     encoder.loadError = new Error("unsupported image format");
     await expect(
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
-    ).rejects.toThrow("unsupported image format");
+    ).resolves.toEqual({
+      ok: false,
+      loaded: false,
+      failure: { cause: "photo", detail: "load-failed: unsupported image format" },
+    });
+    expect(encoder.encoded).toEqual([]);
   });
 
-  it("passes on an encoder that fails, and releases the decoded photo", async () => {
-    encoder.encodeError = new Error("out of memory");
+  it.each([
+    ["an Error with no message", new Error("")],
+    ["something that is not an Error", "busy"],
+  ])("still gives a load failure with %s a reason", async (_name, thrown) => {
+    encoder.load = async () => {
+      throw thrown;
+    };
     await expect(
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
-    ).rejects.toThrow("out of memory");
-    expect(encoder.released).toBe(1);
+    ).resolves.toEqual({
+      ok: false,
+      loaded: false,
+      failure: { cause: "photo", detail: "load-failed" },
+    });
+  });
+
+  it.each([
+    [
+      "full storage, when the encoded copy is written",
+      new Error("ENOSPC: no space left on device"),
+    ],
+    ["a failed read of the encoded bytes", new Error("File could not be read")],
+    ["a programming error", new TypeError("Cannot read properties of undefined")],
+    ["out of memory", new Error("out of memory")],
+  ])(
+    "passes on an error that is not the photo's (%s), and releases the decoded photo (PBI-1.21)",
+    async (_name, thrown) => {
+      encoder.encodeError = thrown;
+      await expect(
+        preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
+      ).rejects.toBe(thrown);
+      expect(encoder.released).toBe(1);
+    },
+  );
+
+  it("passes on a configuration error as a PhotoPreparationError", async () => {
+    const custom: AppConfig = { ...config, analysisJpegQuality: 2 };
+    await expect(
+      preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder, custom),
+    ).rejects.toBeInstanceOf(PhotoPreparationError);
   });
 });

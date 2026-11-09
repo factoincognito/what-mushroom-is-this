@@ -27,7 +27,10 @@ class FakeDatabase implements FindDatabase {
     this.reply("first", "PRAGMA user_version", { user_version: MIGRATIONS.length });
   }
 
-  /** The reply to a statement; an Error is thrown. A later reply to the same statement wins. */
+  /**
+   * The reply to a statement; an Error is thrown, and a function is called with the statement's
+   * parameters to give the reply. A later reply to the same statement wins.
+   */
   reply(method: Method, sql: string, value: unknown): void {
     this.replies.unshift({ method, sql: sqlOf(sql), value });
   }
@@ -41,10 +44,11 @@ class FakeDatabase implements FindDatabase {
         method
       ];
     }
-    if (found.value instanceof Error) {
-      throw found.value;
+    const value = typeof found.value === "function" ? found.value(params) : found.value;
+    if (value instanceof Error) {
+      throw value;
     }
-    return found.value;
+    return value;
   }
 
   async execAsync(source: string): Promise<void> {
@@ -96,6 +100,7 @@ class FakePhotos implements PhotoFiles {
   readonly files = new Set<string>();
   readonly stuck = new Set<string>();
   copyError: Error | null = null;
+  uriError: Error | null = null;
 
   constructor(readonly events: Event[]) {}
 
@@ -126,16 +131,25 @@ class FakePhotos implements PhotoFiles {
   }
 
   uriOf(name: string): string {
+    if (this.uriError !== null) {
+      throw this.uriError;
+    }
     return `file:///doc/photos/${name}`;
   }
 }
 
 const INSERT =
   "INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting')";
-const GET =
-  "SELECT id, taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail, answer_json, model, analysed_at_ms FROM finds WHERE id = ?";
-const LIST =
-  "SELECT id, taken_at_ms, utc_offset_min, time_source, photo_file, state, failure_cause, failure_detail, result, name_sv, name_en, name_it, edibility, confidence FROM finds ORDER BY taken_at_ms DESC, id DESC";
+/** A time column, given back only within JavaScript's safe-integer range, else as NULL. */
+const safeTime = (column: string) =>
+  `CASE WHEN ${column} BETWEEN -9007199254740991 AND 9007199254740991 THEN ${column} END AS ${column}`;
+/** The UTC offset, given back only within the schema's 18 hours, else as NULL. */
+const SAFE_OFFSET =
+  "CASE WHEN utc_offset_min BETWEEN -1080 AND 1080 THEN utc_offset_min END AS utc_offset_min";
+const FIND_COLUMNS = `id, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}`;
+const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE id = ?`;
+const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND id > ? ORDER BY id ASC LIMIT 1`;
+const LIST = `SELECT ${FIND_COLUMNS}, result, name_sv, name_en, name_it, edibility, confidence FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 const ANSWER_COLUMNS =
   "state = 'done', failure_cause = NULL, failure_detail = NULL, answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?, name_it = ?, edibility = ?, confidence = ?";
 const SET_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state IN ('waiting', 'failed')`;
@@ -194,16 +208,9 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
+/** A row as the list reads it: the whole find, and beside it what the Log shows. */
 function summaryRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    id: 7,
-    taken_at_ms: 1_762_590_000_000,
-    utc_offset_min: 60,
-    time_source: "saved",
-    photo_file: "p7.jpg",
-    state: "waiting",
-    failure_cause: null,
-    failure_detail: null,
+  return row({
     result: null,
     name_sv: null,
     name_en: null,
@@ -211,7 +218,24 @@ function summaryRow(overrides: Record<string, unknown> = {}): Record<string, unk
     edibility: null,
     confidence: null,
     ...overrides,
-  };
+  });
+}
+
+/** A done match as the list reads it, its answer stored as the store writes it. */
+function doneMatchRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return summaryRow({
+    state: "done",
+    answer_json: answerToJson(match),
+    model: "claude-model-x",
+    analysed_at_ms: 1_762_600_000_000,
+    result: "match",
+    name_sv: "Kantarell",
+    name_en: "Chanterelle",
+    name_it: "Gallinaccio",
+    edibility: "edible",
+    confidence: "high",
+    ...overrides,
+  });
 }
 
 let events: Event[];
@@ -497,23 +521,26 @@ describe("get", () => {
 describe("list", () => {
   it("asks for the finds newest first and reads what the Log shows of each", async () => {
     db.reply("all", LIST, [
-      summaryRow({
+      doneMatchRow({
         id: 9,
-        state: "done",
-        result: "match",
-        name_sv: "Kantarell",
-        name_en: "Chanterelle",
-        name_it: "Gallinaccio",
-        edibility: "edible",
+        answer_json: answerToJson({ ...match, confidence: "low" }),
         confidence: "low",
       }),
-      summaryRow({ id: 8, state: "done", result: "no_mushroom" }),
+      summaryRow({
+        id: 8,
+        state: "done",
+        answer_json: answerToJson({ result: "no_mushroom" }),
+        model: "m",
+        analysed_at_ms: 1,
+        result: "no_mushroom",
+      }),
       summaryRow({ id: 7, state: "failed", failure_cause: "answer", failure_detail: "shape" }),
       summaryRow({ id: 6 }),
     ]);
     const time = { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" };
     await expect(store.list()).resolves.toEqual([
       {
+        readable: true,
         id: 9,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
@@ -526,18 +553,26 @@ describe("list", () => {
         },
       },
       {
+        readable: true,
         id: 8,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         analysis: { state: "done", result: "no_mushroom" },
       },
       {
+        readable: true,
         id: 7,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         analysis: { state: "failed", failure: { cause: "answer", detail: "shape" } },
       },
-      { id: 6, photoUri: "file:///doc/photos/p7.jpg", time, analysis: { state: "waiting" } },
+      {
+        readable: true,
+        id: 6,
+        photoUri: "file:///doc/photos/p7.jpg",
+        time,
+        analysis: { state: "waiting" },
+      },
     ]);
     expect(events).toEqual([{ method: "all", sql: LIST, params: [] }]);
   });
@@ -547,46 +582,153 @@ describe("list", () => {
   });
 
   it.each<[string, Record<string, unknown>]>([
+    ["a match without a name", doneMatchRow({ name_sv: null })],
+    ["a match with an unknown edibility", doneMatchRow({ edibility: "tasty" })],
+    ["a match with an unknown confidence", doneMatchRow({ confidence: "sure" })],
+    ["a done find with an unknown result", doneMatchRow({ result: "maybe" })],
     [
-      "a match without a name",
-      {
-        state: "done",
-        result: "match",
-        name_sv: null,
-        name_en: "e",
-        name_it: "i",
-        edibility: "edible",
-        confidence: "high",
-      },
+      "a done find whose stored answer is not of the shape (Clead's review of #26, decision 2)",
+      doneMatchRow({ answer_json: '{"result":"maybe"}' }),
     ],
     [
-      "a match with an unknown edibility",
-      {
-        state: "done",
-        result: "match",
-        name_sv: "s",
-        name_en: "e",
-        name_it: "i",
-        edibility: "tasty",
-        confidence: "high",
-      },
+      "a done find whose stored answer is not JSON (decision 2)",
+      doneMatchRow({ answer_json: "{" }),
+    ],
+    ["a done find without its model (decision 2)", doneMatchRow({ model: null })],
+    [
+      "a done find whose analysis time the database gave back as NULL, past the safe range (decision 3)",
+      doneMatchRow({ analysed_at_ms: null }),
+    ],
+    ["an unknown state", summaryRow({ state: "lost" })],
+    ["a time stored as text", summaryRow({ taken_at_ms: "1762590000000" })],
+    [
+      "a UTC offset the database gave back as NULL, past 18 hours (round 2, item 2)",
+      summaryRow({ utc_offset_min: null }),
     ],
     [
-      "a match with an unknown confidence",
-      {
-        state: "done",
-        result: "match",
-        name_sv: "s",
-        name_en: "e",
-        name_it: "i",
-        edibility: "edible",
-        confidence: "sure",
-      },
+      "a time the database gave back as NULL, past the safe range (decision 3)",
+      summaryRow({ taken_at_ms: null }),
     ],
-    ["a done find with an unknown result", { state: "done", result: "maybe" }],
-  ])("refuses a stored row with %s", async (_, overrides) => {
-    db.reply("all", LIST, [summaryRow(overrides)]);
-    await expect(store.list()).rejects.toMatchObject({ code: "corrupt" });
+    [
+      "a time a driver gave back past 2^53, as a number (decision 3)",
+      summaryRow({ taken_at_ms: 2 ** 53 + 2 }),
+    ],
+    [
+      "an unknown position source (Clead's review of #26, fix 1)",
+      summaryRow({ position_source: "gps" }),
+    ],
+    ["a latitude without a longitude (fix 1)", summaryRow({ longitude: null })],
+    ["an accuracy stored as text (fix 1)", summaryRow({ accuracy_m: "12" })],
+    ["a photo name stored as a number", summaryRow({ photo_file: 7 })],
+    ["a failed find without a cause", summaryRow({ state: "failed", failure_detail: "x" })],
+  ])(
+    "marks a stored row with %s as unreadable, by its ID, and lists the others (PBI-1.16)",
+    async (_, stored) => {
+      db.reply("all", LIST, [summaryRow({ id: 9 }), { ...stored, id: 8 }, summaryRow({ id: 7 })]);
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: 9 }),
+        { readable: false, id: 8 },
+        expect.objectContaining({ readable: true, id: 7 }),
+      ]);
+    },
+  );
+
+  it.each<[string, unknown]>([
+    ["a row that is not an object", "a row"],
+    ["a row without an ID", summaryRow({ id: null })],
+    ["a row whose ID is a fraction", summaryRow({ id: 0.5 })],
+    ["a row whose ID is 0 (Clead's review of #26, decision 4)", summaryRow({ id: 0 })],
+    ["a row whose ID is negative", summaryRow({ id: -3 })],
+  ])("marks %s as unreadable without an ID (PBI-1.16)", async (_, stored) => {
+    db.reply("all", LIST, [stored, summaryRow({ id: 7 })]);
+    await expect(store.list()).resolves.toEqual([
+      { readable: false, id: null },
+      expect.objectContaining({ readable: true, id: 7 }),
+    ]);
+  });
+
+  it("passes on an error that does not come from what is stored", async () => {
+    photos.uriError = new Error("the document directory is gone");
+    db.reply("all", LIST, [summaryRow()]);
+    await expect(store.list()).rejects.toThrow("the document directory is gone");
+  });
+
+  it("judges a row readable as get does: a row get refuses is never listed readable (fix 1)", async () => {
+    const damaged = [
+      summaryRow({ position_source: "gps" }),
+      doneMatchRow({ answer_json: "{" }),
+      summaryRow({ taken_at_ms: null }),
+    ];
+    for (const stored of damaged) {
+      db.reply("first", GET, stored);
+      db.reply("all", LIST, [stored]);
+      await expect(store.get(7)).rejects.toMatchObject({ code: "corrupt" });
+      await expect(store.list()).resolves.toEqual([{ readable: false, id: 7 }]);
+    }
+  });
+});
+
+describe("oldestWaiting (PBI-1.7, PBI-1.16)", () => {
+  it("asks for the waiting find saved first, by its ID, reads it and gives its ID", async () => {
+    db.reply("first", NEXT_WAITING, row({ id: 4 }));
+    await expect(store.oldestWaiting()).resolves.toBe(4);
+    expect(events).toEqual([{ method: "first", sql: NEXT_WAITING, params: [0] }]);
+  });
+
+  it("gives null when no find is waiting", async () => {
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
+  it("passes over a waiting find whose row it cannot read, and gives the next one after it", async () => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) => {
+      const after = params[0];
+      if (after === 0) {
+        return row({ id: 2, time_source: "gps" });
+      }
+      return after === 2 ? row({ id: 5 }) : null;
+    });
+    await expect(store.oldestWaiting()).resolves.toBe(5);
+    expect(events).toEqual([
+      { method: "first", sql: NEXT_WAITING, params: [0] },
+      { method: "first", sql: NEXT_WAITING, params: [2] },
+    ]);
+    expect(events.filter((event) => "method" in event && event.method === "run")).toEqual([]);
+  });
+
+  it("gives null when every waiting find is one it cannot read", async () => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) =>
+      params[0] === 0 ? row({ id: 3, state: "lost" }) : null,
+    );
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
+  it.each([
+    ["not a whole number", row({ id: 4.5 })],
+    ["not a number", row({ id: "4" })],
+    ["missing", row({ id: undefined })],
+  ])(
+    "refuses a stored ID that is %s as corrupt, since it cannot pass over it",
+    async (_name, reply) => {
+      db.reply("first", NEXT_WAITING, reply);
+      await expect(store.oldestWaiting()).rejects.toMatchObject({ code: "corrupt" });
+    },
+  );
+
+  it("refuses a stored row that is not an object as corrupt", async () => {
+    db.reply("first", NEXT_WAITING, "a row");
+    await expect(store.oldestWaiting()).rejects.toMatchObject({ code: "corrupt" });
+  });
+
+  it("passes on an error of the database", async () => {
+    db.reply("first", NEXT_WAITING, new Error("database is locked"));
+    await expect(store.oldestWaiting()).rejects.toThrow("database is locked");
+  });
+
+  it("passes on an error while it reads the row that does not come from what is stored, passing over nothing", async () => {
+    photos.uriError = new Error("the document directory is gone");
+    db.reply("first", NEXT_WAITING, row({ id: 4 }));
+    await expect(store.oldestWaiting()).rejects.toThrow("the document directory is gone");
+    expect(events).toEqual([{ method: "first", sql: NEXT_WAITING, params: [0] }]);
   });
 });
 
@@ -696,6 +838,31 @@ describe("markFailed", () => {
   it("marks a waiting or failed find failed, with why", async () => {
     await store.markFailed(7, { cause: "request", detail: "413" });
     expect(events).toEqual([{ method: "run", sql: MARK_FAILED, params: ["request", "413", 7] }]);
+  });
+
+  it("marks a find failed for a photo that cannot be read (PBI-1.7)", async () => {
+    await store.markFailed(7, { cause: "photo", detail: "the image could not be loaded" });
+    expect(events).toEqual([
+      { method: "run", sql: MARK_FAILED, params: ["photo", "the image could not be loaded", 7] },
+    ]);
+  });
+
+  it("marks a find failed for a refused answer (PBI-1.21)", async () => {
+    await store.markFailed(7, { cause: "refused", detail: "stop_reason refusal" });
+    expect(events).toEqual([
+      { method: "run", sql: MARK_FAILED, params: ["refused", "stop_reason refusal", 7] },
+    ]);
+  });
+
+  it("reads a find that failed for its photo", async () => {
+    db.reply(
+      "first",
+      GET,
+      row({ state: "failed", failure_cause: "photo", failure_detail: "gone" }),
+    );
+    await expect(store.get(7)).resolves.toMatchObject({
+      analysis: { state: "failed", failure: { cause: "photo", detail: "gone" } },
+    });
   });
 
   it.each<[string, unknown]>([

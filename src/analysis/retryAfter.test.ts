@@ -12,13 +12,37 @@ describe("parseRetryAfter, seconds", () => {
     expect(parseRetryAfter(value, receivedAt)).toBe(receivedAt + offsetMs);
   });
 
-  it("has no upper bound", () => {
-    const oneYear = 365 * 24 * 60 * 60;
-    expect(parseRetryAfter(String(oneYear), receivedAt)).toBe(receivedAt + oneYear * 1_000);
+  it("reads a value exactly at the bound of the analysis config, one day", () => {
+    expect(parseRetryAfter("86400", receivedAt)).toBe(receivedAt + 86_400_000);
+  });
+
+  it("treats a value one second beyond the bound as missing", () => {
+    expect(parseRetryAfter("86401", receivedAt)).toBeNull();
+  });
+
+  it("treats a year ahead as missing", () => {
+    expect(parseRetryAfter(String(365 * 24 * 60 * 60), receivedAt)).toBeNull();
   });
 
   it("treats a number too large to be a time as missing", () => {
     expect(parseRetryAfter("9".repeat(400), receivedAt)).toBeNull();
+  });
+
+  it("uses the bound it is given", () => {
+    expect(parseRetryAfter("60", receivedAt, 60_000)).toBe(receivedAt + 60_000);
+    expect(parseRetryAfter("61", receivedAt, 60_000)).toBeNull();
+  });
+
+  it("treats a finite time beyond what a JavaScript Date holds as missing, whatever the bound", () => {
+    // 10^17 s is 10^20 ms: finite, but beyond the 8.64 × 10^15 ms a Date holds.
+    expect(parseRetryAfter(`1${"0".repeat(17)}`, receivedAt, Number.POSITIVE_INFINITY)).toBeNull();
+  });
+
+  it("reads the last time a JavaScript Date holds when no bound applies", () => {
+    const lastSecond = 8_640_000_000_000;
+    expect(parseRetryAfter(String(lastSecond), 0, Number.POSITIVE_INFINITY)).toBe(
+      lastSecond * 1_000,
+    );
   });
 });
 
@@ -33,6 +57,20 @@ describe("parseRetryAfter, HTTP date", () => {
     expect(parseRetryAfter("Sun, 08 Nov 2026 12:05:00 GMT", receivedAt)).toBe(
       receivedAt + 5 * 60 * 1_000,
     );
+  });
+
+  it("reads a date exactly at the bound, one day after the answer", () => {
+    expect(parseRetryAfter("Mon, 09 Nov 2026 12:00:00 GMT", receivedAt)).toBe(
+      receivedAt + 86_400_000,
+    );
+  });
+
+  it("treats a date beyond the bound as missing", () => {
+    expect(parseRetryAfter("Mon, 09 Nov 2026 12:00:01 GMT", receivedAt)).toBeNull();
+  });
+
+  it("treats a date in a far year as missing", () => {
+    expect(parseRetryAfter("Fri, 31 Dec 9999 23:59:59 GMT", receivedAt)).toBeNull();
   });
 
   it.each([

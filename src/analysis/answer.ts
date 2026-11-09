@@ -49,16 +49,43 @@ export interface Match {
 
 export type Answer = Match | { result: "no_mushroom" } | { result: "cannot_tell" };
 
-/** Why an answer was not accepted: not from the API at all, or not of the shape. */
-export type AnswerFailure = { ok: false; reason: "not-api" | "shape"; detail: string };
+/**
+ * Why an answer was not accepted: not from the API at all, not of the shape, or refused by
+ * Claude (`stop_reason` `refusal`), which is not a shape failure.
+ */
+export type AnswerFailure = { ok: false; reason: "not-api" | "shape" | "refused"; detail: string };
 export type AnswerResult = { ok: true; answer: Answer } | AnswerFailure;
 
-/** The edibility to show: "unknown" whenever the confidence is low. */
-export function shownEdibility(match: Match): Edibility {
+/**
+ * The edibility to show: "unknown" whenever the confidence is low. It takes the edibility and the
+ * confidence alone, so that a match and the Log's summary of one follow the same rule.
+ */
+export function shownEdibility(match: Pick<Match, "edibility" | "confidence">): Edibility {
   return match.confidence === "low" ? "unknown" : match.edibility;
 }
 
-/** Reads the body of a 2xx answer of the Messages API. */
+/**
+ * The `stop_reason` values of a truncated answer (Claude docs, "Stop reasons and fallback",
+ * https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons, read 2026-11-09):
+ * `max_tokens`, "The response reached your max_tokens limit", and
+ * `model_context_window_exceeded`, "Treat the response as truncated".
+ */
+export const CUT_OFF_STOP_REASONS = ["max_tokens", "model_context_window_exceeded"];
+
+/**
+ * The `stop_reason` of a refusal (the same page): "Claude declined to respond", returned "as a
+ * normal HTTP 200 response, not an error".
+ */
+export const REFUSAL_STOP_REASON = "refusal";
+
+/**
+ * Reads the body of a 2xx answer of the Messages API. The answer is the text of its text
+ * blocks, joined in their order with nothing between them; the thinking blocks that Claude 5
+ * models put before it (`thinking`, `redacted_thinking`; Claude docs, "Thinking",
+ * https://platform.claude.com/docs/en/build-with-claude/thinking, read 2026-11-09) and any other
+ * block are skipped. A cut-off answer and a refusal each fail with their own detail, whatever
+ * the text holds; a refusal fails with its own reason, `refused`.
+ */
 export function readMessageBody(body: string): AnswerResult {
   const notApi: AnswerFailure = {
     ok: false,
@@ -82,9 +109,26 @@ export function readMessageBody(body: string): AnswerResult {
       texts.push(block.text);
     }
   }
-  const [text] = texts;
-  if (texts.length !== 1 || typeof text !== "string") {
-    return shapeFailure("the message has no single text block");
+  const stopReason = parsed.value.stop_reason;
+  if (typeof stopReason === "string" && CUT_OFF_STOP_REASONS.includes(stopReason)) {
+    return shapeFailure(`the answer was cut off (stop_reason ${stopReason})`);
+  }
+  if (stopReason === REFUSAL_STOP_REASON) {
+    return {
+      ok: false,
+      reason: "refused",
+      detail: `the answer was refused (stop_reason ${REFUSAL_STOP_REASON})`,
+    };
+  }
+  if (texts.length === 0) {
+    return shapeFailure("the message has no text block");
+  }
+  let text = "";
+  for (const part of texts) {
+    if (typeof part !== "string") {
+      return shapeFailure("a text block's text is not a string");
+    }
+    text += part;
   }
   return parseAnswerText(text);
 }

@@ -39,8 +39,31 @@ export function roundHalfToEven(value: number): number {
   return floor % 2 === 0 ? floor : floor + 1;
 }
 
-/** The visual tokens an image costs: one per patch started on each edge. */
-export function countImageTokens(width: number, height: number, patchSize: number): number {
+export type TokenCountResult =
+  | { ok: true; tokens: number }
+  | { ok: false; reason: "invalid-size" | "invalid-patch-size" };
+
+/**
+ * The visual tokens an image costs: one per patch started on each edge. A size or a patch
+ * size that is not a positive integer gives a failing result, as in `resizedSize`; nothing is
+ * coerced. The size is checked first.
+ */
+export function countImageTokens(
+  width: number,
+  height: number,
+  patchSize: number,
+): TokenCountResult {
+  if (!isPositiveInteger(width) || !isPositiveInteger(height)) {
+    return { ok: false, reason: "invalid-size" };
+  }
+  if (!isPositiveInteger(patchSize)) {
+    return { ok: false, reason: "invalid-patch-size" };
+  }
+  return { ok: true, tokens: tokensFor(width, height, patchSize) };
+}
+
+/** The token count, for input already checked. */
+function tokensFor(width: number, height: number, patchSize: number): number {
   return Math.ceil(width / patchSize) * Math.ceil(height / patchSize);
 }
 
@@ -67,7 +90,7 @@ function fits(width: number, height: number, limits: ImageLimits): boolean {
   return (
     Math.ceil(width / patchSize) * patchSize <= maxEdge &&
     Math.ceil(height / patchSize) * patchSize <= maxEdge &&
-    countImageTokens(width, height, patchSize) <= maxTokens
+    tokensFor(width, height, patchSize) <= maxTokens
   );
 }
 

@@ -1,19 +1,143 @@
-import { Link } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { Link, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
+import { shownEdibility } from "../analysis/answer";
+import { edibilityText, fillIn, formatFindTime } from "../find/display";
 import { useLanguage } from "../i18n/LanguageContext";
+import type { Language } from "../i18n/languages";
+import type { Strings } from "../i18n/strings";
+import { formatTimeIn, noticeMessage, stopNeedsSettings } from "../queue/messages";
+import { useQueue } from "../queue/QueueContext";
+import { useFindLog } from "../store/FindLogContext";
+import type { FindSummary, ListedFind } from "../store/find";
 
 /**
- * The Log screen, the start screen (docs/SPEC.md 3.1). "New find" opens the New find screen;
- * the list of finds comes in PBI-1.8 and is empty for now.
+ * One entry of the store's list: a find it could read, or the mark of one it could not, in its
+ * place (PBI-1.16).
+ */
+type LogEntry = ListedFind;
+
+/** What the screen has read of the log. */
+type ListState =
+  | { kind: "loading" }
+  | { kind: "ready"; entries: LogEntry[] }
+  /** The store could not give the list; the error itself is not shown. */
+  | { kind: "unreadable" };
+
+/**
+ * The Log screen, the start screen (docs/SPEC.md 3.1): the finds, newest first as the store lists
+ * them, each with its photo, date and time, the species name in the app's language and the
+ * edibility of the matched species ("unknown" when the confidence is low, SPEC 3.3) with the
+ * disclaimer next to it (SPEC 3.5); a find still waiting or failed says so, and each opens its own
+ * screen. A find the store cannot read is a row of its own, in its place, saying so; with its ID it
+ * opens the find's screen, where it can be deleted (PBI-1.16). A list the store cannot give at all
+ * is shown as unreadable, with a way to read it again. The list is read again when the screen
+ * comes into view and when a queue run ends. When the queue has stopped, it says why and offers
+ * "analyse now", and a link to Settings when the stop names a setting; when the last run left the
+ * finds waiting, it says why. "New find" opens the New find screen.
  */
 export default function LogScreen() {
-  const { strings } = useLanguage();
+  const { language, strings } = useLanguage();
+  const { state, analyseNow } = useQueue();
+  const findLog = useFindLog();
+  const formatTime = useMemo(() => formatTimeIn(language), [language]);
+  const { stop, pause, running } = state;
+  const [list, setList] = useState<ListState>({ kind: "loading" });
+  /** The latest read; an earlier one that ends later is dropped. */
+  const latestRead = useRef(0);
+
+  const load = useCallback(async () => {
+    const read = ++latestRead.current;
+    let next: ListState;
+    try {
+      next = { kind: "ready", entries: await (await findLog()).list() };
+    } catch {
+      next = { kind: "unreadable" };
+    }
+    if (read === latestRead.current) {
+      setList(next);
+    }
+  }, [findLog]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+  // A run changes the log; it is read again when the run ends.
+  const wasRunning = useRef(running);
+  useEffect(() => {
+    if (wasRunning.current && !running) {
+      void load();
+    }
+    wasRunning.current = running;
+  }, [running, load]);
+
   return (
     <View style={styles.container}>
       <View style={styles.list}>
-        <Text style={styles.empty}>{strings.log.empty}</Text>
+        {list.kind === "loading" && <ActivityIndicator testID="log-loading" />}
+        {list.kind === "unreadable" && (
+          <View style={styles.centred}>
+            <Text accessibilityLiveRegion="polite" style={styles.text}>
+              {strings.log.unreadable}
+            </Text>
+            <Pressable accessibilityRole="button" onPress={() => void load()} style={styles.button}>
+              <Text style={styles.buttonText}>{strings.log.retry}</Text>
+            </Pressable>
+          </View>
+        )}
+        {list.kind === "ready" && (
+          <FlatList
+            data={list.entries}
+            keyExtractor={entryKey}
+            renderItem={({ item }) => <LogRow entry={item} language={language} strings={strings} />}
+            ListEmptyComponent={
+              <View style={styles.centred}>
+                <Text style={styles.empty}>{strings.log.empty}</Text>
+              </View>
+            }
+            contentContainerStyle={styles.rows}
+          />
+        )}
       </View>
+      {running && (
+        <View style={styles.row}>
+          <ActivityIndicator testID="queue-running" />
+          <Text style={styles.text}>{strings.queue.running}</Text>
+        </View>
+      )}
+      {stop !== null ? (
+        <View style={styles.notice}>
+          <Text accessibilityLiveRegion="polite" style={styles.text}>
+            {noticeMessage({ kind: "stopped", stop }, strings, formatTime)}
+          </Text>
+          {stopNeedsSettings(stop) && (
+            <Link href="/settings" accessibilityRole="link" style={styles.link}>
+              {strings.queue.openSettings}
+            </Link>
+          )}
+          <Pressable accessibilityRole="button" onPress={analyseNow} style={styles.button}>
+            <Text style={styles.buttonText}>{strings.queue.analyseNow}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        pause !== null &&
+        !running && (
+          <Text accessibilityLiveRegion="polite" style={styles.text}>
+            {noticeMessage({ kind: "paused", cause: pause }, strings, formatTime)}
+          </Text>
+        )
+      )}
       <Link href="/new-find" accessibilityRole="link" style={styles.button}>
         {strings.log.newFind}
       </Link>
@@ -22,6 +146,104 @@ export default function LogScreen() {
       </Link>
     </View>
   );
+}
+
+type LogRowProps = {
+  readonly entry: LogEntry;
+  readonly language: Language;
+  readonly strings: Strings;
+};
+
+/**
+ * The key of an entry's row: its find's ID. An entry without an ID is keyed by its place in the
+ * list, which is the store's order and so the same at every reading of an unchanged log.
+ */
+function entryKey(entry: LogEntry, index: number): string {
+  return entry.id === null ? `no-id-${index}` : String(entry.id);
+}
+
+/** One entry of the list, by its kind. */
+function LogRow({ entry, language, strings }: LogRowProps) {
+  if (!entry.readable) {
+    return <UnreadableRow id={entry.id} strings={strings} />;
+  }
+  return <FindRow find={entry} language={language} strings={strings} />;
+}
+
+/**
+ * A find the store cannot read. With its ID, it opens the find's own screen, which says the same
+ * and offers Delete; without one there is nothing to open, so it is text alone.
+ */
+function UnreadableRow({ id, strings }: { readonly id: number | null; readonly strings: Strings }) {
+  const text = <Text style={styles.text}>{strings.find.unreadable}</Text>;
+  if (id === null) {
+    return (
+      <View testID="unreadable-row" style={styles.findRow}>
+        {text}
+      </View>
+    );
+  }
+  return (
+    <Link href={`/find/${id}`} asChild>
+      <Pressable accessibilityRole="link" testID={`find-row-${id}`} style={styles.findRow}>
+        {text}
+      </Pressable>
+    </Link>
+  );
+}
+
+type FindRowProps = {
+  readonly find: FindSummary;
+  readonly language: Language;
+  readonly strings: Strings;
+};
+
+/** One find in the list; it opens the find's own screen. */
+function FindRow({ find, language, strings }: FindRowProps) {
+  return (
+    <Link href={`/find/${find.id}`} asChild>
+      <Pressable accessibilityRole="link" testID={`find-row-${find.id}`} style={styles.findRow}>
+        <Image
+          source={{ uri: find.photoUri }}
+          accessibilityLabel={strings.find.photo}
+          style={styles.thumbnail}
+        />
+        <View style={styles.findText}>
+          <Text style={styles.note}>{formatFindTime(find.time, language)}</Text>
+          <SummaryView find={find} language={language} strings={strings} />
+        </View>
+      </Pressable>
+    </Link>
+  );
+}
+
+function SummaryView({ find, language, strings }: FindRowProps) {
+  const { analysis } = find;
+  switch (analysis.state) {
+    case "waiting":
+      return <Text style={styles.text}>{strings.log.waiting}</Text>;
+    case "failed":
+      return <Text style={styles.text}>{strings.log.failed}</Text>;
+    case "done":
+      if (analysis.result !== "match") {
+        return (
+          <Text style={styles.text}>
+            {analysis.result === "no_mushroom" ? strings.find.noMushroom : strings.find.cannotTell}
+          </Text>
+        );
+      }
+      return (
+        <>
+          <Text style={styles.name}>{analysis.names[language]}</Text>
+          <Text style={styles.text}>
+            {fillIn(strings.find.edibility, {
+              edibility: edibilityText(shownEdibility(analysis), strings),
+            })}
+          </Text>
+          <Text style={styles.note}>{strings.disclaimer}</Text>
+        </>
+      );
+  }
 }
 
 const styles = StyleSheet.create({
@@ -33,10 +255,51 @@ const styles = StyleSheet.create({
   list: {
     flex: 1,
     justifyContent: "center",
+  },
+  rows: {
+    flexGrow: 1,
+    gap: 12,
+  },
+  centred: {
+    flexGrow: 1,
+    justifyContent: "center",
     alignItems: "center",
+    gap: 8,
+  },
+  findRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  thumbnail: {
+    width: 72,
+    height: 72,
+    borderRadius: 4,
+  },
+  findText: {
+    flex: 1,
+    gap: 2,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: "bold",
   },
   empty: {
     fontSize: 16,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  notice: {
+    gap: 8,
+  },
+  text: {
+    fontSize: 16,
+  },
+  note: {
+    fontSize: 14,
   },
   button: {
     fontSize: 16,
@@ -44,6 +307,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
+  },
+  buttonText: {
+    fontSize: 16,
+    textAlign: "center",
   },
   link: {
     fontSize: 16,

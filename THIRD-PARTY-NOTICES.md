@@ -26,7 +26,7 @@ shipped in the app (internal tooling).
 
 | Library | Version | Licence | Mode | Source | Added for |
 |---|---|---|---|---|---|
-| `expo` | 57.0.26 | MIT | depend | https://github.com/expo/expo, `packages/expo` | the Expo SDK (project setup) |
+| `expo` | 57.0.32 | MIT | depend | https://github.com/expo/expo, `packages/expo` | the Expo SDK (project setup) |
 | `expo-status-bar` | 57.0.1 | MIT | depend | https://github.com/expo/expo, `packages/expo-status-bar` | the status bar (project setup) |
 | `react` | 19.2.3 | MIT | depend | https://github.com/facebook/react, `packages/react` | React (project setup) |
 | `react-native` | 0.86.3 | MIT | depend | https://github.com/react/react-native, `packages/react-native` | React Native (project setup) |
@@ -48,6 +48,7 @@ shipped in the app (internal tooling).
 | `expo-image-loader` | 57.0.1 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-loader` | a dependency of `expo-image-picker` and `expo-image-manipulator`, installed with them (PBI-1.6) |
 | `expo-location` | 57.0.23 | MIT | depend | https://github.com/expo/expo, `packages/expo-location` | the position of a new find (PBI-1.6). **Parked**: its Android side builds in `com.google.android.gms:play-services-location` 21.0.1 from Maven (its `android/build.gradle`), Google's vendor SDK under Google's terms, which the policy escalates (Appendix A.2, A.3); it is not used until the Product Office decides in writing |
 | `expo-image-picker` | 57.0.21 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-picker` | the camera and the gallery of a new find (PBI-1.6). Its Android side builds in the native libraries below, from Maven, not npm (its `android/build.gradle`) |
+| `expo-network` | 57.0.3 | MIT | depend | https://github.com/expo/expo, `packages/expo-network` | the queue's "network is back" trigger (PBI-1.7, Known unknown 6). It builds in no other native library: its `android/build.gradle` adds test-only dependencies, and the POM of its prebuilt Android module names only `kotlin-stdlib-jdk7` 2.1.20, `org.jetbrains:annotations` 23.0.0 and `pika-api` 0.3.2, which the POMs of `expo-secure-store`, `expo-sqlite` and `expo-localization` here already name; on Android it uses the platform's `ConnectivityManager`, on iOS Apple's `Network` and `SystemConfiguration` frameworks (its `ios/ExpoNetwork.podspec` depends only on `ExpoModulesCore`) |
 
 ### The Android libraries `expo-image-picker` builds in
 
@@ -86,6 +87,6 @@ are for the release gate and PBI-1.9.
 | `@types/jest` | 29.5.14 | MIT | depend | https://github.com/DefinitelyTyped/DefinitelyTyped, `types/jest` | Jest's types (project setup) |
 | `@types/react` | 19.2.18 | MIT | depend | https://github.com/DefinitelyTyped/DefinitelyTyped, `types/react` | React's types (project setup) |
 | `jest` | 29.7.0 | MIT | depend | https://github.com/jestjs/jest, `packages/jest` | the test runner (project setup) |
-| `jest-expo` | 57.0.5 | MIT | depend | https://github.com/expo/expo, `packages/jest-expo` | the Jest preset of Expo (project setup) |
+| `jest-expo` | 57.0.6 | MIT | depend | https://github.com/expo/expo, `packages/jest-expo` | the Jest preset of Expo (project setup) |
 | `test-renderer` | 1.2.0 | MIT (`package.json`; the package ships no licence file) | depend | https://github.com/mdjastrzebski/test-renderer | the renderer of the component tests (project setup) |
 | `typescript` | 6.0.3 | Apache-2.0 | depend | https://github.com/microsoft/TypeScript | the type check (project setup) |

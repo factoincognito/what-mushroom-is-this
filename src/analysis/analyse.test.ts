@@ -1,3 +1,4 @@
+import { analysisConfig } from "../config/analysis";
 import { type AnalysisInput, analysePhoto, type Fetcher, type HttpResponse } from "./analyse";
 import { buildAnalysisRequest } from "./request";
 
@@ -50,7 +51,11 @@ describe("analysePhoto, the request", () => {
       Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
     );
     await analysePhoto(input, { fetch, now: clock });
-    const built = buildAnalysisRequest(input);
+    const result = buildAnalysisRequest(input);
+    if (!result.ok) {
+      throw new Error("the test input must build a request");
+    }
+    const built = result.request;
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(built.url, {
       method: built.method,
@@ -88,6 +93,79 @@ describe("analysePhoto, the outcome", () => {
     await expect(analysePhoto(input, { fetch, now: clock })).resolves.toEqual({
       ok: false,
       error: { kind: "rate-limited", retryAt: now + 30_000 },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a retry-after beyond the bound of the analysis config as missing", async () => {
+    const fetch = jest.fn(() =>
+      Promise.resolve(response(429, '{"type":"error"}', { "retry-after": "86401" })),
+    );
+    await expect(analysePhoto(input, { fetch, now: clock })).resolves.toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+    });
+  });
+
+  it("bounds retry-after by the config it is given", async () => {
+    const fetch = jest.fn(() =>
+      Promise.resolve(response(429, '{"type":"error"}', { "retry-after": "30" })),
+    );
+    const config = { ...analysisConfig, retryAfterMaxMs: 10_000 };
+    await expect(analysePhoto(input, { fetch, now: clock }, config)).resolves.toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+    });
+  });
+
+  it("sends the request with the config it is given", async () => {
+    const fetch = jest.fn<ReturnType<Fetcher>, Parameters<Fetcher>>(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    const config = { ...analysisConfig, apiVersion: "2099-01-01", maxTokens: 99 };
+    await analysePhoto(input, { fetch, now: clock }, config);
+    const init = fetch.mock.calls[0]?.[1];
+    expect(init?.headers["anthropic-version"]).toBe("2099-01-01");
+    expect(JSON.parse(init?.body ?? "{}")).toHaveProperty("max_tokens", 99);
+  });
+
+  it("fails the find with its own detail when the answer was cut off", async () => {
+    const body = JSON.stringify({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "thinking", thinking: "", signature: "x" }],
+      stop_reason: "max_tokens",
+    });
+    const fetch = jest.fn(() => Promise.resolve(response(200, body)));
+    await expect(analysePhoto(input, { fetch, now: clock })).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: "find-failed",
+        reason: "shape",
+        detail: "the answer was cut off (stop_reason max_tokens)",
+        status: 200,
+        queue: "stops",
+      },
+    });
+  });
+
+  it("fails the find with its own detail, and lets the queue go on, when the answer was refused", async () => {
+    const body = JSON.stringify({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "text", text: "I can't help with that." }],
+      stop_reason: "refusal",
+    });
+    const fetch = jest.fn(() => Promise.resolve(response(200, body)));
+    await expect(analysePhoto(input, { fetch, now: clock })).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: "find-failed",
+        reason: "refused",
+        detail: "the answer was refused (stop_reason refusal)",
+        status: 200,
+        queue: "goes-on",
+      },
     });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
@@ -265,7 +343,10 @@ describe("analysePhoto, a key that cannot be sent as a header value", () => {
       Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
     );
     const result = await analysePhoto({ ...input, apiKey: key }, { fetch, now: clock });
-    expect(result).toEqual({ ok: false, error: { kind: "key-refused", status: null } });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "key-refused", status: null, cause: "refused" },
+    });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -275,7 +356,12 @@ describe("analysePhoto, a key that cannot be sent as a header value", () => {
       Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
     );
     const result = await analysePhoto({ ...input, apiKey: key }, { fetch, now: clock });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "key-refused", status: null, cause: "refused" },
+    });
     expect(JSON.stringify(result)).not.toContain("secret-key-1234567890");
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("sends a key of every printable ASCII character", async () => {
@@ -296,6 +382,37 @@ describe("analysePhoto, a key that cannot be sent as a header value", () => {
     );
     await analysePhoto({ ...input, apiKey: `  ${apiKey}\n` }, { fetch, now: clock });
     expect(fetch.mock.calls[0]?.[1].headers.authorization).toBe(`Bearer ${apiKey}`);
+  });
+});
+
+describe("analysePhoto, a model ID that cannot be sent", () => {
+  it.each([
+    ["an empty ID", ""],
+    ["an inner space", "claude opus"],
+    ["a zero-width space", "claude-​opus"],
+  ])("is never sent when it is %s, and Settings asks for a model", async (_label, model) => {
+    const fetch = jest.fn(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    const result = await analysePhoto({ ...input, model }, { fetch, now: clock });
+    expect(result).toEqual({ ok: false, error: { kind: "model-unknown" } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("analysePhoto, an API address that is not valid configuration", () => {
+  it.each([
+    ["plain http", "http://api.example.test"],
+    ["a path", "https://api.example.test/v1"],
+    ["an empty address", ""],
+  ])("throws a programming error for %s, and sends nothing", async (_label, apiAddress) => {
+    const fetch = jest.fn(() =>
+      Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
+    );
+    await expect(analysePhoto({ ...input, apiAddress }, { fetch, now: clock })).rejects.toThrow(
+      RangeError,
+    );
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 
@@ -337,5 +454,76 @@ describe("analysePhoto, a time limit that is not valid configuration", () => {
     await expect(
       analysePhoto({ ...input, apiKey: "", timeLimitMs: 0 }, { fetch, now: clock }),
     ).rejects.toThrow("timeLimitMs");
+  });
+});
+
+describe("analysePhoto, the time access resumes after a spend limit (PBI-1.7)", () => {
+  const spendCap = JSON.stringify({
+    type: "error",
+    error: {
+      type: "rate_limit_error",
+      message:
+        "You have reached your API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+    },
+  });
+  const ownLimit = JSON.stringify({
+    type: "error",
+    error: {
+      type: "invalid_request_error",
+      message:
+        "You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+    },
+  });
+
+  it("gives the time a 429 without retry-after states, for the message only", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(429, spendCap)));
+    await expect(analysePhoto(input, { fetch, now: clock })).resolves.toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+      accessResumesAtMs: Date.UTC(2026, 11, 1),
+    });
+  });
+
+  it("gives the time the 400 of a spend limit the user set states", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(400, ownLimit)));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+      accessResumesAtMs: Date.UTC(2026, 11, 1),
+    });
+  });
+
+  it("gives no such time when the answer has a retry-after", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(429, spendCap, { "retry-after": "30" })));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).not.toHaveProperty("accessResumesAtMs");
+  });
+
+  it("gives no such time when the message states none", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(429, '{"type":"error"}')));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).not.toHaveProperty("accessResumesAtMs");
+  });
+
+  it("gives no such time when a spend limit's message states it in a form the docs do not show", async () => {
+    const otherForm = JSON.stringify({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message:
+          "You have reached your specified API usage limits. Access resumes on December 1, 2026 at midnight.",
+      },
+    });
+    const fetch = jest.fn(() => Promise.resolve(response(400, otherForm)));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).toEqual({ ok: false, error: { kind: "rate-limited", retryAt: null } });
+    expect(result).not.toHaveProperty("accessResumesAtMs");
+  });
+
+  it("gives no such time for another error class", async () => {
+    const fetch = jest.fn(() => Promise.resolve(response(402, spendCap)));
+    const result = await analysePhoto(input, { fetch, now: clock });
+    expect(result).not.toHaveProperty("accessResumesAtMs");
   });
 });

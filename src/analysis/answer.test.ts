@@ -365,18 +365,125 @@ describe("parseAnswerText, the fields of a match", () => {
   });
 });
 
-function messageBody(content: Json): string {
+function messageBody(content: Json, stopReason: Json = "end_turn"): string {
   return JSON.stringify({
     id: "msg_1",
     type: "message",
     role: "assistant",
     model: "claude-test",
     content,
-    stop_reason: "end_turn",
+    stop_reason: stopReason,
     stop_sequence: null,
     usage: { input_tokens: 1, output_tokens: 1 },
   });
 }
+
+/** A thinking block as Claude 5 models return it by default: `display` "omitted". */
+const omittedThinking = { type: "thinking", thinking: "", signature: "EosnCkYICxIMMb3LzNrMu" };
+const redactedThinking = { type: "redacted_thinking", data: "EmwKAhgBEgy3va3pzix" };
+
+describe("readMessageBody, thinking before the text", () => {
+  it("reads the text after an omitted thinking block, as Claude 5 models return it", () => {
+    const body = messageBody([
+      omittedThinking,
+      { type: "text", text: JSON.stringify(matchJson()) },
+    ]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: expectedMatch });
+  });
+
+  it("reads the text after several thinking blocks and a redacted one", () => {
+    const body = messageBody([
+      omittedThinking,
+      redactedThinking,
+      { type: "thinking", thinking: '{"result":"no_mushroom"}', signature: "x" },
+      { type: "text", text: '{"result":"cannot_tell"}' },
+    ]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: { result: "cannot_tell" } });
+  });
+
+  it("fails a message with thinking only and no text, though it ended its turn", () => {
+    expect(readMessageBody(messageBody([omittedThinking]))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the message has no text block",
+    });
+  });
+});
+
+describe("readMessageBody, a refusal", () => {
+  it.each([
+    ["no blocks", []],
+    ["thinking only", [omittedThinking]],
+    ["a text that is not JSON", [{ type: "text", text: "I can't help with that." }]],
+    ["a JSON text that fits the shape", [{ type: "text", text: '{"result":"no_mushroom"}' }]],
+    [
+      "two text blocks that join into JSON that fits the shape",
+      [
+        { type: "text", text: '{"result":' },
+        { type: "text", text: '"no_mushroom"}' },
+      ],
+    ],
+  ])("says it was refused, apart from a shape failure, when it holds %s", (_label, content) => {
+    expect(readMessageBody(messageBody(content, "refusal"))).toEqual({
+      ok: false,
+      reason: "refused",
+      detail: "the answer was refused (stop_reason refusal)",
+    });
+  });
+
+  it("still fails a body that is not from the API as not from the API", () => {
+    const body = JSON.stringify({ type: "page", stop_reason: "refusal" });
+    expect(readMessageBody(body)).toMatchObject({ ok: false, reason: "not-api" });
+  });
+});
+
+describe("readMessageBody, a cut-off answer", () => {
+  it.each([
+    ["thinking only", [omittedThinking]],
+    ["thinking and part of the JSON", [omittedThinking, { type: "text", text: '{"result":"ma' }]],
+    ["part of the JSON", [{ type: "text", text: '{"result":"match","names":{' }]],
+    ["no blocks", []],
+  ])("says it was cut off at max_tokens when it holds %s", (_label, content) => {
+    expect(readMessageBody(messageBody(content, "max_tokens"))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the answer was cut off (stop_reason max_tokens)",
+    });
+  });
+
+  it("says it was cut off when the context window was filled", () => {
+    const body = messageBody([omittedThinking], "model_context_window_exceeded");
+    expect(readMessageBody(body)).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the answer was cut off (stop_reason model_context_window_exceeded)",
+    });
+  });
+
+  it("does not accept a complete-looking JSON text when the answer was cut off", () => {
+    const body = messageBody([{ type: "text", text: '{"result":"no_mushroom"}' }], "max_tokens");
+    expect(readMessageBody(body)).toMatchObject({ ok: false, reason: "shape" });
+  });
+
+  it("still fails a body that is not from the API as not from the API", () => {
+    const body = JSON.stringify({ type: "page", stop_reason: "max_tokens" });
+    expect(readMessageBody(body)).toMatchObject({ ok: false, reason: "not-api" });
+  });
+
+  it.each([
+    ["no stop_reason", undefined],
+    ["a null stop_reason", null],
+    ["a stop_reason that is not a string", 5],
+    ["another stop_reason", "stop_sequence"],
+  ])("reads the answer with %s", (_label, stopReason) => {
+    const content = [{ type: "text", text: '{"result":"no_mushroom"}' }];
+    const body =
+      stopReason === undefined
+        ? JSON.stringify({ type: "message", content })
+        : messageBody(content, stopReason);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: { result: "no_mushroom" } });
+  });
+});
 
 describe("readMessageBody", () => {
   it("reads the answer from the message's text block", () => {
@@ -412,27 +519,83 @@ describe("readMessageBody", () => {
     expect(readMessageBody(messageBody([]))).toEqual({
       ok: false,
       reason: "shape",
-      detail: "the message has no single text block",
+      detail: "the message has no text block",
     });
   });
 
-  it("fails a message with two text blocks", () => {
+  it("joins two text blocks in order, with nothing between them, before parsing", () => {
+    // Split inside a JSON string, so that any separator changes the value or breaks the JSON.
     const body = messageBody([
-      { type: "text", text: "{" },
-      { type: "text", text: '"result":"no_mushroom"}' },
+      { type: "text", text: '{"result":"no_' },
+      { type: "text", text: 'mushroom"}' },
+    ]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: { result: "no_mushroom" } });
+  });
+
+  it("joins a match split over three text blocks, with other blocks between them", () => {
+    const text = JSON.stringify(matchJson());
+    const body = messageBody([
+      omittedThinking,
+      { type: "text", text: text.slice(0, 40) },
+      redactedThinking,
+      { type: "text", text: text.slice(40, 200) },
+      { type: "text", text: text.slice(200) },
+    ]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: expectedMatch });
+  });
+
+  it("joins the text blocks in their order, not another", () => {
+    const body = messageBody([
+      { type: "text", text: '"no_mushroom"}' },
+      { type: "text", text: '{"result":' },
     ]);
     expect(readMessageBody(body)).toEqual({
       ok: false,
       reason: "shape",
-      detail: "the message has no single text block",
+      detail: "the answer is not JSON",
     });
   });
 
-  it("fails a text block whose text is not a string", () => {
-    expect(readMessageBody(messageBody([{ type: "text", text: 5 }]))).toEqual({
+  it("fails joined text blocks that hold two JSON objects as not JSON", () => {
+    const body = messageBody([
+      { type: "text", text: '{"result":"no_mushroom"}' },
+      { type: "text", text: '{"result":"cannot_tell"}' },
+    ]);
+    expect(readMessageBody(body)).toEqual({
       ok: false,
       reason: "shape",
-      detail: "the message has no single text block",
+      detail: "the answer is not JSON",
+    });
+  });
+
+  it("fails joined text blocks whose answer does not fit the shape", () => {
+    const body = messageBody([
+      { type: "text", text: '{"result":' },
+      { type: "text", text: '"mushroom"}' },
+    ]);
+    expect(readMessageBody(body)).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "result is not one of match, no_mushroom, cannot_tell",
+    });
+  });
+
+  it.each([
+    ["a number", [{ type: "text", text: 5 }]],
+    ["missing", [{ type: "text" }]],
+    [
+      "not a string in one of several blocks",
+      [
+        { type: "text", text: '{"result":' },
+        { type: "text", text: null },
+        { type: "text", text: '"no_mushroom"}' },
+      ],
+    ],
+  ])("fails a text block whose text is %s, without coercing it", (_label, content) => {
+    expect(readMessageBody(messageBody(content))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "a text block's text is not a string",
     });
   });
 
@@ -465,4 +628,13 @@ describe("shownEdibility", () => {
       expect(shownEdibility(answer)).toBe("poisonous");
     },
   );
+
+  it("takes the edibility and the confidence alone, as the Log's summary of a find has them", () => {
+    const summary: { edibility: "edible"; confidence: "low" | "high" } = {
+      edibility: "edible",
+      confidence: "low",
+    };
+    expect(shownEdibility(summary)).toBe("unknown");
+    expect(shownEdibility({ ...summary, confidence: "high" })).toBe("edible");
+  });
 });

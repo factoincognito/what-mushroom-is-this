@@ -1,4 +1,5 @@
-import { act, render, screen } from "@testing-library/react-native";
+import { act, render, screen, waitFor } from "@testing-library/react-native";
+import { useEffect } from "react";
 import { Text } from "react-native";
 
 import type { KeyValueStore } from "../storage/keyValueStore";
@@ -211,6 +212,241 @@ describe("KeyProvider", () => {
     });
     expect(errors).not.toHaveBeenCalled();
     errors.mockRestore();
+  });
+});
+
+describe("KeyProvider, the key for analysis (PBI-1.7)", () => {
+  /** Reads the key for analysis in its own mount effect, which React runs before its parent's. */
+  function EarlyReader({ onRead }: { onRead: (result: unknown) => void }) {
+    const { readForAnalysis } = useApiKey();
+    useEffect(() => {
+      readForAnalysis().then(onRead);
+    }, [readForAnalysis, onRead]);
+    return null;
+  }
+
+  it("is not read before the first-start clearing has run, even from a child's mount effect", async () => {
+    // A key left from an earlier install; no marker, so this is the first start after an install.
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: A_KEY });
+    let releaseMarker: (value: string | null) => void = () => undefined;
+    const store: KeyValueStore = {
+      getItem: () =>
+        new Promise<string | null>((resolve) => {
+          releaseMarker = resolve;
+        }),
+      setItem: async () => undefined,
+    };
+    const onRead = jest.fn();
+    await render(
+      <KeyProvider secrets={secrets} store={store}>
+        <EarlyReader onRead={onRead} />
+      </KeyProvider>,
+    );
+    expect(onRead).not.toHaveBeenCalled();
+    await act(async () => {
+      releaseMarker(null);
+    });
+    expect(onRead).toHaveBeenCalledTimes(1);
+    expect(onRead).toHaveBeenCalledWith({ ok: true, key: null });
+  });
+
+  it("gives the saved key once the clearing has run at a later start", async () => {
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: A_KEY });
+    const onRead = jest.fn();
+    await render(
+      <KeyProvider secrets={secrets} store={memoryStore(MARKED)}>
+        <EarlyReader onRead={onRead} />
+      </KeyProvider>,
+    );
+    expect(onRead).toHaveBeenCalledWith({ ok: true, key: A_KEY });
+  });
+
+  it("gives the key saved since the start", async () => {
+    const secrets = memorySecrets();
+    await renderProvider(secrets, memoryStore(MARKED));
+    await act(async () => {
+      await current().save(` ${A_KEY}\n`);
+    });
+    await expect(current().readForAnalysis()).resolves.toEqual({ ok: true, key: A_KEY });
+  });
+
+  it("reports a key store that cannot be read", async () => {
+    const secrets = memorySecrets();
+    await renderProvider(secrets, memoryStore(MARKED));
+    secrets.getItemAsync = async () => {
+      throw new Error("Keystore unavailable");
+    };
+    await expect(current().readForAnalysis()).resolves.toEqual({ ok: false });
+  });
+});
+
+/** A plain store whose marker writes fail while `failWrites` is true. */
+function flakyStore(failWrites: {
+  value: boolean;
+}): KeyValueStore & { values: Map<string, string> } {
+  const store = memoryStore();
+  return {
+    values: store.values,
+    getItem: store.getItem,
+    setItem: async (key, value) => {
+      if (failWrites.value) {
+        throw new Error("disk full");
+      }
+      await store.setItem(key, value);
+    },
+  };
+}
+
+/** Waits until the startup has reported. */
+async function startupDone(): Promise<void> {
+  await waitFor(() => expect(screen.getByTestId("status")).not.toHaveTextContent("loading"));
+}
+
+describe("KeyProvider, a first-start clearing that failed (PBI-1.17)", () => {
+  it.each([
+    ["the marker cannot be written", "write"],
+    ["the marker cannot be read", "read"],
+    ["the key left from an earlier install cannot be removed", "delete"],
+  ] as const)(
+    "reports the key store as unreadable when %s, since what it holds cannot be trusted",
+    async (_name, failing) => {
+      const secrets = memorySecrets({ [API_KEY_STORE_KEY]: A_KEY });
+      if (failing === "delete") {
+        secrets.deleteItemAsync = async () => {
+          throw new Error("keychain locked");
+        };
+      }
+      const store = flakyStore({ value: failing === "write" });
+      if (failing === "read") {
+        store.getItem = async () => {
+          throw new Error("storage unavailable");
+        };
+      }
+      await renderProvider(secrets, store);
+      expect(await screen.findByText("unreadable")).toBeOnTheScreen();
+    },
+  );
+
+  it("does not lose a key saved after the marker could not be written: the save sets the marker first", async () => {
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: "sk-ant-left-over" });
+    const failWrites = { value: true };
+    const store = flakyStore(failWrites);
+    await renderProvider(secrets, store);
+    await startupDone();
+    failWrites.value = false;
+    await act(async () => {
+      await expect(current().save(A_KEY)).resolves.toEqual({ ok: true });
+    });
+    expect(store.values.get(INSTALL_MARKER_KEY)).toBe("installed");
+    await screen.unmount();
+
+    // The next start: the marker is there, so the key saved since is kept.
+    await renderProvider(secrets, store);
+    expect(await screen.findByText("stored")).toBeOnTheScreen();
+    expect(secrets.values.get(API_KEY_STORE_KEY)).toBe(A_KEY);
+  });
+
+  it("does not save a key while the marker still cannot be written, so the next start has none to delete", async () => {
+    const secrets = memorySecrets();
+    const store = flakyStore({ value: true });
+    await renderProvider(secrets, store);
+    await startupDone();
+    await act(async () => {
+      await expect(current().save(A_KEY)).resolves.toEqual({
+        ok: false,
+        reason: "store-failed",
+      });
+    });
+    expect(secrets.values.has(API_KEY_STORE_KEY)).toBe(false);
+    expect(screen.getByTestId("status")).not.toHaveTextContent("stored");
+  });
+
+  it("does not give the key left from an earlier install for analysis when it could not be cleared", async () => {
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: "sk-ant-left-over" });
+    secrets.deleteItemAsync = async () => {
+      throw new Error("keychain locked");
+    };
+    await renderProvider(secrets, memoryStore());
+    await startupDone();
+    await expect(current().readForAnalysis()).resolves.toEqual({ ok: false });
+  });
+
+  it("does not give a key for analysis when the marker could not be read", async () => {
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: A_KEY });
+    const store: KeyValueStore = {
+      getItem: async () => {
+        throw new Error("storage unavailable");
+      },
+      setItem: async () => undefined,
+    };
+    await renderProvider(secrets, store);
+    await startupDone();
+    await expect(current().readForAnalysis()).resolves.toEqual({ ok: false });
+    expect(secrets.values.get(API_KEY_STORE_KEY)).toBe(A_KEY);
+  });
+
+  it("gives the key for analysis once a save has set the marker", async () => {
+    const secrets = memorySecrets();
+    const failWrites = { value: true };
+    await renderProvider(secrets, flakyStore(failWrites));
+    await startupDone();
+    failWrites.value = false;
+    await act(async () => {
+      await current().save(A_KEY);
+    });
+    await expect(current().readForAnalysis()).resolves.toEqual({ ok: true, key: A_KEY });
+    expect(screen.getByTestId("status")).toHaveTextContent("stored");
+  });
+
+  it("removes a key while the clearing has failed, and reports no key", async () => {
+    const secrets = memorySecrets({ [API_KEY_STORE_KEY]: "sk-ant-left-over" });
+    secrets.deleteItemAsync = jest
+      .fn<Promise<void>, [string]>()
+      .mockRejectedValueOnce(new Error("keychain locked"))
+      .mockImplementation(async (key) => {
+        secrets.values.delete(key);
+      });
+    await renderProvider(secrets, memoryStore());
+    await startupDone();
+    await act(async () => {
+      await expect(current().remove()).resolves.toEqual({ ok: true });
+    });
+    expect(secrets.values.has(API_KEY_STORE_KEY)).toBe(false);
+    expect(screen.getByTestId("status")).toHaveTextContent("none");
+  });
+});
+
+describe("KeyProvider, the order of effects (PBI-1.17)", () => {
+  /** Saves a key in its own mount effect, which React runs before its parent's. */
+  function EarlySaver({ onSaved }: { onSaved: (result: unknown) => void }) {
+    const { save } = useApiKey();
+    useEffect(() => {
+      save(A_KEY).then(onSaved);
+    }, [save, onSaved]);
+    return <Probe />;
+  }
+
+  it("keeps a key saved from a child's mount effect at the first start: the save waits for the clearing", async () => {
+    const secrets = memorySecrets();
+    let releaseMarker: (value: string | null) => void = () => undefined;
+    const store = memoryStore();
+    store.getItem = () =>
+      new Promise<string | null>((resolve) => {
+        releaseMarker = resolve;
+      });
+    const onSaved = jest.fn();
+    await render(
+      <KeyProvider secrets={secrets} store={store}>
+        <EarlySaver onSaved={onSaved} />
+      </KeyProvider>,
+    );
+    expect(secrets.values.has(API_KEY_STORE_KEY)).toBe(false);
+    await act(async () => {
+      releaseMarker(null);
+    });
+    expect(onSaved).toHaveBeenCalledWith({ ok: true });
+    expect(secrets.values.get(API_KEY_STORE_KEY)).toBe(A_KEY);
+    expect(screen.getByTestId("status")).toHaveTextContent("stored");
   });
 });
 
