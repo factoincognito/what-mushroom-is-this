@@ -8,7 +8,7 @@
   "libraries": [
     {
       "name": "expo",
-      "version": "57.0.26",
+      "version": "57.0.32",
       "licence": "MIT",
       "source": "https://github.com/expo/expo",
       "textId": "expo"
