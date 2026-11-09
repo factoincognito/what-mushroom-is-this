@@ -39,18 +39,71 @@ describe("roundHalfToEven", () => {
   );
 });
 
+/** The token count of a valid size, or a thrown error that fails the test. */
+function tokens(width: number, height: number, patchSize: number): number {
+  const result = countImageTokens(width, height, patchSize);
+  if (!result.ok) {
+    throw new Error(`expected a token count for ${width} x ${height}, got ${result.reason}`);
+  }
+  return result.tokens;
+}
+
 describe("countImageTokens", () => {
   it("counts one token per started patch on each edge", () => {
-    expect(countImageTokens(1075, 1520, 28)).toBe(39 * 55);
-    expect(countImageTokens(28, 28, 28)).toBe(1);
-    expect(countImageTokens(29, 28, 28)).toBe(2);
+    expect(countImageTokens(1075, 1520, 28)).toEqual({ ok: true, tokens: 39 * 55 });
+    expect(countImageTokens(28, 28, 28)).toEqual({ ok: true, tokens: 1 });
+    expect(countImageTokens(29, 28, 28)).toEqual({ ok: true, tokens: 2 });
+    expect(countImageTokens(1, 1, 1)).toEqual({ ok: true, tokens: 1 });
+  });
+
+  it.each<[string, number, number]>([
+    ["a zero width", 0, 100],
+    ["a zero height", 100, 0],
+    ["a negative width", -1075, 1520],
+    ["a fractional height", 1075, 1520.5],
+    ["a NaN width", Number.NaN, 1520],
+    ["an infinite height", 1075, Number.POSITIVE_INFINITY],
+    ["a width beyond the safe integers", 2 ** 53, 1520],
+  ])("rejects %s as an invalid size", (_label, width, height) => {
+    expect(countImageTokens(width, height, 28)).toEqual({ ok: false, reason: "invalid-size" });
+  });
+
+  it.each<[string, number]>([
+    ["a zero patch size, which would give Infinity", 0],
+    ["a negative patch size", -28],
+    ["a fractional patch size", 28.5],
+    ["a NaN patch size", Number.NaN],
+    ["an infinite patch size", Number.POSITIVE_INFINITY],
+    ["a patch size beyond the safe integers", 2 ** 53],
+  ])("rejects %s as an invalid patch size", (_label, patchSize) => {
+    expect(countImageTokens(1075, 1520, patchSize)).toEqual({
+      ok: false,
+      reason: "invalid-patch-size",
+    });
+  });
+
+  it.each<[string, unknown, unknown, unknown, string]>([
+    ["a width given as a string", "1075", 1520, 28, "invalid-size"],
+    ["a height given as a string", 1075, "1520", 28, "invalid-size"],
+    ["a width given as null", null, 1520, 28, "invalid-size"],
+    ["a patch size given as a string", 1075, 1520, "28", "invalid-patch-size"],
+    ["a patch size given as undefined", 1075, 1520, undefined, "invalid-patch-size"],
+  ])("rejects %s, without coercing it", (_label, width, height, patchSize, reason) => {
+    expect(countImageTokens(width as number, height as number, patchSize as number)).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+
+  it("checks the size before the patch size", () => {
+    expect(countImageTokens(0, 1520, 0)).toEqual({ ok: false, reason: "invalid-size" });
   });
 });
 
 describe("resizedSize: the docs example and the 4:3 sizes", () => {
   it("resizes the docs example 1075 x 1520 to 924 x 1307 on the standard tier", () => {
     expect(resizedSize(1075, 1520, STANDARD_TIER)).toEqual({ ok: true, width: 924, height: 1307 });
-    expect(countImageTokens(924, 1307, 28)).toBe(1551);
+    expect(tokens(924, 1307, 28)).toBe(1551);
   });
 
   it("leaves the docs example 1075 x 1520 unchanged on the high-resolution tier", () => {
@@ -63,13 +116,13 @@ describe("resizedSize: the docs example and the 4:3 sizes", () => {
 
   it("resizes a 4:3 photo, 4032 x 3024, to 1270 x 952 (1,564 tokens) on the standard tier", () => {
     expect(resizedSize(4032, 3024, STANDARD_TIER)).toEqual({ ok: true, width: 1270, height: 952 });
-    expect(countImageTokens(1270, 952, 28)).toBe(1564);
+    expect(tokens(1270, 952, 28)).toBe(1564);
   });
 
-  it("keeps 1270 at the 952.5 tie, which Math.round would round to 953 (1,610 tokens, too many)", () => {
+  it("has a 4:3 short edge of exactly 952.5 at 1270, and 1270 x 953 costs 1,610 tokens, more than the standard tier allows", () => {
     expect(1270 / (4032 / 3024)).toBe(952.5);
-    expect(countImageTokens(1270, 953, 28)).toBe(1610);
-    expect(countImageTokens(1270, 953, 28)).toBeGreaterThan(STANDARD_TIER.maxTokens);
+    expect(tokens(1270, 953, 28)).toBe(1610);
+    expect(tokens(1270, 953, 28)).toBeGreaterThan(STANDARD_TIER.maxTokens);
   });
 
   it("resizes a 4:3 photo, 4032 x 3024, to 2212 x 1659 (4,740 tokens) on the high-resolution tier", () => {
@@ -78,7 +131,7 @@ describe("resizedSize: the docs example and the 4:3 sizes", () => {
       width: 2212,
       height: 1659,
     });
-    expect(countImageTokens(2212, 1659, 28)).toBe(4740);
+    expect(tokens(2212, 1659, 28)).toBe(4740);
   });
 
   it("resizes a portrait 3:4 photo, 3024 x 4032, to 952 x 1270 on the standard tier", () => {
@@ -101,7 +154,7 @@ describe("resizedSize: other sizes", () => {
 
   it("resizes 4000 x 1800 to 1568 x 706 on the standard tier, limited by the long edge", () => {
     expect(resizedSize(4000, 1800, STANDARD_TIER)).toEqual({ ok: true, width: 1568, height: 706 });
-    expect(countImageTokens(1568, 706, 28)).toBeLessThan(STANDARD_TIER.maxTokens);
+    expect(tokens(1568, 706, 28)).toBeLessThan(STANDARD_TIER.maxTokens);
   });
 
   it("resizes a square 2000 x 2000 to 1092 x 1092 on the standard tier", () => {
@@ -150,9 +203,7 @@ describe("resizedSize: other sizes", () => {
         const p = limits.patchSize;
         expect(Math.ceil(result.width / p) * p).toBeLessThanOrEqual(limits.maxEdge);
         expect(Math.ceil(result.height / p) * p).toBeLessThanOrEqual(limits.maxEdge);
-        expect(countImageTokens(result.width, result.height, p)).toBeLessThanOrEqual(
-          limits.maxTokens,
-        );
+        expect(tokens(result.width, result.height, p)).toBeLessThanOrEqual(limits.maxTokens);
         if (result.width !== width || result.height !== height) {
           const long = Math.max(result.width, result.height) + 1;
           const short = Math.max(
@@ -162,7 +213,7 @@ describe("resizedSize: other sizes", () => {
           const grownFits =
             Math.ceil(long / p) * p <= limits.maxEdge &&
             Math.ceil(short / p) * p <= limits.maxEdge &&
-            countImageTokens(long, short, p) <= limits.maxTokens;
+            tokens(long, short, p) <= limits.maxTokens;
           expect(grownFits).toBe(false);
         }
       }
