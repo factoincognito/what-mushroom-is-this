@@ -59,7 +59,7 @@ export interface FindStore {
   get(id: number): Promise<Find | null>;
   /**
    * What the Log list shows of every find, the latest taken first. A find whose row cannot be read
-   * is marked unreadable in its place, and the others are listed all the same.
+   * as `get` reads it is marked unreadable in its place, and the others are listed all the same.
    */
   list(): Promise<ListedFind[]>;
   /**
@@ -93,13 +93,23 @@ export interface StoreOptions {
 
 const INSERT = `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude,
   accuracy_m, position_source, photo_file, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting')`;
-const FIND_COLUMNS = `id, taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m,
-  position_source, photo_file, state, failure_cause, failure_detail, answer_json, model,
-  analysed_at_ms`;
+/**
+ * A time column, given back only within JavaScript's safe-integer range and otherwise as NULL,
+ * which the store reads as a row it cannot read. The schema's CHECK keeps the times in that range;
+ * this covers a value that passed it by (a damaged file), which some drivers cannot hand back at
+ * all (`node:sqlite` throws a RangeError for the whole statement).
+ */
+const safeTime = (column: string) =>
+  `CASE WHEN ${column} BETWEEN ${-Number.MAX_SAFE_INTEGER} AND ${Number.MAX_SAFE_INTEGER}
+  THEN ${column} END AS ${column}`;
+/** Every column of a find, as `get`, the queue's pick and the list all read it. */
+const FIND_COLUMNS = `id, ${safeTime("taken_at_ms")}, utc_offset_min, time_source, latitude,
+  longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail,
+  answer_json, model, ${safeTime("analysed_at_ms")}`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE id = ?`;
-const LIST = `SELECT id, taken_at_ms, utc_offset_min, time_source, photo_file, state, failure_cause,
-  failure_detail, result, name_sv, name_en, name_it, edibility, confidence FROM finds
-  ORDER BY taken_at_ms DESC, id DESC`;
+/** The finds, the latest taken first, by the stored time (`finds.`, not the column read). */
+const LIST = `SELECT ${FIND_COLUMNS}, result, name_sv, name_en, name_it, edibility, confidence
+  FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /** The waiting find saved first after a given ID. */
 const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND id > ?
   ORDER BY id ASC LIMIT 1`;
@@ -314,7 +324,7 @@ function record(row: unknown): Row {
 
 function readFind(row: Row, photos: PhotoFiles): Find {
   return {
-    id: integerOf(row, "id"),
+    id: idOf(row),
     photoUri: photos.uriOf(textOf(row, "photo_file")),
     time: readTime(row),
     position: readPosition(row),
@@ -335,10 +345,16 @@ function readsAsFind(row: Row, photos: PhotoFiles): boolean {
   }
 }
 
-/** A row of the list, or its mark when it cannot be read. */
+/**
+ * A row of the list, or its mark when it cannot be read. A row is judged as `get` and the queue's
+ * pick judge it, by reading the whole find, its position and its answer included, so the Log
+ * never shows as readable a find whose screen cannot open or which the queue passes over.
+ */
 function listed(stored: unknown, photos: PhotoFiles): ListedFind {
   try {
-    return { readable: true, ...readSummary(record(stored), photos) };
+    const row = record(stored);
+    readFind(row, photos);
+    return { readable: true, ...readSummary(row, photos) };
   } catch (error) {
     if (!isCorrupt(error)) {
       throw error;
@@ -359,7 +375,7 @@ function isCorrupt(error: unknown): boolean {
 
 function readSummary(row: Row, photos: PhotoFiles): FindSummary {
   return {
-    id: integerOf(row, "id"),
+    id: idOf(row),
     photoUri: photos.uriOf(textOf(row, "photo_file")),
     time: readTime(row),
     analysis: readSummaryAnalysis(row),
@@ -459,6 +475,15 @@ function integerOf(row: Row, column: string): number {
     throw corrupt(`the stored ${column} is not a whole number`);
   }
   return value;
+}
+
+/** The find's ID, read by the rule `checkId` applies to an ID given to the store. */
+function idOf(row: Row): number {
+  const id = integerOf(row, "id");
+  if (id < 1) {
+    throw corrupt("the stored id is not a positive whole number");
+  }
+  return id;
 }
 
 function enumOf<T extends string>(row: Row, column: string, values: readonly T[]): T {

@@ -12,13 +12,14 @@ import { corrupt, StoreError } from "./find";
  * Version 1: one row per find, its answer as JSON and, beside it, what the Log list shows. Not yet
  * released, so it is still changed in place: the failure causes `photo` (PBI-1.7) and `refused`
  * (PBI-1.21) were added without a migration (Clead's decisions on #17 and for PBI-1.21), and the
- * table made STRICT, with a CHECK on the edibility (PBI-1.16). The edibilities are written out,
- * not taken from the analysis module, so a later change there cannot change this version.
+ * table made STRICT, with a CHECK on the edibility and the two times kept within JavaScript's
+ * safe-integer range (PBI-1.16). The edibilities are written out, not taken from the analysis
+ * module, so a later change there cannot change this version.
  */
 const VERSION_1 = `
 CREATE TABLE finds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  taken_at_ms INTEGER NOT NULL,
+  taken_at_ms INTEGER NOT NULL CHECK (taken_at_ms BETWEEN -9007199254740991 AND 9007199254740991),
   utc_offset_min INTEGER NOT NULL CHECK (utc_offset_min BETWEEN -1080 AND 1080),
   time_source TEXT NOT NULL CHECK (time_source IN ('saved', 'photo', 'photo-phone-offset')),
   latitude REAL CHECK (latitude BETWEEN -90 AND 90),
@@ -31,7 +32,7 @@ CREATE TABLE finds (
   failure_detail TEXT,
   answer_json TEXT,
   model TEXT,
-  analysed_at_ms INTEGER,
+  analysed_at_ms INTEGER CHECK (analysed_at_ms BETWEEN -9007199254740991 AND 9007199254740991),
   result TEXT CHECK (result IN ('match', 'no_mushroom', 'cannot_tell')),
   name_sv TEXT,
   name_en TEXT,

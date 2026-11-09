@@ -1,6 +1,6 @@
 /**
  * The queue over the real find store on a real SQLite (`src/testing/sqliteDatabase.ts`): what the
- * queue does with a waiting find the store cannot read (PBI-1.16).
+ * queue does with a waiting find the store cannot read, and how the list shows it (PBI-1.16).
  */
 
 import type { AnalysisInput } from "../analysis/analyse";
@@ -61,20 +61,43 @@ afterEach(() => {
 });
 
 /**
- * Inserts a waiting find, taken latest, whose time source the store does not know; gives its ID.
- * It is written past the CHECKs, as a row the constraints did not guard (a damaged file, say).
+ * Inserts a waiting find, taken latest, past the CHECKs, as a row the constraints did not guard
+ * (a damaged file, say); gives its ID.
  */
-function insertUnreadableWaiting(): number {
+function insertPastChecks(columns: string, values: string, ...params: unknown[]): number {
   sqlite.exec("PRAGMA ignore_check_constraints = ON");
-  const { lastInsertRowid } = sqlite
-    .prepare(
-      `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
-        VALUES (9000000, 0, 'gps', 'unreadable.jpg', 'waiting')`,
-    )
-    .run();
-  sqlite.exec("PRAGMA ignore_check_constraints = OFF");
-  return Number(lastInsertRowid);
+  try {
+    const { lastInsertRowid } = sqlite
+      .prepare(
+        `INSERT INTO finds (utc_offset_min, photo_file, state, ${columns})
+          VALUES (0, 'unreadable.jpg', 'waiting', ${values})`,
+      )
+      .run(...params);
+    return Number(lastInsertRowid);
+  } finally {
+    sqlite.exec("PRAGMA ignore_check_constraints = OFF");
+  }
 }
+
+/** The kinds of waiting row the store cannot read. */
+const KINDS: [string, () => number][] = [
+  [
+    "a time source the store does not know",
+    () => insertPastChecks("taken_at_ms, time_source", "9000000, 'gps'"),
+  ],
+  [
+    "a position source the store does not know (Clead's review of #26, fix 1)",
+    () =>
+      insertPastChecks(
+        "taken_at_ms, time_source, latitude, longitude, position_source",
+        "9000000, 'saved', 1, 2, 'gps'",
+      ),
+  ],
+  [
+    "a time taken past 2^53 (Clead's review of #26, decision 3)",
+    () => insertPastChecks("taken_at_ms, time_source", "?, 'saved'", 2n ** 53n + 1n),
+  ],
+];
 
 function stateOf(id: number): unknown {
   return sqlite.prepare("SELECT state FROM finds WHERE id = ?").get(id);
@@ -82,7 +105,7 @@ function stateOf(id: number): unknown {
 
 const takenAt = { utcOffsetMinutes: 60, source: "saved" } as const;
 
-describe("a waiting find the store cannot read (PBI-1.16)", () => {
+describe.each(KINDS)("a waiting find with %s (PBI-1.16)", (_kind, insertUnreadableWaiting) => {
   it("is passed over: the run analyses the finds after it and is not stopped, and it stays waiting", async () => {
     const unreadable = insertUnreadableWaiting();
     const first = await store.add({

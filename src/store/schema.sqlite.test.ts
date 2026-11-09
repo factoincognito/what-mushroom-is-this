@@ -90,19 +90,61 @@ function insertMatch(edibility: string): void {
 }
 
 /**
- * Inserts a waiting find, taken latest, whose time source the store does not know; gives its ID.
- * It is written past the CHECKs, as a row the constraints did not guard (a damaged file, say).
+ * Runs an INSERT past the CHECKs, as a row the constraints did not guard (a damaged file, say);
+ * gives the row's ID. STRICT typing, NOT NULL and UNIQUE still apply.
  */
-function insertUnreadableWaiting(photo: string): number {
+function insertPastChecks(sql: string, ...params: unknown[]): number {
   sqlite.exec("PRAGMA ignore_check_constraints = ON");
-  const { lastInsertRowid } = sqlite
+  try {
+    return Number(sqlite.prepare(sql).run(...params).lastInsertRowid);
+  } finally {
+    sqlite.exec("PRAGMA ignore_check_constraints = OFF");
+  }
+}
+
+/** Inserts a waiting find, taken latest, whose time source the store does not know. */
+function insertUnreadableWaiting(photo: string): number {
+  return insertPastChecks(
+    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
+      VALUES (9000000, 0, 'gps', ?, 'waiting')`,
+    photo,
+  );
+}
+
+/** Inserts a waiting find, taken latest, whose position source the store does not know. */
+function insertWaitingWithUnreadablePosition(photo: string): number {
+  return insertPastChecks(
+    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude,
+      position_source, photo_file, state) VALUES (9000000, 0, 'saved', 1, 2, 'gps', ?, 'waiting')`,
+    photo,
+  );
+}
+
+/** 2^53 + 1, the first integer past JavaScript's safe range that is not 2^53 itself. */
+const PAST_SAFE = 2n ** 53n + 1n;
+
+/** Inserts a waiting find taken at a time past 2^53, which no JavaScript number holds exactly. */
+function insertWaitingPastSafeTime(photo: string): number {
+  return insertPastChecks(
+    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
+      VALUES (?, 0, 'saved', ?, 'waiting')`,
+    PAST_SAFE,
+    photo,
+  );
+}
+
+/** Inserts a find with the times given, without passing the CHECKs by. */
+function insertTimes(takenAtMs: bigint | number, analysedAtMs: bigint | number | null): void {
+  sqlite
     .prepare(
-      `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
-        VALUES (9000000, 0, 'gps', ?, 'waiting')`,
+      analysedAtMs === null
+        ? `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
+            VALUES (?, 0, 'saved', 't.jpg', 'waiting')`
+        : `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state,
+            answer_json, model, analysed_at_ms, result) VALUES (?, 0, 'saved', 't.jpg', 'done',
+            '{"result":"no_mushroom"}', 'm', ?, 'no_mushroom')`,
     )
-    .run(photo);
-  sqlite.exec("PRAGMA ignore_check_constraints = OFF");
-  return Number(lastInsertRowid);
+    .run(...(analysedAtMs === null ? [takenAtMs] : [takenAtMs, analysedAtMs]));
 }
 
 function stateOf(id: number): unknown {
@@ -146,6 +188,30 @@ describe("schema version 1 on a real SQLite", () => {
 
   it("refuses a failure cause the store does not know", () => {
     expect(() => insertFailed("bad-luck")).toThrow(/CHECK constraint failed/);
+  });
+
+  it.each([
+    ["the largest", Number.MAX_SAFE_INTEGER],
+    ["the smallest", -Number.MAX_SAFE_INTEGER],
+  ])(
+    "accepts %s safe integer as the time taken and as the analysis time (PBI-1.16)",
+    (_name, ms) => {
+      expect(() => insertTimes(ms, ms)).not.toThrow();
+    },
+  );
+
+  it.each([
+    ["2^53", 2n ** 53n],
+    ["-2^53", -(2n ** 53n)],
+  ])("refuses %s as the time taken, past the safe-integer range (PBI-1.16)", (_name, ms) => {
+    expect(() => insertTimes(ms, null)).toThrow(/CHECK constraint failed/);
+  });
+
+  it.each([
+    ["2^53", 2n ** 53n],
+    ["-2^53", -(2n ** 53n)],
+  ])("refuses %s as the analysis time, past the safe-integer range (PBI-1.16)", (_name, ms) => {
+    expect(() => insertTimes(1, ms)).toThrow(/CHECK constraint failed/);
   });
 
   it.each(EDIBILITIES)("accepts the edibility %s of the answer's shape (PBI-1.16)", (edibility) => {
@@ -375,11 +441,67 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
     expect(stateOf(unreadable)).toBeUndefined();
   });
 
-  it("refuses to read a done find whose stored answer is not of the shape, which the list, reading no answer, still shows", async () => {
-    const id = await store.add(newFind(1_000));
-    await store.setAnswer(id, analysed);
-    sqlite.prepare("UPDATE finds SET answer_json = '{' WHERE id = ?").run(id);
-    await expect(store.get(id)).rejects.toMatchObject({ code: "corrupt" });
-    await expect(store.list()).resolves.toEqual([expect.objectContaining({ readable: true, id })]);
-  });
+  /** The kinds of waiting row the store cannot read, each taken latest. */
+  const unreadableWaiting: [string, (photo: string) => number][] = [
+    ["a time source it does not know", insertUnreadableWaiting],
+    [
+      "a position source it does not know (Clead's review of #26, fix 1)",
+      insertWaitingWithUnreadablePosition,
+    ],
+    ["a time taken past 2^53 (Clead's review of #26, decision 3)", insertWaitingPastSafeTime],
+  ];
+
+  it.each(unreadableWaiting)(
+    "judges a waiting row with %s the same way in the list, the queue's pick and get",
+    async (_name, insert) => {
+      const before = await store.add(newFind(1_000));
+      const unreadable = insert("u1.jpg");
+      const after = await store.add(newFind(2_000));
+      await expect(store.list()).resolves.toEqual([
+        { readable: false, id: unreadable },
+        expect.objectContaining({ readable: true, id: after }),
+        expect.objectContaining({ readable: true, id: before }),
+      ]);
+      await expect(store.oldestWaiting()).resolves.toBe(before);
+      await store.markFailed(before, { cause: "photo", detail: "gone" });
+      await expect(store.oldestWaiting()).resolves.toBe(after);
+      await expect(store.get(unreadable)).rejects.toMatchObject({ code: "corrupt" });
+      expect(stateOf(unreadable)).toEqual({ state: "waiting" });
+    },
+  );
+
+  /** Makes the done find `id` unreadable, past the CHECKs. */
+  const unreadableDone: [string, (id: number) => void][] = [
+    [
+      "a stored answer not of the shape (Clead's review of #26, decision 2)",
+      (id) => {
+        sqlite.prepare("UPDATE finds SET answer_json = '{' WHERE id = ?").run(id);
+      },
+    ],
+    [
+      "an analysis time past 2^53 (Clead's review of #26, decision 3)",
+      (id) => {
+        insertPastChecks("UPDATE finds SET analysed_at_ms = ? WHERE id = ?", PAST_SAFE, id);
+      },
+    ],
+  ];
+
+  it.each(unreadableDone)(
+    "marks a done find with %s unreadable in the list, by its ID, which get refuses and delete still removes",
+    async (_name, damage) => {
+      const id = await store.add(newFind(1_000));
+      await store.setAnswer(id, analysed);
+      const other = await store.add(newFind(500));
+      damage(id);
+      await expect(store.list()).resolves.toEqual([
+        { readable: false, id },
+        expect.objectContaining({ readable: true, id: other }),
+      ]);
+      await expect(store.get(id)).rejects.toMatchObject({ code: "corrupt" });
+      await expect(store.delete(id)).resolves.toEqual({ photoRemoved: true });
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: other }),
+      ]);
+    },
+  );
 });

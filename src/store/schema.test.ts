@@ -143,8 +143,14 @@ describe("schema version 1", () => {
     expect(v1).toContain("CHECK ((state = 'failed') = (failure_cause IS NOT NULL))");
   });
 
-  it("is a STRICT table, so SQLite refuses a value of the wrong type (PBI-1.16)", () => {
+  it("declares the table STRICT (PBI-1.16; the refusal itself is in schema.sqlite.test.ts)", () => {
     expect(v1).toMatch(/\) STRICT;/);
+  });
+
+  it("keeps both times within JavaScript's safe-integer range (Clead's review of #26, decision 3)", () => {
+    const range = `BETWEEN ${-Number.MAX_SAFE_INTEGER} AND ${Number.MAX_SAFE_INTEGER}`;
+    expect(v1).toContain(`taken_at_ms INTEGER NOT NULL CHECK (taken_at_ms ${range})`);
+    expect(v1).toContain(`analysed_at_ms INTEGER CHECK (analysed_at_ms ${range})`);
   });
 
   it("lets the database refuse an edibility the answer's shape does not have (PBI-1.16)", () => {
