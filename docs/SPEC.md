@@ -10,10 +10,14 @@ with Clead's recommendations; the licence and the Italian disclaimer
 19:28. Phase 2 (3.9): intent approved by Adam, 2026-11-09 20:49, in
 chat ("apyr"), with Clead's two proposals (the disclaimer for a lookup
 without photos, and the edibility until the self-check agrees) and the
-choices marked **[Clead]** at that time (#47). The choices marked
-**[Clead]** later (#50) Adam confirmed on 2026-11-09 at 21:36, in chat
-("apyr"), answering Clead's list of them. The approved text and its
-decisions are
+choices marked **[Clead]** at that time (#47). Of the choices marked
+**[Clead]** later (#50), Adam confirmed five on 2026-11-09 at 21:36, in
+chat ("apyr"), answering Clead's list of them: Wikimedia's standard
+thumbnail widths, the map's credit folding to "(i)" and listed in
+About, no offline map downloads, the library's own location engine,
+and the rule for a picture under several licences. The other choices
+marked **[Clead]** in #50 are proposals until he confirms them
+(`RULES.md` § 7 (3)). The approved text and its decisions are
 recorded in the product
 office (`library/designs/what-mushroom-is-this/design.md` and
 `DECISIONS.md` in `factoincognito/product-office`, private). This file
@@ -81,7 +85,8 @@ There is no server. Phase 2 adds the text and the several photos of a
 lookup, sent for analysis, the area the map shows, sent to the map
 provider for its tiles, the Latin name of a text lookup's species, sent
 to Wikimedia for its picture, and that picture, sent to Anthropic for the
-self-check (3.9, Adam's decisions, 2026-11-09).
+self-check (3.9, Adam's decisions, 2026-11-09). The map provider's tiles
+may come through Cloudflare as its CDN (3.9).
 
 ## 3. Component specs
 
@@ -453,12 +458,14 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   item, found by its Latin name, fetched as a JPEG or PNG thumbnail at
   the smallest of Wikimedia's standard widths at or above the width the
   resize of 3.3 needs (3840 when the need is above that, and the
-  original's own width when it is narrower), then resized on the phone
+  original's own width when the original is narrower than the chosen
+  standard width), then resized on the phone
   (**[Clead]**; **[not checked]**: that the thumbnail URL returns such
   widths, Known unknown 15). Its licence must be CC0, public domain
   without a country limit, CC BY or CC BY-SA; any other licence means no
   picture (Adam, 2026-11-09 21:27). A file under several licences is used
-  when one of them is on that list, and is credited under that one
+  when one of them is on that list, and is credited under the first of
+  its listed licences in the order CC0, public domain, CC BY, CC BY-SA
   (**[Clead]**).
 - The picture, and the check below, belong to an answer from text alone.
   When a text find gets photos, it keeps its answer, its picture and its
@@ -595,7 +602,8 @@ answers to Clead's questions, 19:05).
   OpenFreeMap's vector tiles; the style URL is configuration (the
   escalation under the IP policy, decided by Adam, 2026-11-09 21:27).
   The map shows the attribution that OpenStreetMap's attribution
-  guidelines and OpenMapTiles ask for (PBI-2.1's findings): OpenStreetMap,
+  guidelines and OpenMapTiles ask for (PBI-2.1's findings; with the map,
+  Adam's decision, 2026-11-09 21:27): OpenStreetMap,
   with a link to its copyright page, and OpenMapTiles. It may collapse to
   an "(i)" button, and is also listed in About (**[Clead]**;
   **[not checked]**: the default attribution of the library, Known
@@ -677,12 +685,12 @@ answers to Clead's questions, 19:05).
     - each image introduced by "Image 1:" and so on, the images before the
       text.
     Five photos at 3.3's sizes are within these. Settled.
-13. Phase 2's library for picking from the phone's files (3.9):
-    `expo-document-picker`, with `type: 'image/*'` and
+13. Phase 2's library for picking from the phone's files (3.9)
+    (**[Clead]**, on PBI-2.1's findings): `expo-document-picker`, with
+    `type: 'image/*'` and
     `copyToCacheDirectory` on, so that `expo-image-manipulator` reads a
     local file; the copy then goes into the app's photo store. Its
-    `lastModified` is never used as the photo's time (**[Clead]**, on
-    PBI-2.1's findings). To be checked on the phone: `content://` sources,
+    `lastModified` is never used as the photo's time. To be checked on the phone: `content://` sources,
     and HEIC and SVG files (PBI-2.6).
 14. Whether resizing up to five photos for one request (one at a time,
     3.9) brings back the low-memory load failures PBI-1.25 was written
