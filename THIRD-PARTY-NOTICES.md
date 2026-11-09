@@ -65,6 +65,17 @@ whose NOTICE duty is PBI-1.9's.
 | `androidx.core:core-ktx` | 1.17.0 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
 | `androidx.exifinterface:exifinterface` | 1.4.1 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
 
+### The native libraries `expo-image-loader` and `expo-image-manipulator` build in
+
+Read on 2026-11-09, as above. Mode "depend" for each. Both licences are permissive (Appendix
+A.3). Their own dependencies (behind Glide, and `SDWebImage` and `libwebp` behind the WebP coder)
+are for the release gate and PBI-1.9.
+
+| Library | Version | Licence | Mode | Source | Where the licence was read |
+|---|---|---|---|---|---|
+| `com.github.bumptech.glide:glide` (Android, through `expo-image-loader`'s `android/build.gradle`) | 5.0.5 | BSD-2-Clause ("Simplified BSD License") and Apache-2.0 | depend | https://github.com/bumptech/glide | version 5.0.5's licences, "Apache 2.0" and "BSD", on https://badges.mvnrepository.com/artifact/com.github.bumptech.glide/glide/5.0.5/changes; their names and URLs from the POM on Maven Central, https://central.sonatype.com/artifact/com.github.bumptech.glide/glide, which shows version 5.0.9, not 5.0.5 |
+| `SDWebImageWebPCoder` (iOS, a CocoaPods dependency in `expo-image-manipulator`'s `ios/ExpoImageManipulator.podspec`) | not pinned: the podspec names no version, so CocoaPods chooses it at the iOS build; the release gate fixes it and reads its licence for that version | MIT ("available under the MIT license") | depend | https://github.com/SDWebImage/SDWebImageWebPCoder | https://www.cocoapods.org/pods/SDWebImageWebPCoder, which shows version 0.15.0 |
+
 ## Development tools
 
 | Library | Version | Licence | Mode | Source | Added for |

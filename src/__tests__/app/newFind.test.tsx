@@ -275,6 +275,43 @@ describe("a photo from the camera", () => {
     expect(screen.getByText(STRINGS.en.newFind.saved)).toBeOnTheScreen();
   });
 
+  it("keeps the photo whose save failed: offers Save again and Discard, and no new photo, until one is chosen", async () => {
+    mockLog.addErrors = [new Error("database is locked")];
+    jest
+      .mocked(ImagePicker.launchCameraAsync)
+      .mockResolvedValue(wrong({ canceled: false, assets: [cameraPhoto] }));
+    await openNewFind();
+    expect(screen.getByRole("button", { name: STRINGS.en.newFind.retrySave })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: STRINGS.en.newFind.discardPhoto })).toBeOnTheScreen();
+    expect(
+      screen.queryByRole("button", { name: STRINGS.en.newFind.takePhoto }),
+    ).not.toBeOnTheScreen();
+    expect(
+      screen.queryByRole("button", { name: STRINGS.en.newFind.pickFromGallery }),
+    ).not.toBeOnTheScreen();
+  });
+
+  it("drops the photo whose save failed only when the user discards it, then offers a new photo", async () => {
+    mockLog.addErrors = [new Error("database is locked")];
+    jest
+      .mocked(ImagePicker.launchCameraAsync)
+      .mockResolvedValueOnce(wrong({ canceled: false, assets: [cameraPhoto] }));
+    await openNewFind();
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.discardPhoto }));
+    await settle();
+    expect(mockLog.added).toEqual([]);
+    expect(
+      screen.queryByRole("button", { name: STRINGS.en.newFind.retrySave }),
+    ).not.toBeOnTheScreen();
+    jest
+      .mocked(ImagePicker.launchImageLibraryAsync)
+      .mockResolvedValue(wrong({ canceled: false, assets: [galleryPhoto] }));
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.pickFromGallery }));
+    await settle();
+    expect(mockLog.added).toHaveLength(1);
+    expect(mockLog.added[0]?.photoUri).toBe(galleryPhoto.uri);
+  });
+
   it("can be taken again after the camera was closed without a photo", async () => {
     await openNewFind();
     expect(mockLog.added).toEqual([]);

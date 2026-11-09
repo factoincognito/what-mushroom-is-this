@@ -28,7 +28,10 @@ export interface NewFindView {
   message: NewFindMessage | null;
   /** The location permission, once known. */
   location: PermissionState | null;
-  /** Whether the photo whose save failed can be saved again. */
+  /**
+   * Whether a photo whose save failed is kept: it can be saved again or discarded, and no new
+   * photo is taken until one of the two.
+   */
   canRetrySave: boolean;
 }
 
@@ -87,7 +90,14 @@ export class NewFindFlow {
     await this.takePhoto();
   }
 
+  /**
+   * Opens the camera. While a photo whose save failed is kept, no new photo is taken: the kept
+   * one is saved again or discarded first, so it is never dropped without the user's say.
+   */
   async takePhoto(): Promise<void> {
+    if (this.pending !== null) {
+      return;
+    }
     const camera = await ensurePermission(this.deps.camera.permission, {
       askAgainWhenDenied: true,
     });
@@ -104,7 +114,11 @@ export class NewFindFlow {
     }
   }
 
+  /** Opens the gallery; as `takePhoto`, not while a photo whose save failed is kept. */
   async pickFromGallery(): Promise<void> {
+    if (this.pending !== null) {
+      return;
+    }
     const result = await this.pick(this.deps.gallery.pick);
     if (result !== null) {
       await this.save({ from: "gallery", photo: { uri: result.uri, exif: result.exif } });
@@ -115,6 +129,12 @@ export class NewFindFlow {
     if (this.pending !== null) {
       await this.save(this.pending);
     }
+  }
+
+  /** The user discards the photo whose save failed; a new photo can then be taken. */
+  discardPending(): void {
+    this.pending = null;
+    this.show({ phase: "ready", message: null, canRetrySave: false });
   }
 
   /** The screen is gone: stops asking for a position, unless a saved find still waits for a fix. */

@@ -131,6 +131,7 @@ describe("the strings of the new find", () => {
       "newFind.back",
       "newFind.cameraBlocked",
       "newFind.cameraDenied",
+      "newFind.discardPhoto",
       "newFind.locationDenied",
       "newFind.openSettings",
       "newFind.pickFailed",
