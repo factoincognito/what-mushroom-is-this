@@ -162,7 +162,7 @@ const SAFE_ID = "CASE WHEN id BETWEEN 1 AND 9007199254740991 THEN id END AS id";
 const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES}, ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}, added_photos, picture_file, picture_author, picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
 const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND batch_open = 0 AND finds.id > ? AND finds.id <= 9007199254740991 ORDER BY finds.id ASC LIMIT 1`;
-const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv, name_en, name_it, edibility, confidence FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
+const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv, name_en, name_it, edibility, confidence, confidence_score FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /** Only among the IDs the store cannot read: a readable find is deleted by `delete` alone. */
 const UNREADABLE_ID = "(id < 1 OR id > 9007199254740991)";
 const FILES_OF_STORED = `SELECT photos, picture_file FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
@@ -171,7 +171,7 @@ const DELETE_STORED = `DELETE FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREAD
  * An answer's columns (review of #49, fix 1): the photos added since are waiting when the find now
  * holds one the analysis did not send; the self-check waits only for a match from no photo.
  */
-const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL, answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?, name_it = ?, edibility = ?, confidence = ?, added_photos = CASE WHEN EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(finds.photos) THEN finds.photos ELSE '[]' END) WHERE json_extract(value, '$.file') NOT IN (SELECT value FROM json_each(?))) THEN 'waiting' ELSE 'analysed' END, picture_file = NULL, picture_author = NULL, picture_licence = NULL, picture_page = NULL, self_check = CASE WHEN ? = 0 AND ? = 'match' AND text IS NOT NULL THEN 'waiting' END, check_name_sv = NULL, check_name_en = NULL, check_name_la = NULL, check_name_it = NULL`;
+const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL, answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?, name_it = ?, edibility = ?, confidence = ?, confidence_score = ?, added_photos = CASE WHEN EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(finds.photos) THEN finds.photos ELSE '[]' END) WHERE json_extract(value, '$.file') NOT IN (SELECT value FROM json_each(?))) THEN 'waiting' ELSE 'analysed' END, picture_file = NULL, picture_author = NULL, picture_licence = NULL, picture_page = NULL, self_check = CASE WHEN ? = 0 AND ? = 'match' AND text IS NOT NULL THEN 'waiting' END, check_name_sv = NULL, check_name_en = NULL, check_name_la = NULL, check_name_it = NULL`;
 const SET_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state IN ('waiting', 'failed')`;
 const REPLACE_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state = 'done'`;
 const MARK_FAILED =
@@ -209,10 +209,13 @@ const match: Match = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
-  confidence: "high",
+  confidence: 90,
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [],
 };
+
+/** A match analysed in Phase 1, its confidence a level (SPEC 3.9). */
+const phaseOneMatch: Match = { ...match, confidence: "low" };
 
 const analysed: AnalysedAnswer = {
   answer: match,
@@ -308,6 +311,7 @@ function summaryRow(overrides: Record<string, unknown> = {}): Record<string, unk
     name_it: null,
     edibility: null,
     confidence: null,
+    confidence_score: null,
     ...overrides,
   });
 }
@@ -325,7 +329,18 @@ function doneMatchRow(overrides: Record<string, unknown> = {}): Record<string, u
     name_en: "Chanterelle",
     name_it: "Gallinaccio",
     edibility: "edible",
-    confidence: "high",
+    confidence: null,
+    confidence_score: 90,
+    ...overrides,
+  });
+}
+
+/** A done match of Phase 1 as the list reads it: its confidence a level (SPEC 3.9). */
+function phaseOneMatchRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return doneMatchRow({
+    answer_json: answerToJson(phaseOneMatch),
+    confidence: "low",
+    confidence_score: null,
     ...overrides,
   });
 }
@@ -1182,6 +1197,35 @@ describe("get", () => {
     });
   });
 
+  it("reads a Phase 1 answer with its confidence as the level it was given (SPEC 3.9)", async () => {
+    db.reply("first", GET, doneRow({ answer_json: answerToJson(phaseOneMatch) }));
+    await expect(store.get(7)).resolves.toMatchObject({
+      analysis: { state: "done", answer: { confidence: "low" } },
+    });
+    await expect(store.getStored(7)).resolves.toMatchObject({
+      analysis: { state: "done", answer: { confidence: "low" } },
+    });
+  });
+
+  it("reads an answer with its confidence as a whole number from 1 to 100 (SPEC 3.9)", async () => {
+    db.reply("first", GET, doneRow({ answer_json: answerToJson({ ...match, confidence: 1 }) }));
+    await expect(store.get(7)).resolves.toMatchObject({
+      analysis: { state: "done", answer: { confidence: 1 } },
+    });
+  });
+
+  it.each<[string, string]>([
+    ["0", '"confidence":0'],
+    ["101", '"confidence":101'],
+    ["a fraction", '"confidence":69.5'],
+    ["a number written as text", '"confidence":"90"'],
+    ["a level it does not know", '"confidence":"sure"'],
+  ])("refuses as corrupt a stored answer whose confidence is %s", async (_, confidence) => {
+    const answerJson = answerToJson(match).replace('"confidence":90', confidence);
+    db.reply("first", GET, doneRow({ answer_json: answerJson }));
+    await expect(store.get(7)).rejects.toMatchObject({ code: "corrupt" });
+  });
+
   it("gives the first photo of a find with several as its photo (PBI-2.2)", async () => {
     db.reply(
       "first",
@@ -1321,11 +1365,8 @@ describe("get", () => {
 describe("list", () => {
   it("asks for the finds newest first and reads what the Log shows of each", async () => {
     db.reply("all", LIST, [
-      doneMatchRow({
-        id: 9,
-        answer_json: answerToJson({ ...match, confidence: "low" }),
-        confidence: "low",
-      }),
+      doneMatchRow({ id: 10, answer_json: answerToJson({ ...match, confidence: 42 }), confidence_score: 42 }),
+      phaseOneMatchRow({ id: 9 }),
       summaryRow({
         id: 8,
         state: "done",
@@ -1340,6 +1381,19 @@ describe("list", () => {
     ]);
     const time = { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" };
     await expect(store.list()).resolves.toEqual([
+      {
+        readable: true,
+        id: 10,
+        photoUri: "file:///doc/photos/p7.jpg",
+        time,
+        analysis: {
+          state: "done",
+          result: "match",
+          names: { sv: "Kantarell", en: "Chanterelle", it: "Gallinaccio" },
+          edibility: "edible",
+          confidence: 42,
+        },
+      },
       {
         readable: true,
         id: 9,
@@ -1385,7 +1439,16 @@ describe("list", () => {
   it.each<[string, Record<string, unknown>]>([
     ["a match without a name", doneMatchRow({ name_sv: null })],
     ["a match with an unknown edibility", doneMatchRow({ edibility: "tasty" })],
-    ["a match with an unknown confidence", doneMatchRow({ confidence: "sure" })],
+    ["a Phase 1 match with an unknown level", phaseOneMatchRow({ confidence: "sure" })],
+    [
+      "a match with its confidence both as a level and as a number (SPEC 3.9)",
+      doneMatchRow({ confidence: "high", confidence_score: 90 }),
+    ],
+    ["a match with no confidence at all (SPEC 3.9)", doneMatchRow({ confidence_score: null })],
+    ["a match with a confidence of 0 (SPEC 3.9)", doneMatchRow({ confidence_score: 0 })],
+    ["a match with a confidence of 101 (SPEC 3.9)", doneMatchRow({ confidence_score: 101 })],
+    ["a match with a confidence that is a fraction", doneMatchRow({ confidence_score: 50.5 })],
+    ["a match with a confidence stored as text", doneMatchRow({ confidence_score: "90" })],
     ["a done find with an unknown result", doneMatchRow({ result: "maybe" })],
     [
       "a done find whose stored answer is not of the shape (Clead's review of #26, decision 2)",
@@ -1604,7 +1667,8 @@ describe("setAnswer", () => {
           "Chanterelle",
           "Gallinaccio",
           "edible",
-          "high",
+          null,
+          90,
           '["p7.jpg"]',
           1,
           "match",
@@ -1638,12 +1702,26 @@ describe("setAnswer", () => {
     });
   });
 
-  it("keeps the edibility Claude gave even at low confidence", async () => {
-    const low: Match = { ...match, edibility: "deadly_poisonous", confidence: "low" };
+  it("keeps the edibility Claude gave even at low confidence, with the number in place of a level", async () => {
+    const low: Match = { ...match, edibility: "deadly_poisonous", confidence: 12 };
     await store.setAnswer(7, { ...analysed, answer: low }, SENT_P7);
-    expect(events.at(-1)).toMatchObject({
-      params: expect.arrayContaining(["deadly_poisonous", "low"]),
+    const run = events.at(-1);
+    expect(run).toMatchObject({ sql: SET_ANSWER });
+    expect(run !== undefined && "params" in run && run.params.slice(7, 10)).toEqual([
+      "deadly_poisonous",
+      null,
+      12,
+    ]);
+  });
+
+  it("refuses a new answer whose confidence is a Phase 1 level, sending nothing (SPEC 3.9)", async () => {
+    await expect(
+      store.setAnswer(7, { ...analysed, answer: phaseOneMatch }, SENT_P7),
+    ).rejects.toMatchObject({
+      code: "invalid-input",
+      message: "the answer is not of the shape: confidence is not a whole number from 1 to 100",
     });
+    expect(events).toEqual([]);
   });
 
   it.each<[string, Answer]>([
@@ -1657,6 +1735,7 @@ describe("setAnswer", () => {
         "claude-model-x",
         1_762_600_000_000,
         answer.result,
+        null,
         null,
         null,
         null,

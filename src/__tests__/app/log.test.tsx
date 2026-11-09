@@ -59,7 +59,7 @@ const CHANTERELLE: Match = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
-  confidence: "high",
+  confidence: 90,
   generalInformation: { sv: "En gul svamp.", en: "A yellow mushroom.", it: "Un fungo giallo." },
   lookAlikes: [],
 };
@@ -173,7 +173,26 @@ describe("the Log screen's list (SPEC 3.1)", () => {
     expect(row.getByText(en.disclaimer)).toBeOnTheScreen();
   });
 
-  it("shows unknown when the confidence is low, whatever was stored", async () => {
+  it("shows unknown below a confidence of 70, and the edibility from 70, whatever was stored (SPEC 3.9)", async () => {
+    mockLog.finds.set(
+      1,
+      find(1, 0, done({ ...CHANTERELLE, edibility: "deadly_poisonous", confidence: 69 })),
+    );
+    mockLog.finds.set(2, find(2, 1, done({ ...CHANTERELLE, edibility: "poisonous", confidence: 70 })));
+    await startApp();
+    const below = within(await screen.findByTestId("find-row-1"));
+    expect(
+      below.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(below.queryByText(en.find.edibilities.deadlyPoisonous, { exact: false })).toBeNull();
+    expect(below.getByText(en.disclaimer)).toBeOnTheScreen();
+    const at = within(screen.getByTestId("find-row-2"));
+    expect(
+      at.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.poisonous)),
+    ).toBeOnTheScreen();
+  });
+
+  it("shows unknown when a Phase 1 find's confidence is low, whatever was stored", async () => {
     mockLog.finds.set(
       1,
       find(1, 0, done({ ...CHANTERELLE, edibility: "deadly_poisonous", confidence: "low" })),

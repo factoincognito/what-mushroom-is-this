@@ -2,6 +2,7 @@ import { EDIBILITIES } from "../analysis/answer";
 import { STRINGS } from "../i18n/strings";
 import { POSITION_SOURCES, TIME_SOURCES } from "../store/find";
 import {
+  confidenceText,
   edibilityText,
   fillIn,
   formatAccuracy,
@@ -185,6 +186,26 @@ describe("the texts of a find's values", () => {
       STRINGS[lang].find.edibilities.edibleAfterPreparation,
     );
   });
+
+  it("gives Claude's confidence from 1 to 100 as a number of 100 (SPEC 3.9)", () => {
+    expect(confidenceText(90, STRINGS.en)).toBe("Claude's confidence in the match: 90 of 100");
+    expect(confidenceText(1, STRINGS.sv)).toBe("Claudes säkerhet om matchningen: 1 av 100");
+    expect(confidenceText(100, STRINGS.it)).toBe(
+      "Sicurezza di Claude sulla corrispondenza: 100 su 100",
+    );
+  });
+
+  it.each(["low", "medium", "high"] as const)(
+    "gives a Phase 1 find's level %s in words, as before (SPEC 3.9)",
+    (level) => {
+      for (const lang of ["sv", "en", "it"] as const) {
+        const t = STRINGS[lang].find;
+        expect(confidenceText(level, STRINGS[lang])).toBe(
+          fillIn(t.confidence, { confidence: t.confidences[level] }),
+        );
+      }
+    },
+  );
 
   it.each(["sv", "en", "it"] as const)("names every time and position source in %s", (lang) => {
     const t = STRINGS[lang].find;

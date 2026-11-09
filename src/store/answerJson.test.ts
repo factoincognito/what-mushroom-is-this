@@ -1,11 +1,16 @@
-import { type Answer, type Match, parseAnswerText } from "../analysis/answer";
+import {
+  type Answer,
+  type Match,
+  parseAnswerText,
+  parseStoredAnswerText,
+} from "../analysis/answer";
 import { answerToJson } from "./answerJson";
 
 const match: Match = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
-  confidence: "high",
+  confidence: 90,
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [
     {
@@ -36,10 +41,16 @@ describe("answerToJson", () => {
       result: "match",
       names: match.names,
       edibility: "edible",
-      confidence: "high",
+      confidence: 90,
       general_information: match.generalInformation,
       look_alikes: [{ names: match.lookAlikes[0]?.names, edibility: "not_edible" }],
     });
+  });
+
+  it("writes a Phase 1 answer's level as it was, so the store reads it back unchanged (SPEC 3.9)", () => {
+    const phaseOne: Match = { ...match, confidence: "low" };
+    expect(JSON.parse(answerToJson(phaseOne))).toMatchObject({ confidence: "low" });
+    expect(parseStoredAnswerText(answerToJson(phaseOne))).toEqual({ ok: true, answer: phaseOne });
   });
 
   it("writes only the known keys of an answer that carries others at run time", () => {

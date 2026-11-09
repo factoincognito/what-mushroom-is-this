@@ -216,9 +216,15 @@ describe("ANALYSIS_PROMPT", () => {
     '{"result": "no_mushroom"}',
     '{"result": "cannot_tell"}',
     "edible, edible_after_preparation, not_edible, poisonous, deadly_poisonous, unknown",
-    "low, medium, high",
+    "a whole number from 1 to 100",
   ])("names %s from the answer's shape", (part) => {
     expect(ANALYSIS_PROMPT).toContain(part);
+  });
+
+  it("asks for the confidence as a bare number, not as a level or a string (SPEC 3.9)", () => {
+    expect(ANALYSIS_PROMPT).toContain('"confidence": <confidence>,');
+    expect(ANALYSIS_PROMPT).not.toContain('"<confidence>"');
+    expect(ANALYSIS_PROMPT).not.toMatch(/low, medium, high/);
   });
 
   it("holds nothing from the log", () => {

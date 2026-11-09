@@ -93,7 +93,7 @@ const CHANTERELLE: Match = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
-  confidence: "high",
+  confidence: 90,
   generalInformation: {
     sv: "En gul svamp i mossig skog.",
     en: "A yellow mushroom of mossy woods.",
@@ -226,6 +226,47 @@ describe("an analysed find (SPEC 3.1)", () => {
     expect(edibility.getByText(en.disclaimer)).toBeOnTheScreen();
   });
 
+  it("shows Claude's confidence from 1 to 100 as a number, with the note that it is Claude's own statement (SPEC 3.9)", async () => {
+    mockLog.finds.set(1, aFind(done({ ...CHANTERELLE, confidence: 90 })));
+    await startApp();
+    expect(
+      await screen.findByText("Claude's confidence in the match: 90 of 100"),
+    ).toBeOnTheScreen();
+    expect(screen.getByText(en.find.confidenceNote)).toBeOnTheScreen();
+  });
+
+  it("shows unknown below a confidence of 70, whatever was stored, still with the disclaimer (SPEC 3.9)", async () => {
+    mockLog.finds.set(1, aFind(done({ ...CHANTERELLE, edibility: "edible", confidence: 69 })));
+    await startApp();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(
+      edibility.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(edibility.queryByText(en.find.edibilities.edible, { exact: false })).toBeNull();
+    expect(edibility.getByText(en.disclaimer)).toBeOnTheScreen();
+    expect(screen.getByText("Claude's confidence in the match: 69 of 100")).toBeOnTheScreen();
+  });
+
+  it("shows the edibility from a confidence of 70 (SPEC 3.9)", async () => {
+    mockLog.finds.set(1, aFind(done({ ...CHANTERELLE, edibility: "poisonous", confidence: 70 })));
+    await startApp();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(
+      edibility.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.poisonous)),
+    ).toBeOnTheScreen();
+  });
+
+  it("keeps a look-alike's own edibility below a confidence of 70 (SPEC 3.9)", async () => {
+    mockLog.finds.set(1, aFind(done({ ...CHANTERELLE, confidence: 20 })));
+    await startApp();
+    const second = within(await screen.findByTestId("look-alike-1"));
+    expect(
+      second.getByText(
+        en.find.lookAlikeEdibility.replace("{edibility}", en.find.edibilities.deadlyPoisonous),
+      ),
+    ).toBeOnTheScreen();
+  });
+
   it("shows unknown when the confidence is low, whatever was stored, still with the disclaimer", async () => {
     mockLog.finds.set(1, aFind(done({ ...CHANTERELLE, edibility: "edible", confidence: "low" })));
     await startApp();
@@ -240,7 +281,7 @@ describe("an analysed find (SPEC 3.1)", () => {
     ).toBeOnTheScreen();
   });
 
-  it("shows Claude's confidence with the note that it is Claude's own statement", async () => {
+  it("shows a Phase 1 find's level in words, with the note that it is Claude's own statement", async () => {
     mockLog.finds.set(1, aFind(done({ ...CHANTERELLE, confidence: "medium" })));
     await startApp();
     expect(
@@ -316,6 +357,14 @@ describe("an analysed find (SPEC 3.1)", () => {
     ).toBeOnTheScreen();
     expect(screen.getByText(CHANTERELLE.generalInformation[lang])).toBeOnTheScreen();
     expect(screen.getByText(t.find.confidenceNote)).toBeOnTheScreen();
+    expect(
+      screen.getByText(
+        t.find.confidence.replace(
+          "{confidence}",
+          t.find.confidenceScore.replace("{score}", String(CHANTERELLE.confidence)),
+        ),
+      ),
+    ).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: t.find.analyseAgain })).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: t.find.delete })).toBeOnTheScreen();
   });

@@ -351,6 +351,33 @@ describe("the migration to schema version 2, on a version 1 database (PBI-2.2)",
     });
   });
 
+  it("keeps a Phase 1 find's level until it is analysed again, then holds the number in its place (SPEC 3.9, PBI-2.3)", async () => {
+    await versionOne();
+    const ids = phaseOneFinds();
+    const store = await open();
+    const again = {
+      answer: { ...match, confidence: 64 },
+      model: "claude-opus-5-5",
+      analysedAtMs: 1_762_800_000_000,
+    };
+    await store.replaceAnswer(ids.lowMatch, again, { photoUris: ["file:///photos/d.jpg"] });
+    expect(
+      sqlite
+        .prepare("SELECT confidence, confidence_score FROM finds WHERE id = ?")
+        .get(ids.lowMatch),
+    ).toEqual({ confidence: null, confidence_score: 64 });
+    await expect(store.get(ids.lowMatch)).resolves.toMatchObject({
+      analysis: { state: "done", answer: { confidence: 64 } },
+    });
+    expect((await store.list()).find((entry) => entry.id === ids.lowMatch)).toMatchObject({
+      analysis: { confidence: 64 },
+    });
+    // The other Phase 1 finds keep their levels.
+    await expect(store.get(ids.match)).resolves.toMatchObject({
+      analysis: { answer: { confidence: "medium" } },
+    });
+  });
+
   it("keeps the waiting finds waiting for the queue, oldest first", async () => {
     await versionOne();
     const ids = phaseOneFinds();
