@@ -65,6 +65,8 @@ All notable changes to What mushroom is this? are documented here.
 - The app is named Washroom on the phone (#41).
 - One copy of `expo-font`, the SDK 57 version, is installed; the first
   build had two (#45).
+- The answer's confidence is a whole number from 1 to 100, and below 70
+  the edibility shown is "unknown"; Phase 1 finds keep their level (#52).
 
 ## Project created
 
