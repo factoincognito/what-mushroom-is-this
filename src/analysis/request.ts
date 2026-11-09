@@ -1,3 +1,6 @@
+import { type AnalysisConfig, analysisConfig } from "../config/analysis";
+import { checkModelId } from "../config/modelSetting";
+import type { AnalysisError } from "./errors";
 import { ANALYSIS_PROMPT } from "./prompt";
 
 /**
@@ -7,24 +10,26 @@ import { ANALYSIS_PROMPT } from "./prompt";
  */
 
 /**
- * The API version and the key's header, as the Claude API docs recommend when
- * calling without an SDK (read 2026-11-08): "Versions",
- * https://platform.claude.com/docs/en/api/versioning ("Anthropic recommends using the
- * latest API version whenever possible"; latest `2026-10-21`), and "API overview",
- * https://platform.claude.com/docs/en/api/overview (`Authorization: Bearer <key>`;
- * `x-api-key` is a legacy fallback). The request uses nothing `2026-10-21` refuses: no
+ * The key's header, as the Claude API docs recommend when calling without an SDK (read
+ * 2026-11-08): "API overview", https://platform.claude.com/docs/en/api/overview
+ * (`Authorization: Bearer <key>`; `x-api-key` is a legacy fallback). The API version is
+ * configuration (`src/config/analysis.ts`). The request uses nothing `2026-10-21` refuses: no
  * `temperature`, `top_p` or `top_k`, no document block, no citations
  * (https://platform.claude.com/docs/en/api/migration-2026-10-21).
  */
-export const ANTHROPIC_VERSION = "2026-10-21";
 export const AUTHORIZATION_HEADER = "authorization";
 export const AUTHORIZATION_SCHEME = "Bearer";
 
-/** Room for the answer's JSON object in three languages, with its look-alikes. */
-export const MAX_TOKENS = 4096;
-
 /** Printable ASCII, 0x21 to 0x7E: what the key may hold to go in the `authorization` header. */
 const SENDABLE_KEY = /^[\x21-\x7e]+$/;
+
+/**
+ * An `https` address with a host name and an optional port, and no user, path, query or
+ * fragment; trailing slashes are dropped. Plain `http` is refused: it would send the key
+ * unencrypted.
+ */
+const API_ADDRESS =
+  /^https:\/\/([a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*)(:(\d{1,5}))?\/*$/i;
 
 /**
  * Whether a key, already trimmed, can be sent as a header value. A key with a
@@ -52,30 +57,63 @@ export interface AnalysisRequest {
   body: string;
 }
 
-export function buildAnalysisRequest(input: RequestInput): AnalysisRequest {
+export type BuildResult =
+  | { ok: true; request: AnalysisRequest }
+  | { ok: false; error: Extract<AnalysisError, { kind: "key-refused" | "model-unknown" }> };
+
+/**
+ * Builds the request, after checking what goes into it. An API address that is not valid is a
+ * programming error (it is configuration) and throws a RangeError. A key that cannot be sent as
+ * a header value, after the trim, gives `key-refused` with `status: null`; a model ID that is
+ * not valid, after the trim, gives `model-unknown`. Either way nothing is built.
+ */
+export function buildAnalysisRequest(
+  input: RequestInput,
+  config: AnalysisConfig = analysisConfig,
+): BuildResult {
+  const address = API_ADDRESS.exec(input.apiAddress);
+  const port = address?.[6];
+  if (address === null || (port !== undefined && !isPort(Number(port)))) {
+    throw new RangeError("apiAddress must be an https address with a host and no path");
+  }
+  const apiKey = input.apiKey.trim();
+  if (!isSendableKey(apiKey)) {
+    return { ok: false, error: { kind: "key-refused", status: null } };
+  }
+  const model = checkModelId(input.model);
+  if (!model.ok) {
+    return { ok: false, error: { kind: "model-unknown" } };
+  }
   return {
-    url: `${input.apiAddress.replace(/\/+$/, "")}/v1/messages`,
-    method: "POST",
-    headers: {
-      [AUTHORIZATION_HEADER]: `${AUTHORIZATION_SCHEME} ${input.apiKey}`,
-      "anthropic-version": ANTHROPIC_VERSION,
-      "content-type": "application/json",
+    ok: true,
+    request: {
+      url: `${input.apiAddress.replace(/\/+$/, "")}/v1/messages`,
+      method: "POST",
+      headers: {
+        [AUTHORIZATION_HEADER]: `${AUTHORIZATION_SCHEME} ${apiKey}`,
+        "anthropic-version": config.apiVersion,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: model.id,
+        max_tokens: config.maxTokens,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: "image/jpeg", data: input.imageBase64 },
+              },
+              { type: "text", text: ANALYSIS_PROMPT },
+            ],
+          },
+        ],
+      }),
     },
-    body: JSON.stringify({
-      model: input.model,
-      max_tokens: MAX_TOKENS,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: "image/jpeg", data: input.imageBase64 },
-            },
-            { type: "text", text: ANALYSIS_PROMPT },
-          ],
-        },
-      ],
-    }),
   };
+}
+
+function isPort(value: number): boolean {
+  return value >= 1 && value <= 65_535;
 }
