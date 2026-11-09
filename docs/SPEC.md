@@ -71,8 +71,9 @@ its own tests; the screens only wire them together. The modules:
 
 Nothing leaves the phone except the photo sent for analysis (section 3.3).
 There is no server. Phase 2 adds the text and the several photos of a
-lookup, sent for analysis, and the area the map shows, sent to the map
-provider for its tiles (3.9, Adam's decision, 2026-11-09).
+lookup, sent for analysis, the area the map shows, sent to the map
+provider for its tiles, and the Latin name of a text lookup's species,
+sent to Wikimedia for its picture (3.9, Adam's decisions, 2026-11-09).
 
 ## 3. Component specs
 
@@ -360,7 +361,9 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   again" does for a find (**[Clead]**).
 - A saved text lookup becomes a find when the user taps "Analyse" or
   leaves the screen with text entered; its position is asked for when the
-  screen opens, as the camera's is (3.6) (**[Clead]**). Leaving the
+  screen opens, as the camera's is (3.6), whether or not "Save" is on
+  (**[Clead]**). The location permission is asked for the first time a
+  lookup screen opens, saved or not (**[Clead]**). Leaving the
   screen with an unsaved lookup asks first, on the screen, as 3.1 does
   for a photo (**[Clead]**).
 - The position is asked for when the camera opens whether or not "Save"
@@ -411,7 +414,9 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
 - A photo can be removed from a find, but not the last photo of a find
   without text (**[Clead]**). The find is then analysed again only when
   the user asks. It keeps its time and position, also when its first
-  photo is removed (**[Clead]**).
+  photo is removed (**[Clead]**). If photos added since its answer are
+  waiting for the queue, the analysis still runs, with the photos left
+  (**[Clead]**).
 
 **Answers.**
 
@@ -432,14 +437,48 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   checked as before). Until then, such a lookup shows the disclaimer of
   3.5.
 
+**A representative picture for text lookups** (Adam, 19:01; the source,
+Wikimedia Commons, is his answer to Clead's question, by 19:03).
+
+- When the answer to a text lookup names a species, the app shows a
+  representative picture of that species from Wikimedia Commons (Adam).
+  It is the picture that Wikidata gives as the image of the species'
+  item, found by its Latin name (**[Clead]**, **[not checked]**: Known
+  unknown 15). With no such picture, or one whose licence is not among
+  those the IP policy allows for this use, there is no picture
+  (**[Clead]**).
+- The picture is shown on the find's screen, and in the Library list in
+  place of the text mark, labelled as a picture of the species, not of
+  the user's mushroom. Its author, its licence and a link to its page on
+  Commons are shown with it, as its licence requires (**[Clead]**).
+- On a saved find it is stored with the find, apart from its photos: it
+  is never sent for analysis and does not count toward the 5 photos
+  (**[Clead]**). A new answer naming another species replaces it. On an
+  unsaved lookup it is shown and not stored.
+- Only the Latin name is sent to Wikimedia, which also sees the phone's
+  IP address (**[Clead]**). Without a network the picture is fetched the
+  next time the find is opened with one (**[Clead]**).
+- Pictures from Wikimedia Commons are an exception to 3.7's "pictures
+  from outside sources" (**[Clead]**). Their use goes through the IP
+  policy before the build (**[not checked]**, Known unknown 15).
+- Adam's self-check, a photo lookup run on that picture and compared with
+  the text lookup's species, is an evaluation Clead runs outside the app
+  (Adam's answer, by 19:03), not a feature of the app; it is tracked in
+  the backlog.
+
 **The store** (3.6 for Phase 2; **[Clead]**).
 
-- A find holds, besides 3.6: its text or none; its photos in the order
-  added, up to 5, each with its file and the batch it came in; whether a
-  batch is open; the state of its newest photos on a find with an answer:
-  analysed, waiting for the queue, or not yet analysed after a failure;
-  and its
-  confidence as a level (Phase 1) or a number from 1 to 100.
+- A find holds, besides 3.6:
+  - its text or none;
+  - its photos in the order added, up to 5, each with its file and the
+    batch it came in;
+  - whether a batch is open;
+  - on a find with an answer, the state of the photos added since that
+    answer: analysed, waiting for the queue, or not yet analysed after a
+    failure;
+  - its confidence as a level (Phase 1) or a number from 1 to 100;
+  - its representative picture with its author, licence and page, or
+    none.
 - The database moves to schema version 2 by a migration that keeps every
   Phase 1 find, its photo as its first photo and its answer as it was.
   Adam's test-session finds are kept.
@@ -562,3 +601,10 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
 14. Whether resizing up to five photos for one request (one at a time,
     3.9) brings back the low-memory load failures PBI-1.25 was written
     for, on Adam's phone.
+15. Phase 2's representative picture (3.9):
+    - how Wikidata and Commons are queried by Latin name, and how often
+      a species has an image there;
+    - the licences of those images, and which of them the IP policy
+      allows for showing unchanged with credit;
+    - the terms of Wikimedia's APIs for an app, including the User-Agent
+      they ask for, which must not carry a personal email address.
