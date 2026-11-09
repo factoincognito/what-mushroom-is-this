@@ -30,6 +30,10 @@ describe("config", () => {
     expect(config.lookupTextMaxLength).toBe(2000);
   });
 
+  it("holds the confidence below which the edibility shown is unknown, 70, of SPEC 3.9 (PBI-2.3)", () => {
+    expect(config.edibilityConfidenceLine).toBe(70);
+  });
+
   it("keeps each model's image limits in the image module's ImageLimits type", () => {
     const limits: ImageLimits = { maxEdge: 1568, maxTokens: 1568, patchSize: 28 };
     const model: ModelConfig = { id: "a-model", imageLimits: limits };

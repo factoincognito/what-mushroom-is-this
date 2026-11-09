@@ -19,7 +19,7 @@ const match: Match = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
-  confidence: "high",
+  confidence: 90,
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [],
 };
@@ -728,10 +728,10 @@ describe("the constraints of schema version 2 on a real SQLite (PBI-2.2)", () =>
   it.each<[string, string]>([
     ["no state of the added photos", "added_photos = NULL"],
     ["a state of the added photos it does not know", "added_photos = 'lost'"],
-    ["a confidence both as a level and as a number", "confidence_score = 80"],
+    ["a confidence both as a level and as a number", "confidence = 'high'"],
     ["a confidence as a number of 0", "confidence = NULL, confidence_score = 0"],
     ["a confidence as a number of 101", "confidence = NULL, confidence_score = 101"],
-    ["no confidence at all", "confidence = NULL"],
+    ["no confidence at all", "confidence_score = NULL"],
   ])("refuses a done match with %s", async (_, set) => {
     const id = await store.add(photoFind());
     await store.setAnswer(id, analysed, await sentAll(id));

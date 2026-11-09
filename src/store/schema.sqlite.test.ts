@@ -20,7 +20,7 @@ const match: Match = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
-  confidence: "high",
+  confidence: 90,
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [
     {
@@ -313,10 +313,14 @@ describe("the store's statements on a real SQLite", () => {
           result: "match",
           names: { sv: "Kantarell", en: "Chanterelle", it: "Gallinaccio" },
           edibility: "edible",
-          confidence: "high",
+          confidence: 90,
         },
       },
     ]);
+    // The number in its own column, the level's left empty (SPEC 3.9, PBI-2.3).
+    expect(
+      sqlite.prepare("SELECT confidence, confidence_score FROM finds WHERE id = ?").get(id),
+    ).toEqual({ confidence: null, confidence_score: 90 });
   });
 
   it("stores an answer without a match, with none of the match's columns", async () => {

@@ -239,6 +239,7 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       "find.cannotTell",
       "find.confidence",
       "find.confidenceNote",
+      "find.confidenceScore",
       "find.confidences.high",
       "find.confidences.low",
       "find.confidences.medium",
@@ -286,6 +287,8 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       expect(STRINGS[lang].find.edibility).toContain("{edibility}");
       expect(STRINGS[lang].find.lookAlikeEdibility).toContain("{edibility}");
       expect(STRINGS[lang].find.confidence).toContain("{confidence}");
+      expect(STRINGS[lang].find.confidenceScore).toContain("{score}");
+      expect(STRINGS[lang].find.confidenceScore).toContain("100");
       expect(STRINGS[lang].find.time).toContain("{time}");
       expect(STRINGS[lang].find.position).toContain("{coordinates}");
       expect(STRINGS[lang].find.accuracy).toContain("{metres}");

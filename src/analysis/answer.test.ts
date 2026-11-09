@@ -1,4 +1,11 @@
-import { type Match, parseAnswerText, readMessageBody, shownEdibility } from "./answer";
+import { config } from "../config/config";
+import {
+  type Match,
+  parseAnswerText,
+  parseStoredAnswerText,
+  readMessageBody,
+  shownEdibility,
+} from "./answer";
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
@@ -12,7 +19,7 @@ function matchJson(): { [key: string]: Json } {
       it: "Gallinaccio",
     },
     edibility: "edible",
-    confidence: "high",
+    confidence: 90,
     general_information: {
       sv: "En gul svamp i barr- och lövskog.",
       en: "A yellow mushroom of coniferous and deciduous woods.",
@@ -41,7 +48,7 @@ const expectedMatch: Match = {
     it: "Gallinaccio",
   },
   edibility: "edible",
-  confidence: "high",
+  confidence: 90,
   generalInformation: {
     sv: "En gul svamp i barr- och lövskog.",
     en: "A yellow mushroom of coniferous and deciduous woods.",
@@ -121,16 +128,34 @@ describe("parseAnswerText, accepted answers", () => {
     );
   });
 
-  it.each(["low", "medium", "high"])("accepts the confidence %s", (confidence) => {
-    const result = parseAnswerText(
-      withChange((a) => {
-        a.confidence = confidence;
-      }),
-    );
-    expect(result.ok && result.answer.result === "match" && result.answer.confidence).toBe(
-      confidence,
-    );
-  });
+  it.each([1, 69, 70, 100])(
+    "accepts the confidence %s, a whole number from 1 to 100 (SPEC 3.9)",
+    (confidence) => {
+      const result = parseAnswerText(
+        withChange((a) => {
+          a.confidence = confidence;
+        }),
+      );
+      expect(result.ok && result.answer.result === "match" && result.answer.confidence).toBe(
+        confidence,
+      );
+    },
+  );
+
+  it.each([
+    ["85.0", 85],
+    ["1e2", 100],
+  ])(
+    "accepts the confidence written as %s, which JSON reads as the whole number %s",
+    (written, value) => {
+      const text = JSON.stringify(matchJson()).replace(
+        '"confidence":90',
+        `"confidence":${written}`,
+      );
+      const result = parseAnswerText(text);
+      expect(result.ok && result.answer.result === "match" && result.answer.confidence).toBe(value);
+    },
+  );
 
   it("reads the no-mushroom form", () => {
     expect(parseAnswerText('{"result":"no_mushroom"}')).toEqual({
@@ -246,11 +271,22 @@ describe("parseAnswerText, the fields of a match", () => {
     );
   });
 
-  it.each([
-    ["an unknown value", "very high"],
-    ["a number", 0.9],
+  it.each<[string, Json | undefined]>([
+    ["0, below the range", 0],
+    ["101, above the range", 101],
+    ["negative", -5],
+    ["a fraction", 69.5],
+    ["a fraction below 1", 0.9],
+    ["a number written as text", "85"],
+    ["Phase 1's level low", "low"],
+    ["Phase 1's level medium", "medium"],
+    ["Phase 1's level high", "high"],
+    ["an unknown word", "very high"],
+    ["true", true],
+    ["null", null],
+    ["an object", { value: 85 }],
     ["missing", undefined],
-  ])("fails a match whose confidence is %s", (_label, value) => {
+  ])("fails a match whose confidence is %s (SPEC 3.9)", (_label, value) => {
     expectFailure(
       withChange((a) => {
         if (value === undefined) {
@@ -259,8 +295,13 @@ describe("parseAnswerText, the fields of a match", () => {
           a.confidence = value;
         }
       }),
-      "confidence is not one of low, medium, high",
+      "confidence is not a whole number from 1 to 100",
     );
+  });
+
+  it("fails a confidence too large for a number, which JSON reads as Infinity", () => {
+    const text = JSON.stringify(matchJson()).replace('"confidence":90', '"confidence":1e400');
+    expectFailure(text, "confidence is not a whole number from 1 to 100");
   });
 
   it.each(["sv", "en", "it"])(
@@ -362,6 +403,73 @@ describe("parseAnswerText, the fields of a match", () => {
   it("fails an own __proto__ key as an extra key", () => {
     const text = JSON.stringify(matchJson()).replace(/^\{/, '{"__proto__":{},');
     expectFailure(text, "the answer has an unknown key");
+  });
+});
+
+describe("parseStoredAnswerText, an answer the store holds (SPEC 3.9)", () => {
+  it("reads an answer with a confidence from 1 to 100, as parseAnswerText does", () => {
+    expect(parseStoredAnswerText(JSON.stringify(matchJson()))).toEqual({
+      ok: true,
+      answer: expectedMatch,
+    });
+  });
+
+  it.each(["low", "medium", "high"] as const)(
+    "reads a Phase 1 answer whose confidence is the level %s, which it keeps",
+    (level) => {
+      const text = withChange((a) => {
+        a.confidence = level;
+      });
+      expect(parseStoredAnswerText(text)).toEqual({
+        ok: true,
+        answer: { ...expectedMatch, confidence: level },
+      });
+    },
+  );
+
+  it.each<[string, Json | undefined]>([
+    ["0", 0],
+    ["101", 101],
+    ["a fraction", 0.9],
+    ["a number written as text", "85"],
+    ["an unknown word", "very high"],
+    ["a level in another case", "Low"],
+    ["null", null],
+    ["missing", undefined],
+  ])("fails a stored confidence that is %s", (_label, value) => {
+    const text = withChange((a) => {
+      if (value === undefined) {
+        delete a.confidence;
+      } else {
+        a.confidence = value;
+      }
+    });
+    expect(parseStoredAnswerText(text)).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "confidence is neither a whole number from 1 to 100 nor one of low, medium, high",
+    });
+  });
+
+  it("checks the rest of the shape as parseAnswerText does", () => {
+    const text = withChange((a) => {
+      a.confidence = "low";
+      a.edibility = "toxic";
+    });
+    expect(parseStoredAnswerText(text)).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "edibility is not one of the six values",
+    });
+    expect(parseStoredAnswerText('{"result":"no_mushroom"}')).toEqual({
+      ok: true,
+      answer: { result: "no_mushroom" },
+    });
+    expect(parseStoredAnswerText("{")).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the answer is not JSON",
+    });
   });
 });
 
@@ -606,9 +714,55 @@ describe("readMessageBody", () => {
       detail: "result is not one of match, no_mushroom, cannot_tell",
     });
   });
+
+  it("fails an answer from the API whose confidence is a Phase 1 level (SPEC 3.9)", () => {
+    const text = withChange((a) => {
+      a.confidence = "high";
+    });
+    expect(readMessageBody(messageBody([{ type: "text", text }]))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "confidence is not a whole number from 1 to 100",
+    });
+  });
 });
 
-describe("shownEdibility", () => {
+describe("shownEdibility, a confidence from 1 to 100 (SPEC 3.9)", () => {
+  it.each([1, 50, 69])("shows unknown below 70, at %s, whatever the answer said", (confidence) => {
+    const answer: Match = { ...expectedMatch, edibility: "edible", confidence };
+    expect(shownEdibility(answer)).toBe("unknown");
+  });
+
+  it.each([70, 85, 100])("shows the answer's edibility from 70 up, at %s", (confidence) => {
+    const answer: Match = { ...expectedMatch, edibility: "poisonous", confidence };
+    expect(shownEdibility(answer)).toBe("poisonous");
+  });
+
+  it("takes the line from the configuration by default", () => {
+    const line = config.edibilityConfidenceLine;
+    expect(shownEdibility({ edibility: "edible", confidence: line - 1 })).toBe("unknown");
+    expect(shownEdibility({ edibility: "edible", confidence: line })).toBe("edible");
+  });
+
+  it("follows another line when one is given, so the line is configuration, not code", () => {
+    expect(shownEdibility({ edibility: "edible", confidence: 79 }, 80)).toBe("unknown");
+    expect(shownEdibility({ edibility: "edible", confidence: 80 }, 80)).toBe("edible");
+    expect(shownEdibility({ edibility: "edible", confidence: 60 }, 60)).toBe("edible");
+  });
+
+  it("shows unknown for a confidence that is not a number at all, which no answer can hold", () => {
+    expect(shownEdibility({ edibility: "edible", confidence: Number.NaN })).toBe("unknown");
+  });
+
+  it("leaves the stored answer as Claude gave it", () => {
+    const answer: Match = { ...expectedMatch, edibility: "deadly_poisonous", confidence: 12 };
+    shownEdibility(answer);
+    expect(answer.edibility).toBe("deadly_poisonous");
+    expect(answer.confidence).toBe(12);
+  });
+});
+
+describe("shownEdibility, a Phase 1 find's level (SPEC 3.3, 3.9)", () => {
   it("shows unknown when the confidence is low, whatever the answer said", () => {
     const answer: Match = { ...expectedMatch, edibility: "edible", confidence: "low" };
     expect(shownEdibility(answer)).toBe("unknown");
@@ -629,12 +783,19 @@ describe("shownEdibility", () => {
     },
   );
 
+  it("keeps 3.3's rule whatever the line, which is for numbers only", () => {
+    expect(shownEdibility({ edibility: "edible", confidence: "medium" }, 100)).toBe("edible");
+    expect(shownEdibility({ edibility: "edible", confidence: "low" }, 1)).toBe("unknown");
+  });
+
   it("takes the edibility and the confidence alone, as the Log's summary of a find has them", () => {
-    const summary: { edibility: "edible"; confidence: "low" | "high" } = {
+    const summary: { edibility: "edible"; confidence: "low" | "high" | number } = {
       edibility: "edible",
       confidence: "low",
     };
     expect(shownEdibility(summary)).toBe("unknown");
     expect(shownEdibility({ ...summary, confidence: "high" })).toBe("edible");
+    expect(shownEdibility({ ...summary, confidence: 69 })).toBe("unknown");
+    expect(shownEdibility({ ...summary, confidence: 70 })).toBe("edible");
   });
 });

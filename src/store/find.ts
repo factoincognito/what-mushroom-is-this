@@ -102,8 +102,12 @@ export type SummaryAnalysis =
       result: "match";
       /** The species' names in the app's three languages. */
       names: Texts;
-      /** As Claude gave it: the screen shows "unknown" when the confidence is low. */
+      /**
+       * As Claude gave it: the screen shows "unknown" below the confidence line, or when a Phase 1
+       * level is low (`shownEdibility`).
+       */
       edibility: Edibility;
+      /** A whole number from 1 to 100, or the level of an answer given in Phase 1. */
       confidence: Confidence;
     }
   | { state: "done"; result: "no_mushroom" | "cannot_tell" };

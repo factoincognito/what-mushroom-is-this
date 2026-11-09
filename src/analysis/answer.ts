@@ -1,8 +1,10 @@
 /**
- * The answer's shape (docs/SPEC.md 3.3) and its validation. The model's text is
+ * The answer's shape (docs/SPEC.md 3.3, and 3.9 "Answers") and its validation. The model's text is
  * one JSON object of the shape `ANALYSIS_PROMPT` asks for; anything else is a
  * failed analysis with a reason.
  */
+
+import { config } from "../config/config";
 
 export const EDIBILITIES = [
   "edible",
@@ -14,8 +16,19 @@ export const EDIBILITIES = [
 ] as const;
 export type Edibility = (typeof EDIBILITIES)[number];
 
-export const CONFIDENCES = ["low", "medium", "high"] as const;
-export type Confidence = (typeof CONFIDENCES)[number];
+/** The confidence levels of Phase 1 (docs/SPEC.md 3.3), which a find analysed then keeps (3.9). */
+export const CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
+export type ConfidenceLevel = (typeof CONFIDENCE_LEVELS)[number];
+
+/** The range of a confidence from Phase 2 on (docs/SPEC.md 3.9): a whole number, low to high. */
+export const MIN_CONFIDENCE_SCORE = 1;
+export const MAX_CONFIDENCE_SCORE = 100;
+
+/**
+ * Claude's confidence in a match: a whole number from 1 to 100 (docs/SPEC.md 3.9), or the level
+ * of an answer given in Phase 1, which the find keeps until it is analysed again.
+ */
+export type Confidence = number | ConfidenceLevel;
 
 /** A species' names in Swedish, English, Latin and Italian. */
 export interface SpeciesNames {
@@ -57,11 +70,19 @@ export type AnswerFailure = { ok: false; reason: "not-api" | "shape" | "refused"
 export type AnswerResult = { ok: true; answer: Answer } | AnswerFailure;
 
 /**
- * The edibility to show: "unknown" whenever the confidence is low. It takes the edibility and the
+ * The edibility to show (docs/SPEC.md 3.9): "unknown" below a confidence of `line`, the
+ * configuration's 70 unless another is given, whatever the answer said; for a Phase 1 find's
+ * level, "unknown" when it is low (3.3), whatever the line. It takes the edibility and the
  * confidence alone, so that a match and the Log's summary of one follow the same rule.
  */
-export function shownEdibility(match: Pick<Match, "edibility" | "confidence">): Edibility {
-  return match.confidence === "low" ? "unknown" : match.edibility;
+export function shownEdibility(
+  match: Pick<Match, "edibility" | "confidence">,
+  line: number = config.edibilityConfidenceLine,
+): Edibility {
+  const { confidence } = match;
+  // Written as "not at or above the line", so a number no answer can hold (NaN) shows "unknown".
+  const tooLow = typeof confidence === "number" ? !(confidence >= line) : confidence === "low";
+  return tooLow ? "unknown" : match.edibility;
 }
 
 /**
@@ -133,8 +154,34 @@ export function readMessageBody(body: string): AnswerResult {
   return parseAnswerText(text);
 }
 
-/** Reads the model's text: one JSON object, with whitespace around it and nothing else. */
+/**
+ * Reads the model's text: one JSON object, with whitespace around it and nothing else. Its
+ * confidence is a whole number from 1 to 100 (docs/SPEC.md 3.9); a level fails the shape.
+ */
 export function parseAnswerText(text: string): AnswerResult {
+  return parseText(text, false);
+}
+
+/**
+ * Reads an answer the store holds, as `parseAnswerText` reads one from the API, but its confidence
+ * may also be the level of an answer given in Phase 1, which the find keeps until it is analysed
+ * again (docs/SPEC.md 3.9).
+ */
+export function parseStoredAnswerText(text: string): AnswerResult {
+  return parseText(text, true);
+}
+
+/** Whether a value is a confidence from Phase 2 on: a whole number from 1 to 100. */
+export function isConfidenceScore(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= MIN_CONFIDENCE_SCORE &&
+    value <= MAX_CONFIDENCE_SCORE
+  );
+}
+
+function parseText(text: string, levelAllowed: boolean): AnswerResult {
   const parsed = parseJson(text);
   if (!parsed.ok) {
     return shapeFailure("the answer is not JSON");
@@ -142,7 +189,7 @@ export function parseAnswerText(text: string): AnswerResult {
   if (!isRecord(parsed.value)) {
     return shapeFailure("the answer is not an object");
   }
-  const answer = readAnswer(parsed.value);
+  const answer = readAnswer(parsed.value, levelAllowed);
   return answer.ok ? { ok: true, answer: answer.value } : shapeFailure(answer.detail);
 }
 
@@ -161,7 +208,7 @@ const MATCH_KEYS = [
   "look_alikes",
 ];
 
-function readAnswer(value: Record<string, unknown>): Read<Answer> {
+function readAnswer(value: Record<string, unknown>, levelAllowed: boolean): Read<Answer> {
   const result = value.result;
   if (result === "no_mushroom" || result === "cannot_tell") {
     return hasOnlyKeys(value, ["result"])
@@ -182,9 +229,9 @@ function readAnswer(value: Record<string, unknown>): Read<Answer> {
   if (!edibility.ok) {
     return edibility;
   }
-  const confidence = value.confidence;
-  if (!isConfidence(confidence)) {
-    return fail("confidence is not one of low, medium, high");
+  const confidence = readConfidence(value.confidence, levelAllowed);
+  if (!confidence.ok) {
+    return confidence;
   }
   const generalInformation = readTexts(value.general_information, "general_information");
   if (!generalInformation.ok) {
@@ -200,7 +247,7 @@ function readAnswer(value: Record<string, unknown>): Read<Answer> {
       result: "match",
       names: names.value,
       edibility: edibility.value,
-      confidence,
+      confidence: confidence.value,
       generalInformation: generalInformation.value,
       lookAlikes: lookAlikes.value,
     },
@@ -231,6 +278,23 @@ function readLookAlikes(value: unknown): Read<LookAlike[]> {
     lookAlikes.push({ names: names.value, edibility: edibility.value });
   }
   return { ok: true, value: lookAlikes };
+}
+
+/**
+ * A whole number from 1 to 100; with `levelAllowed`, for an answer the store holds, also a Phase 1
+ * level. JSON gives a number written as 85.0 or 1e2 as 85 and 100, so those are whole numbers too;
+ * nothing is coerced from text.
+ */
+function readConfidence(value: unknown, levelAllowed: boolean): Read<Confidence> {
+  if (isConfidenceScore(value)) {
+    return { ok: true, value };
+  }
+  if (!levelAllowed) {
+    return fail("confidence is not a whole number from 1 to 100");
+  }
+  return isConfidenceLevel(value)
+    ? { ok: true, value }
+    : fail("confidence is neither a whole number from 1 to 100 nor one of low, medium, high");
 }
 
 function readEdibility(value: unknown, path: string): Read<Edibility> {
@@ -319,6 +383,6 @@ function isEdibility(value: unknown): value is Edibility {
   return EDIBILITIES.some((edibility) => edibility === value);
 }
 
-function isConfidence(value: unknown): value is Confidence {
-  return CONFIDENCES.some((confidence) => confidence === value);
+export function isConfidenceLevel(value: unknown): value is ConfidenceLevel {
+  return CONFIDENCE_LEVELS.some((level) => level === value);
 }

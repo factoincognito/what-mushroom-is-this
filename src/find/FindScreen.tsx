@@ -28,6 +28,7 @@ import type { QueueNotice, QueueState } from "../queue/queue";
 import { useFindLog } from "../store/FindLogContext";
 import { type Find, type Position, StoreError } from "../store/find";
 import {
+  confidenceText,
   edibilityText,
   fillIn,
   formatAccuracy,
@@ -56,8 +57,9 @@ type Message =
 
 /**
  * The Find screen (docs/SPEC.md 3.1, 3.3, 3.5): the photo; the species' names in the app's
- * language, in Latin and in the other two; the edibility of the matched species, "unknown" when the
- * confidence is low, with the disclaimer next to it; Claude's confidence with its note; the
+ * language, in Latin and in the other two; the edibility of the matched species, "unknown" below the
+ * confidence line or when a Phase 1 level is low (SPEC 3.9), with the disclaimer next to it;
+ * Claude's confidence, a number of 100 or a Phase 1 level, with its note; the
  * general information; the poisonous look-alikes, each with its names and its edibility; the time
  * and the position with where each came from, and a link to the phone's map app. "Analyse again"
  * goes through the queue; a failed new analysis of an analysed find keeps its answer and shows the
@@ -314,9 +316,7 @@ function MatchView({ match, language, strings }: MatchViewProps) {
         <Text style={styles.strong}>{fillIn(t.edibility, { edibility })}</Text>
         <Text style={styles.disclaimer}>{strings.disclaimer}</Text>
       </View>
-      <Text style={styles.text}>
-        {fillIn(t.confidence, { confidence: t.confidences[match.confidence] })}
-      </Text>
+      <Text style={styles.text}>{confidenceText(match.confidence, strings)}</Text>
       <Text style={styles.note}>{t.confidenceNote}</Text>
       <Text accessibilityRole="header" style={styles.heading}>
         {t.generalInformation}
