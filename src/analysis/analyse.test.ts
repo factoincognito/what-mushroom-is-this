@@ -149,7 +149,7 @@ describe("analysePhoto, the outcome", () => {
     });
   });
 
-  it("fails the find with its own detail when the answer was refused", async () => {
+  it("fails the find with its own detail, and lets the queue go on, when the answer was refused", async () => {
     const body = JSON.stringify({
       type: "message",
       role: "assistant",
@@ -161,10 +161,10 @@ describe("analysePhoto, the outcome", () => {
       ok: false,
       error: {
         kind: "find-failed",
-        reason: "shape",
+        reason: "refused",
         detail: "the answer was refused (stop_reason refusal)",
         status: 200,
-        queue: "stops",
+        queue: "goes-on",
       },
     });
     expect(fetch).toHaveBeenCalledTimes(1);

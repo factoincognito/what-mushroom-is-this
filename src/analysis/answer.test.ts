@@ -405,7 +405,7 @@ describe("readMessageBody, thinking before the text", () => {
     expect(readMessageBody(messageBody([omittedThinking]))).toEqual({
       ok: false,
       reason: "shape",
-      detail: "the message has no single text block",
+      detail: "the message has no text block",
     });
   });
 });
@@ -416,10 +416,17 @@ describe("readMessageBody, a refusal", () => {
     ["thinking only", [omittedThinking]],
     ["a text that is not JSON", [{ type: "text", text: "I can't help with that." }]],
     ["a JSON text that fits the shape", [{ type: "text", text: '{"result":"no_mushroom"}' }]],
-  ])("says it was refused when it holds %s", (_label, content) => {
+    [
+      "two text blocks that join into JSON that fits the shape",
+      [
+        { type: "text", text: '{"result":' },
+        { type: "text", text: '"no_mushroom"}' },
+      ],
+    ],
+  ])("says it was refused, apart from a shape failure, when it holds %s", (_label, content) => {
     expect(readMessageBody(messageBody(content, "refusal"))).toEqual({
       ok: false,
-      reason: "shape",
+      reason: "refused",
       detail: "the answer was refused (stop_reason refusal)",
     });
   });
@@ -512,27 +519,82 @@ describe("readMessageBody", () => {
     expect(readMessageBody(messageBody([]))).toEqual({
       ok: false,
       reason: "shape",
-      detail: "the message has no single text block",
+      detail: "the message has no text block",
     });
   });
 
-  it("fails a message with two text blocks", () => {
+  it("joins two text blocks in order, with nothing between them, before parsing", () => {
     const body = messageBody([
       { type: "text", text: "{" },
       { type: "text", text: '"result":"no_mushroom"}' },
     ]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: { result: "no_mushroom" } });
+  });
+
+  it("joins a match split over three text blocks, with other blocks between them", () => {
+    const text = JSON.stringify(matchJson());
+    const body = messageBody([
+      omittedThinking,
+      { type: "text", text: text.slice(0, 40) },
+      redactedThinking,
+      { type: "text", text: text.slice(40, 200) },
+      { type: "text", text: text.slice(200) },
+    ]);
+    expect(readMessageBody(body)).toEqual({ ok: true, answer: expectedMatch });
+  });
+
+  it("joins the text blocks in their order, not another", () => {
+    const body = messageBody([
+      { type: "text", text: '"no_mushroom"}' },
+      { type: "text", text: '{"result":' },
+    ]);
     expect(readMessageBody(body)).toEqual({
       ok: false,
       reason: "shape",
-      detail: "the message has no single text block",
+      detail: "the answer is not JSON",
     });
   });
 
-  it("fails a text block whose text is not a string", () => {
-    expect(readMessageBody(messageBody([{ type: "text", text: 5 }]))).toEqual({
+  it("fails joined text blocks that hold two JSON objects as not JSON", () => {
+    const body = messageBody([
+      { type: "text", text: '{"result":"no_mushroom"}' },
+      { type: "text", text: '{"result":"cannot_tell"}' },
+    ]);
+    expect(readMessageBody(body)).toEqual({
       ok: false,
       reason: "shape",
-      detail: "the message has no single text block",
+      detail: "the answer is not JSON",
+    });
+  });
+
+  it("fails joined text blocks whose answer does not fit the shape", () => {
+    const body = messageBody([
+      { type: "text", text: '{"result":' },
+      { type: "text", text: '"mushroom"}' },
+    ]);
+    expect(readMessageBody(body)).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "result is not one of match, no_mushroom, cannot_tell",
+    });
+  });
+
+  it.each([
+    ["a number", [{ type: "text", text: 5 }]],
+    ["missing", [{ type: "text" }]],
+    [
+      "not a string in one of several blocks",
+      [
+        { type: "text", text: '{"result":' },
+        { type: "text", text: null },
+        { type: "text", text: '"no_mushroom"}' },
+      ],
+    ],
+  ])("fails a text block whose text is %s, without coercing it", (_label, content) => {
+    expect(readMessageBody(messageBody(content))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "a text block's text is not a string",
     });
   });
 
