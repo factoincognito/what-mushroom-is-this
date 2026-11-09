@@ -52,6 +52,12 @@
           ]
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a30ac88f-da33-4997-ba7e-a816bfd9afa2"
+      }
+    },
+    "owner": "factoincognito"
   }
 }
