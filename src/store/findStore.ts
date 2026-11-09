@@ -82,6 +82,7 @@ export interface FindStore {
   /**
    * Deletes the find, then its photo. `photoRemoved` is false when the photo could not be
    * removed: the find is gone all the same, and the next opening of the store removes the photo.
+   * A DELETE that changed no row gives `not-found` and removes no photo (PBI-1.27).
    */
   delete(id: number): Promise<{ photoRemoved: boolean }>;
   /**
@@ -310,7 +311,11 @@ export async function createFindStore(
         throw new StoreError("not-found", `no find has the ID ${id}`);
       }
       const name = textOf(record(row), "photo_file");
-      await db.runAsync(DELETE, [id]);
+      // As in `deleteUnreadable`: a DELETE that changed no row leaves the photo (PBI-1.27).
+      const { changes } = await db.runAsync(DELETE, [id]);
+      if (changes === 0) {
+        throw new StoreError("not-found", `no find has the ID ${id}`);
+      }
       return { photoRemoved: removeQuietly(photos, name) };
     },
 

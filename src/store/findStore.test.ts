@@ -962,6 +962,15 @@ describe("markWaiting", () => {
 });
 
 describe("delete", () => {
+  it("says no find has the ID when the delete changes no row, and removes no photo (PBI-1.27)", async () => {
+    photos.files.add("p7.jpg");
+    db.reply("first", PHOTO_OF, { photo_file: "p7.jpg" });
+    db.reply("run", DELETE, { changes: 0, lastInsertRowId: 0 });
+    await expect(store.delete(7)).rejects.toMatchObject({ code: "not-found" });
+    expect(events).not.toContainEqual({ photo: "remove p7.jpg" });
+    expect([...photos.files]).toEqual(["p7.jpg"]);
+  });
+
   it("deletes the find first, then its photo", async () => {
     photos.files.add("p7.jpg");
     db.reply("first", PHOTO_OF, { photo_file: "p7.jpg" });

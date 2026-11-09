@@ -448,6 +448,18 @@ describe("the store's statements on a real SQLite", () => {
   it("says no find has the ID when there is none to delete", async () => {
     await expect(store.delete(99)).rejects.toMatchObject({ code: "not-found" });
   });
+
+  it("of two deletes of one find at once (a double tap), lets one delete the find and its photo, and has the other answer not-found and remove no photo (PBI-1.27)", async () => {
+    const id = await store.add(newFind(1_000));
+    const remove = jest.spyOn(photos, "remove");
+    // Both read the photo's name before either deletes: the second DELETE changes no row.
+    const [first, second] = await Promise.allSettled([store.delete(id), store.delete(id)]);
+    expect(first).toEqual({ status: "fulfilled", value: { photoRemoved: true } });
+    expect(second).toMatchObject({ status: "rejected", reason: { code: "not-found" } });
+    expect(remove).toHaveBeenCalledTimes(1);
+    await expect(store.get(id)).resolves.toBeNull();
+    expect(photos.files.size).toBe(0);
+  });
 });
 
 describe("finds whose ID the store cannot read, on a real SQLite (PBI-1.26)", () => {
