@@ -15,7 +15,7 @@ const STOPS: readonly QueueStop[] = [
   { reason: "no-credit" },
   { reason: "model-unknown" },
   { reason: "answer" },
-  { reason: "photo-unreadable" },
+  { reason: "internal-error" },
   { reason: "other", status: 418 },
 ];
 
@@ -27,6 +27,7 @@ const NOTICES: readonly QueueNotice[] = [
   { kind: "find-failed", failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" } },
   { kind: "find-failed", failure: { cause: "request", detail: "request-wrong (status 400)" } },
   { kind: "find-failed", failure: { cause: "answer", detail: "the answer is not JSON" } },
+  { kind: "find-failed", failure: { cause: "photo", detail: "the image could not be loaded" } },
 ];
 
 describe("noticeMessage", () => {
@@ -104,6 +105,19 @@ describe("noticeMessage", () => {
     );
     expect(message).toContain("0xFFE1");
   });
+
+  it.each(LANGUAGES)(
+    "gives the internal-error stop its own text in %s, which tells the user to analyse now",
+    (language) => {
+      const message = noticeMessage(
+        { kind: "stopped", stop: { reason: "internal-error" } },
+        STRINGS[language],
+        formatTime,
+      );
+      expect(message).toBe(STRINGS[language].queue.stopped.internalError);
+      expect(message).toContain(STRINGS[language].queue.analyseNow);
+    },
+  );
 });
 
 describe("failureMessage", () => {
@@ -111,6 +125,7 @@ describe("failureMessage", () => {
     ["segment-check", "segmentCheck"],
     ["request", "request"],
     ["answer", "answer"],
+    ["photo", "photo"],
   ] as const)("gives a failed find's cause %s its message, with the detail", (cause, key) => {
     expect(failureMessage({ cause, detail: "D" }, STRINGS.en)).toBe(
       STRINGS.en.queue.failed[key].replace("{detail}", "D"),

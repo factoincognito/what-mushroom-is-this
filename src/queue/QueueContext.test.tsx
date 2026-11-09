@@ -296,6 +296,94 @@ describe("QueueProvider, once it is gone", () => {
   });
 });
 
+describe("QueueProvider, a run that rejects (Clead's decision on #17)", () => {
+  /** The state the probe shows. */
+  function shownState(): unknown {
+    return JSON.parse(String(screen.getByTestId("queue-state").props.children));
+  }
+
+  const INTERNAL = { running: false, stop: { reason: "internal-error" }, pause: null };
+
+  /** A log whose search for a waiting find rejects, as a programming or store error would. */
+  function failingLog(): FindStore {
+    const log = emptyLog();
+    jest.mocked(log.oldestWaiting).mockRejectedValue(new RangeError("timeLimitMs must be…"));
+    return log;
+  }
+
+  it("at the start: is caught, and the queue stops with an internal error", async () => {
+    await renderQueue({ log: failingLog() });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("when the app comes to the front: is caught, and the queue stops", async () => {
+    const { appState } = await renderQueue({ appState: "background", log: failingLog() });
+    await act(async () => {
+      appState.change("active");
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("when the network is back: is caught, and the queue stops", async () => {
+    const log = emptyLog();
+    const { network } = await renderQueue({ log });
+    jest.mocked(log.oldestWaiting).mockRejectedValue(new RangeError("bad"));
+    await act(async () => {
+      network.emit({ isConnected: false });
+      network.emit({ isConnected: true });
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("after a find is saved: is caught, the find is saved, and the queue stops", async () => {
+    const log = emptyLog();
+    await renderQueue({ log });
+    jest.mocked(log.oldestWaiting).mockRejectedValue(new RangeError("bad"));
+    await act(async () => {
+      const store = await screenLog?.();
+      await expect(store?.add(NEW_FIND)).resolves.toBe(1);
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("on analyse now: is caught, and the queue stops again", async () => {
+    const { queue } = await renderQueue();
+    jest.spyOn(queue, "analyseNow").mockRejectedValue(new RangeError("bad"));
+    await act(async () => {
+      current().analyseNow();
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("on a setting's change: is caught, and the queue stops", async () => {
+    const { queue } = await renderQueue();
+    jest.spyOn(queue, "settingChanged").mockRejectedValue(new RangeError("bad"));
+    await act(async () => {
+      current().settingChanged("key");
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("analysing one find: stops the queue, and the screen still gets the rejection", async () => {
+    const { queue } = await renderQueue();
+    jest.spyOn(queue, "analyseFind").mockRejectedValue(new RangeError("bad"));
+    await act(async () => {
+      await expect(current().analyseFind(4)).rejects.toBeInstanceOf(RangeError);
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("analyse now after it starts the queue again", async () => {
+    const log = failingLog();
+    await renderQueue({ log });
+    jest.mocked(log.oldestWaiting).mockResolvedValue(null);
+    await act(async () => {
+      current().analyseNow();
+    });
+    expect(shownState()).toEqual({ running: false, stop: null, pause: null });
+  });
+});
+
 describe("useQueue", () => {
   it("throws outside a QueueProvider", async () => {
     const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);

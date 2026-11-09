@@ -721,6 +721,20 @@ describe("markFailed", () => {
     expect(events).toEqual([{ method: "run", sql: MARK_FAILED, params: ["request", "413", 7] }]);
   });
 
+  it("marks a find failed for a photo that cannot be read (PBI-1.7)", async () => {
+    await store.markFailed(7, { cause: "photo", detail: "the image could not be loaded" });
+    expect(events).toEqual([
+      { method: "run", sql: MARK_FAILED, params: ["photo", "the image could not be loaded", 7] },
+    ]);
+  });
+
+  it("reads a find that failed for its photo", async () => {
+    db.reply("first", GET, row({ state: "failed", failure_cause: "photo", failure_detail: "gone" }));
+    await expect(store.get(7)).resolves.toMatchObject({
+      analysis: { state: "failed", failure: { cause: "photo", detail: "gone" } },
+    });
+  });
+
   it.each<[string, unknown]>([
     ["an unknown cause", { cause: "bad-luck", detail: "x" }],
     ["an empty detail", { cause: "answer", detail: "" }],

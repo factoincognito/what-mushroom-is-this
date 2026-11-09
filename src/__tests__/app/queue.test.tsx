@@ -200,6 +200,47 @@ describe("the Log screen when the queue has stopped (SPEC 3.1)", () => {
     await fireEvent.press(screen.getByRole("link", { name: en.openSettings }));
     expect(app.pathname()).toBe("/settings");
   });
+
+  it("shows no time when a spend limit's message states it in a form the docs do not show", async () => {
+    fetchMock.mockResolvedValueOnce(
+      answer(
+        400,
+        JSON.stringify({
+          type: "error",
+          error: {
+            type: "invalid_request_error",
+            message:
+              "You have reached your specified API usage limits. Access resumes on December 1, 2026.",
+          },
+        }),
+      ),
+    );
+    await startApp();
+    expect(await screen.findByText(en.stopped.rateLimited)).toBeOnTheScreen();
+    expect(screen.queryByText(/2026/)).not.toBeOnTheScreen();
+  });
+});
+
+describe("the Log screen after an internal error (Clead's decision on #17)", () => {
+  it.each(["sv", "en", "it"] as const)(
+    "says so in %s, without the error itself, and offers analyse now, which runs the queue again",
+    async (language) => {
+      phoneIn(language);
+      const t = STRINGS[language].queue;
+      jest
+        .spyOn(mockLog, "oldestWaiting")
+        .mockRejectedValueOnce(new RangeError("timeLimitMs must be an integer from 1"));
+      fetchMock.mockResolvedValue(ANSWERED);
+      await startApp();
+      expect(await screen.findByText(t.stopped.internalError)).toBeOnTheScreen();
+      expect(screen.queryByText(/timeLimitMs/)).not.toBeOnTheScreen();
+      expect(fetchMock).not.toHaveBeenCalled();
+      await fireEvent.press(screen.getByRole("button", { name: t.analyseNow }));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(mockFinds.get(1)?.analysis.state).toBe("done");
+      expect(screen.queryByText(t.stopped.internalError)).not.toBeOnTheScreen();
+    },
+  );
 });
 
 describe("the Log screen when the finds wait for a network", () => {

@@ -557,26 +557,60 @@ describe("the photo for analysis (SPEC 3.3)", () => {
     ]);
   });
 
-  it("a photo the encoder cannot read stops the queue; the find stays waiting", async () => {
+  it("a photo the encoder cannot read: the find is marked failed (photo, with the reason) and the queue goes on", async () => {
     const t = setup();
     t.log.addFind(1);
-    t.setPreparation(async () => {
-      throw new Error("the image could not be loaded");
+    t.log.addFind(2);
+    t.setPreparation(async (uri) => {
+      if (uri.endsWith("/1.jpg")) {
+        throw new Error("the image could not be loaded");
+      }
+      return { ok: true, imageBase64: "BBBB", width: 1, height: 1 };
     });
     await t.queue.trigger();
-    expect(t.calls).toEqual([]);
-    expect(t.log.state(1)).toEqual({ state: "waiting" });
-    expect(t.queue.getState().stop).toEqual({ reason: "photo-unreadable" });
+    expect(t.calls.map((call) => call.imageBase64)).toEqual(["BBBB"]);
+    expect(t.log.changes).toEqual([
+      "markFailed 1 photo: the image could not be loaded",
+      "setAnswer 2",
+    ]);
+    expect(t.queue.getState().stop).toBeNull();
   });
 
-  it("a decoder that gives no usable size counts as an unreadable photo", async () => {
+  it("a decoder that gives no usable size: the find is marked failed (photo), naming the size", async () => {
     const t = setup();
     t.log.addFind(1);
     t.setPreparation(async () => {
-      throw new PhotoPreparationError("invalid-size", "0 x 0");
+      throw new PhotoPreparationError("invalid-size", "the photo of 0 x 0 px cannot be sized");
     });
     await t.queue.trigger();
-    expect(t.queue.getState().stop).toEqual({ reason: "photo-unreadable" });
+    expect(t.log.changes).toEqual([
+      "markFailed 1 photo: invalid-size: the photo of 0 x 0 px cannot be sized",
+    ]);
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it.each([
+    ["an Error with no message", new Error("")],
+    ["something that is not an Error", "busy"],
+  ])("an encoder failure with %s still gives the find a reason", async (_name, thrown) => {
+    const t = setup();
+    t.log.addFind(1);
+    t.setPreparation(async () => {
+      throw thrown;
+    });
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["markFailed 1 photo: the photo could not be read"]);
+  });
+
+  it("an unreadable photo is not tried again by the queue", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.setPreparation(async () => {
+      throw new Error("gone");
+    });
+    await t.queue.trigger();
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["markFailed 1 photo: gone"]);
   });
 
   it.each(["invalid-limits", "invalid-quality"] as const)(
@@ -627,6 +661,47 @@ describe("programming errors", () => {
     t.log.failOn = "setAnswer";
     await expect(t.queue.trigger()).rejects.toBeInstanceOf(StoreError);
     expect(t.queue.getState().running).toBe(false);
+  });
+});
+
+describe("the internal-error stop", () => {
+  it("stops the queue for an internal error, which analyse now lifts", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.queue.stopForInternalError();
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+    await t.queue.trigger();
+    expect(t.calls).toEqual([]);
+    await t.queue.analyseNow();
+    expect(t.log.changes).toEqual(["setAnswer 1"]);
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it("is not lifted by a change of a setting", async () => {
+    const t = setup();
+    t.queue.stopForInternalError();
+    await t.queue.settingChanged("key");
+    await t.queue.settingChanged("model");
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+  });
+
+  it("is set when the run the queue starts itself after a 429's retry-after rejects", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.replies.push(fail({ kind: "rate-limited", retryAt: NOW + 1_000 }));
+    t.replies.push(async () => {
+      throw new RangeError("bad");
+    });
+    await t.queue.trigger();
+    t.setNow(NOW + 1_000);
+    t.timers[0]?.task();
+    await flush();
+    expect(t.queue.getState()).toEqual({
+      running: false,
+      stop: { reason: "internal-error" },
+      pause: null,
+    });
+    expect(t.log.state(1)).toEqual({ state: "waiting" });
   });
 });
 
@@ -901,6 +976,21 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
         expect(t.queue.getState().stop).toEqual(stop);
       },
     );
+
+    it("a photo the encoder cannot read: the answer is kept", async () => {
+      const t = setup();
+      t.log.addFind(1, analysed);
+      t.setPreparation(async () => {
+        throw new Error("gone");
+      });
+      await expect(t.queue.analyseFind(1)).resolves.toEqual({
+        ok: false,
+        notice: { kind: "find-failed", failure: { cause: "photo", detail: "gone" } },
+        answerKept: true,
+      });
+      expect(t.log.changes).toEqual([]);
+      expect(t.queue.getState().stop).toBeNull();
+    });
 
     it("a photo that fails the segment check: the answer is kept", async () => {
       const t = setup();
