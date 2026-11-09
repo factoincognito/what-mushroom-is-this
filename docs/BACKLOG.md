@@ -120,7 +120,7 @@ the role that did not write it.
   - a new batch on an analysed find, with its three states;
   - removing a photo.
   Spec 3.9.
-- **[NEXT] PBI-2.6** (after PBI-2.1 for the picker) — Photos from the phone's files, images only, without position or time of their own. Spec 3.9, Known unknown 13.
+- **[NEXT] PBI-2.6** (the picker as Known unknown 13 has it, after PBI-2.1) — Photos from the phone's files, images only, without position or time of their own. Spec 3.9, Known unknown 13.
 - **[NEXT] PBI-2.7** — The Library's list, replacing the Log:
   - the species, years and months filters;
   - unreadable finds always listed;

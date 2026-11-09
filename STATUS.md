@@ -11,11 +11,11 @@ Build: Phase 1's test session, and Phase 2, whose spec ([`docs/SPEC.md`](https:/
 
 ## Current focus
 - Adam's Phase 1 test session on his Android phone, [PBI-1.11](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/BACKLOG.md?plain=1#L50). The first build, [PBI-1.10](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/BACKLOG.md?plain=1#L49), was installed on his phone by 2026-11-09 17:44.
-- Phase 2: PBI-2.1, the checks of the map provider, the Claude API's image limits, the file picker and Wikimedia, before their parts are built.
+- Phase 2: the store at schema version 2, PBI-2.2 ([#49](https://github.com/factoincognito/what-mushroom-is-this/pull/49), in review). PBI-2.1's checks are done, and Adam decided the map and Wikimedia escalations on 2026-11-09 at 21:27 ([#50](https://github.com/factoincognito/what-mushroom-is-this/pull/50)).
 
 ## Next step
-- Adam: the test session.
-- Clead: what the test session finds, and the [Known unknowns](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/SPEC.md?plain=1#L317) it settles (2, 7, 9 and 10). Also PBI-2.1's escalations to the product office, and the Phase 2 items that need none, starting with the store (PBI-2.2).
+- Adam: the test session, before installing any Phase 2 build. The database migration is one-way: a Phase 1 build cannot read a version 2 database.
+- Clead: what the test session finds, and the [Known unknowns](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/SPEC.md?plain=1#L317) it settles (2, 7, 9 and 10). Then the Phase 2 items in order, after PBI-2.2.
 
 ## Blockers
 None.

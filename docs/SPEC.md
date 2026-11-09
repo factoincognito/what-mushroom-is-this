@@ -10,7 +10,9 @@ with Clead's recommendations; the licence and the Italian disclaimer
 19:28. Phase 2 (3.9): intent approved by Adam, 2026-11-09 20:49, in
 chat ("apyr"), with Clead's two proposals (the disclaimer for a lookup
 without photos, and the edibility until the self-check agrees) and the
-choices marked **[Clead]**. The approved text and its decisions are
+choices marked **[Clead]** at that time (#47). Choices marked
+**[Clead]** later (#50) are proposals until Adam confirms them
+(`RULES.md` § 7 (3)). The approved text and its decisions are
 recorded in the product
 office (`library/designs/what-mushroom-is-this/design.md` and
 `DECISIONS.md` in `factoincognito/product-office`, private). This file
@@ -449,10 +451,14 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   It is the picture that Wikidata gives as the image of the species'
   item, found by its Latin name, fetched as a JPEG or PNG thumbnail at
   the smallest of Wikimedia's standard widths at or above the width the
-  resize of 3.3 needs, then resized on the phone (**[Clead]**; Known
-  unknown 15). Its licence must be CC0, public domain without a country
-  limit, CC BY or CC BY-SA; any other licence means no picture (Adam,
-  2026-11-09 21:27).
+  resize of 3.3 needs (3840 when the need is above that, and the
+  original's own width when it is narrower), then resized on the phone
+  (**[Clead]**; **[not checked]**: that the thumbnail URL returns such
+  widths, Known unknown 15). Its licence must be CC0, public domain
+  without a country limit, CC BY or CC BY-SA; any other licence means no
+  picture (Adam, 2026-11-09 21:27). A file under several licences is used
+  when one of them is on that list, and is credited under that one
+  (**[Clead]**).
 - The picture, and the check below, belong to an answer from text alone.
   When a text find gets photos, it keeps its answer, its picture and its
   check, with the check's outcome for the edibility shown, until an answer
@@ -587,12 +593,17 @@ answers to Clead's questions, 19:05).
   sources" (**[Clead]**). The map is MapLibre React Native with
   OpenFreeMap's vector tiles; the style URL is configuration (the
   escalation under the IP policy, decided by Adam, 2026-11-09 21:27).
-  The map shows the attribution OpenFreeMap's terms and OpenStreetMap's
-  guidelines require: OpenStreetMap, with a link to its copyright page,
-  and OpenMapTiles. It may collapse to an "(i)" button and is also listed
-  in About (**[Clead]**). Requests carry the app's own User-Agent
-  (**[Clead]**). No offline areas are downloaded; the map uses what its
-  cache holds (**[Clead]**).
+  The map shows the attribution that OpenStreetMap's attribution
+  guidelines and OpenMapTiles ask for (PBI-2.1's findings): OpenStreetMap,
+  with a link to its copyright page, and OpenMapTiles. It may collapse to
+  an "(i)" button, and is also listed in About (**[Clead]**;
+  **[not checked]**: the default attribution of the library, Known
+  unknown 11). Requests carry the app's own User-Agent (**[Clead]**;
+  **[not checked]**: that the library sends it, Known unknown 11). No
+  offline areas are downloaded; the map uses what its cache holds
+  (**[Clead]**). The library's location engine is its default, not
+  Google's (**[Clead]**). OpenFreeMap's tiles may come through Cloudflare
+  as its CDN, which then also sees the tile requests (PBI-2.1's findings).
 
 ---
 
@@ -640,11 +651,13 @@ answers to Clead's questions, 19:05).
     from a fix the app had before the camera opened, or from the last
     known position (3.6); a fix after the camera closes still counts
     within the 30 seconds. Checked in Adam's test session (PBI-1.11).
-11. Phase 2's map (3.9). Settled by PBI-2.1, whose findings are in the
-    product office (`library/designs/what-mushroom-is-this/phase-2-checks.md`).
-    The choice is MapLibre React Native (MIT), on MapLibre Native
-    (BSD-2-Clause), with OpenFreeMap's tiles. OpenFreeMap needs no key and
-    charges no fee; its terms allow apps and caching; it has no SLA.
+11. Phase 2's map (3.9). Decided by Adam, 2026-11-09 21:27, on PBI-2.1's
+    findings (product office,
+    `library/designs/what-mushroom-is-this/phase-2-checks.md`): MapLibre
+    React Native (MIT), on MapLibre Native (BSD-2-Clause), with
+    OpenFreeMap's tiles. Per the findings, OpenFreeMap needs no key and
+    charges no fee; its terms allow apps, and offline downloads within
+    limits; it has no SLA.
     Left for the build:
     - whether it builds on SDK 57;
     - whether it sends telemetry;
@@ -667,23 +680,28 @@ answers to Clead's questions, 19:05).
     `expo-document-picker`, with `type: 'image/*'` and
     `copyToCacheDirectory` on, so that `expo-image-manipulator` reads a
     local file; the copy then goes into the app's photo store. Its
-    `lastModified` is never used as the photo's time. To be checked on the
-    phone: `content://` sources, and HEIC files (PBI-2.1).
+    `lastModified` is never used as the photo's time (**[Clead]**, on
+    PBI-2.1's findings). To be checked on the phone: `content://` sources,
+    and HEIC and SVG files (PBI-2.6).
 14. Whether resizing up to five photos for one request (one at a time,
     3.9) brings back the low-memory load failures PBI-1.25 was written
     for, on Adam's phone.
-15. Phase 2's representative picture (3.9). PBI-2.1's findings, which
-    Adam decided on 2026-11-09 21:27:
-    - Wikimedia's API terms are accepted.
-    - The pictures are limited to CC0, public domain without a country
+15. Phase 2's representative picture (3.9).
+    Adam decided on 2026-11-09 21:27, on PBI-2.1's findings:
+    - Wikimedia's API terms are accepted;
+    - the pictures are limited to CC0, public domain without a country
       limit, CC BY and CC BY-SA.
-    - The lookup: the Wikidata item by P225 (taxon name), with rank P105
-      species; its image, P18; then the Commons file's thumbnail URL,
-      author, licence and page.
-    - Thumbnails come at Wikimedia's standard widths only.
-    - The User-Agent names the app, its version and the repository's URL.
-    - The limits are a few hundred requests an hour per phone, one at a
-      time.
+    From PBI-2.1's findings, with Clead's choices marked:
+    - the lookup: the Wikidata item by P225 (taxon name), its image, P18,
+      then the Commons file's thumbnail URL, author, licence and page
+      (**[Clead]**); a check that the item's rank, P105, is species
+      (**[Clead]**, still open);
+    - thumbnails at Wikimedia's standard widths only, since other widths
+      are rate-limited (**[Clead]**);
+    - a User-Agent that names the app, its version and the repository's
+      URL, as Wikimedia's policy asks (**[Clead]**: the form);
+    - requests one at a time, within limits of a few hundred an hour per
+      phone (**[Clead]**).
     Left for the build:
     - Wikimedia's policy pages, read again on the original sites (PBI-2.1
       read some of them only through copies);
