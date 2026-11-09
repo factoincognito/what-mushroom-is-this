@@ -19,6 +19,8 @@ All notable changes to What mushroom is this? are documented here.
   the photo prepared for analysis (#14).
 - The analysis queue: its triggers, stops, restarts and messages, and
   "analyse now" on the Log screen (#17).
+- Out of Android's backups and device transfers: the find log, the photos
+  and the settings; and the About view with the licences (#21).
 
 ### Changed
 
@@ -26,6 +28,9 @@ All notable changes to What mushroom is this? are documented here.
   refused answer fails only its find, and an answer's text blocks are
   joined (#18).
 - The image module checks the input of its token count (#19).
+- The queue fails a find only when its photo cannot be read, and stops
+  on other errors; a refused photo and a key in no workspace get their
+  own messages (#23).
 
 ## Project created
 

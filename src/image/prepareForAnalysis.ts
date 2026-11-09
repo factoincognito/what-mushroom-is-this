@@ -31,18 +31,19 @@ export interface JpegEncoder {
 
 export type PreparedPhoto =
   | { ok: true; imageBase64: string; width: number; height: number }
-  /** The encoder wrote something the segment check refuses: the find is marked failed. */
+  /**
+   * The find is marked failed: the encoder wrote something the segment check refuses
+   * (`segment-check`), or the photo itself cannot be loaded, decoded or sized (`photo`).
+   */
   | { ok: false; failure: FindFailure };
 
 export type PhotoPreparationErrorCode =
-  /** The decoder gave a size that is not whole pixels of one or more. */
-  | "invalid-size"
   /** The model's image limits in the config are not whole numbers the rule can use. */
   | "invalid-limits"
   /** The JPEG quality in the config is not a number above 0 and at most 1. */
   | "invalid-quality";
 
-/** A programming or configuration error, or a decoder that gave no usable size. */
+/** A configuration error. */
 export class PhotoPreparationError extends Error {
   readonly code: PhotoPreparationErrorCode;
 
@@ -54,8 +55,11 @@ export class PhotoPreparationError extends Error {
 }
 
 /**
- * Prepares a find's photo for the model `modelId`. A photo the encoder cannot read, and an
- * encoder that fails, pass their error on.
+ * Prepares a find's photo for the model `modelId`. Only a fault of the photo itself fails the find
+ * with the cause `photo`: the encoder cannot load or decode it, or the size it decodes to is not
+ * whole pixels of one or more (Clead's decision for PBI-1.21). Any other error, which is not the
+ * photo's (resizing, writing the encoded copy to the cache, full storage, reading its bytes, a
+ * programming error), is passed on, and so is a configuration error.
  */
 export async function preparePhotoForAnalysis(
   photoUri: string,
@@ -71,14 +75,21 @@ export async function preparePhotoForAnalysis(
     );
   }
   const limits = imageLimitsFor(modelId, appConfig);
-  const image = await encoder.load(photoUri);
+  let image: LoadedImage;
+  try {
+    image = await encoder.load(photoUri);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.trim() : "";
+    return photoFailure(reason === "" ? "load-failed" : `load-failed: ${reason}`);
+  }
   try {
     const size = resizedSize(image.width, image.height, limits);
     if (!size.ok) {
-      throw new PhotoPreparationError(
-        size.reason,
-        `the photo of ${image.width} x ${image.height} px cannot be sized for ${modelId}`,
-      );
+      const what = `the photo of ${image.width} x ${image.height} px cannot be sized for ${modelId}`;
+      if (size.reason === "invalid-size") {
+        return photoFailure(`invalid-size: ${what}`);
+      }
+      throw new PhotoPreparationError(size.reason, what);
     }
     const bytes = await image.encodeJpeg(size.width, size.height, quality);
     const check = checkJpegSegments(bytes);
@@ -90,6 +101,10 @@ export async function preparePhotoForAnalysis(
   } finally {
     image.release();
   }
+}
+
+function photoFailure(detail: string): PreparedPhoto {
+  return { ok: false, failure: { cause: "photo", detail } };
 }
 
 /** A two-byte marker as the segment check's tests write it: 0xFFE1. */

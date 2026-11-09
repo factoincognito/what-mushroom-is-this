@@ -130,6 +130,8 @@ export type Strings = {
       readonly answer: string;
       /** The photo could not be read for analysis. */
       readonly photo: string;
+      /** Claude declined to analyse the photo (`stop_reason` `refusal`); no detail is shown. */
+      readonly refused: string;
     };
     /** A failed new analysis of a find that has an answer. */
     readonly answerKept: string;
@@ -209,6 +211,21 @@ export type Strings = {
     readonly deleteCancel: string;
     readonly deleteFailed: string;
   };
+  /** The About view (docs/SPEC.md 3.1): the licences and the disclaimer. */
+  readonly about: {
+    /** The view's title, which is also the text of its link in Settings. */
+    readonly title: string;
+    readonly appHeading: string;
+    readonly librariesHeading: string;
+    readonly librariesIntro: string;
+    /** In place of the version of a library whose version the build chooses. */
+    readonly versionNotPinned: string;
+    readonly showText: string;
+    readonly hideText: string;
+    /** For a library whose licence text is not in the app yet. */
+    readonly textMissing: string;
+    readonly disclaimerHeading: string;
+  };
 };
 
 /**
@@ -234,6 +251,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "newFind",
     "queue",
     "find",
+    "about",
   ],
   it: [
     "languageName",
@@ -247,6 +265,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "newFind",
     "queue",
     "find",
+    "about",
   ],
 };
 
@@ -364,6 +383,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         request: "Claude-API:t avvisade förfrågan ({detail}).",
         answer: "Svaret hade inte den väntade formen ({detail}).",
         photo: "Fotot gick inte att läsa för analys ({detail}).",
+        refused: "Claude avböjde att analysera det här fotot.",
       },
       answerKept: "Den nya analysen misslyckades. Det tidigare svaret finns kvar.",
     },
@@ -425,6 +445,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       deleteYes: "Ta bort",
       deleteCancel: "Avbryt",
       deleteFailed: "Fyndet gick inte att ta bort. Försök igen.",
+    },
+    about: {
+      title: "Om appen",
+      appHeading: "Appens licens",
+      librariesHeading: "Bibliotek",
+      librariesIntro: "Appen innehåller dessa bibliotek, under deras egna licenser.",
+      versionNotPinned: "väljs när appen byggs",
+      showText: "Visa licenstexten",
+      hideText: "Dölj licenstexten",
+      textMissing: "Licenstexten finns inte i appen ännu.",
+      disclaimerHeading: "Ätlighet",
     },
   },
   en: {
@@ -535,6 +566,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         request: "The Claude API refused the request ({detail}).",
         answer: "The answer did not have the expected form ({detail}).",
         photo: "The photo could not be read for analysis ({detail}).",
+        refused: "Claude declined to analyse this photo.",
       },
       answerKept: "The new analysis failed. The earlier answer is kept.",
     },
@@ -596,6 +628,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       deleteYes: "Delete",
       deleteCancel: "Cancel",
       deleteFailed: "The find could not be deleted. Try again.",
+    },
+    about: {
+      title: "About",
+      appHeading: "The app's licence",
+      librariesHeading: "Libraries",
+      librariesIntro: "The app contains these libraries, under their own licences.",
+      versionNotPinned: "chosen when the app is built",
+      showText: "Show the licence text",
+      hideText: "Hide the licence text",
+      textMissing: "The licence text is not in the app yet.",
+      disclaimerHeading: "Edibility",
     },
   },
   // Not checked by an Italian speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
@@ -712,6 +755,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         request: "L'API di Claude ha rifiutato la richiesta ({detail}).",
         answer: "La risposta non aveva la forma prevista ({detail}).",
         photo: "Non è stato possibile leggere la foto per l'analisi ({detail}).",
+        refused: "Claude ha rifiutato di analizzare questa foto.",
       },
       answerKept: "La nuova analisi non è riuscita. La risposta precedente è mantenuta.",
     },
@@ -773,6 +817,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       deleteYes: "Elimina",
       deleteCancel: "Annulla",
       deleteFailed: "Non è stato possibile eliminare il ritrovamento. Riprova.",
+    },
+    about: {
+      title: "Informazioni",
+      appHeading: "La licenza dell'app",
+      librariesHeading: "Librerie",
+      librariesIntro: "L'app contiene queste librerie, con le loro licenze.",
+      versionNotPinned: "scelta quando l'app viene compilata",
+      showText: "Mostra il testo della licenza",
+      hideText: "Nascondi il testo della licenza",
+      textMissing: "Il testo della licenza non è ancora nell'app.",
+      disclaimerHeading: "Commestibilità",
     },
   },
 };

@@ -728,6 +728,13 @@ describe("markFailed", () => {
     ]);
   });
 
+  it("marks a find failed for a refused answer (PBI-1.21)", async () => {
+    await store.markFailed(7, { cause: "refused", detail: "stop_reason refusal" });
+    expect(events).toEqual([
+      { method: "run", sql: MARK_FAILED, params: ["refused", "stop_reason refusal", 7] },
+    ]);
+  });
+
   it("reads a find that failed for its photo", async () => {
     db.reply(
       "first",

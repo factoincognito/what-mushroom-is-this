@@ -67,9 +67,10 @@ describe("NOT_CHECKED_BY_A_SPEAKER", () => {
     "newFind",
     "queue",
     "find",
+    "about",
   ];
 
-  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7 and PBI-1.8", () => {
+  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7, PBI-1.8 and PBI-1.9", () => {
     expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
   });
 
@@ -154,6 +155,7 @@ describe("the strings of the queue (PBI-1.7)", () => {
       "queue.answerKept",
       "queue.failed.answer",
       "queue.failed.photo",
+      "queue.failed.refused",
       "queue.failed.request",
       "queue.failed.segmentCheck",
       "queue.openSettings",
@@ -251,6 +253,22 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       expect(STRINGS[lang].find.accuracy).toContain("{metres}");
     },
   );
+});
+
+describe("the strings of the About view", () => {
+  it.each(LANGUAGES)("are all there in %s", (language) => {
+    expect(keyPaths(STRINGS[language]).filter((path) => path.startsWith("about."))).toEqual([
+      "about.appHeading",
+      "about.disclaimerHeading",
+      "about.hideText",
+      "about.librariesHeading",
+      "about.librariesIntro",
+      "about.showText",
+      "about.textMissing",
+      "about.title",
+      "about.versionNotPinned",
+    ]);
+  });
 });
 
 describe("the disclaimer of SPEC 3.5", () => {
