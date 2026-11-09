@@ -57,17 +57,29 @@ export default function NewFindScreen() {
             <Text style={styles.buttonText}>{t.back}</Text>
           </Pressable>
         </>
+      ) : view.canRetrySave ? (
+        // The photo whose save failed is kept until it is saved or discarded (SPEC 3.1: a find
+        // is never lost), so no new photo is offered meanwhile.
+        <>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!canChoose}
+            onPress={() => flow.retrySave()}
+            style={[styles.button, !canChoose && styles.disabled]}
+          >
+            <Text style={styles.buttonText}>{t.retrySave}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!canChoose}
+            onPress={() => flow.discardPending()}
+            style={[styles.button, !canChoose && styles.disabled]}
+          >
+            <Text style={styles.buttonText}>{t.discardPhoto}</Text>
+          </Pressable>
+        </>
       ) : (
         <>
-          {canChoose && view.canRetrySave && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => flow.retrySave()}
-              style={styles.button}
-            >
-              <Text style={styles.buttonText}>{t.retrySave}</Text>
-            </Pressable>
-          )}
           <Pressable
             accessibilityRole="button"
             disabled={!canChoose}

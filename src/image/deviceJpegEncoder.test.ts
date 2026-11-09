@@ -101,6 +101,18 @@ describe("deviceJpegEncoder", () => {
     expect(saved.exists).toBe(false);
   });
 
+  it("removes the encoded copy from the cache, and passes the error on, when its bytes cannot be read", async () => {
+    const spy = jest.spyOn(File.prototype, "bytes").mockRejectedValue(new Error("read failed"));
+    try {
+      const image = await deviceJpegEncoder.load("file:///doc/photos/p1.jpg");
+      await expect(image.encodeJpeg(2212, 1659, 0.9)).rejects.toThrow("read failed");
+      expect(saved.exists).toBe(false);
+      expect(calls).toEqual(expect.arrayContaining(["resized.release", "resizing.release"]));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("gives the bytes even when the encoded file cannot be removed", async () => {
     resized.saveAsync.mockImplementation(async () => {
       saved.write(ENCODED);

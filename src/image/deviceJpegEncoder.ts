@@ -32,9 +32,11 @@ export const deviceJpegEncoder: JpegEncoder = {
           try {
             const saved = await resized.saveAsync({ format: SaveFormat.JPEG, compress: quality });
             const file = new File(saved.uri);
-            const bytes = await file.bytes();
-            removeQuietly(file);
-            return bytes;
+            try {
+              return await file.bytes();
+            } finally {
+              removeQuietly(file);
+            }
           } finally {
             resized.release();
           }
