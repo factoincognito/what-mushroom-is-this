@@ -4,6 +4,10 @@
  * check what the fake database of the other store tests cannot: that SQLite accepts the schema,
  * that its constraints refuse what they should, and that the store's SQL does what the store says.
  * The app does not import this module.
+ *
+ * "A real SQLite" here is Node's (its version is Node's, 3.53.4 on Node 22.23), not expo-sqlite's
+ * vendored 3.50.3, and a transaction runs as `BEGIN EXCLUSIVE` on the same connection, where
+ * expo-sqlite runs `BEGIN` on a new one (review of #49, note 2).
  */
 
 import type { SQLiteBindParams } from "expo-sqlite";

@@ -58,6 +58,28 @@ export interface AnalysedAnswer {
   analysedAtMs: number;
 }
 
+/**
+ * What the analysis behind an answer sent of the find (review of #49, fix 1): the URIs of the
+ * photos it included, as the store gave them (`Find.photoUri`, `StoredFind.photos`), in order;
+ * none for an analysis of the text alone. The store compares them with the photos the find holds
+ * when the answer is stored, which may have changed while the analysis ran.
+ */
+export interface AnalysisSent {
+  photoUris: readonly string[];
+}
+
+export function checkSent(sent: AnalysisSent | undefined): void {
+  if (sent === undefined || sent === null || typeof sent !== "object") {
+    throw invalid("there is no account of what the analysis sent");
+  }
+  if (!Array.isArray(sent.photoUris)) {
+    throw invalid("the photos the analysis sent are not a list");
+  }
+  for (const uri of sent.photoUris) {
+    checkUri(uri, "a photo the analysis sent");
+  }
+}
+
 export type Analysis =
   | { state: "waiting" }
   | { state: "failed"; failure: FindFailure }

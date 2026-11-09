@@ -22,6 +22,7 @@ import {
   type AddedPhotosState,
   type AnalysedAnswer,
   type Analysis,
+  type AnalysisSent,
   checkFailure,
   checkId,
   checkNewFind,
@@ -29,6 +30,7 @@ import {
   checkNewTextFind,
   checkPosition,
   checkSelfCheckOutcome,
+  checkSent,
   checkUri,
   corrupt,
   FAILURE_CAUSES,
@@ -94,13 +96,16 @@ export interface FindStore {
    */
   oldestWaiting(): Promise<number | null>;
   /**
-   * Stores the first answer. Every answer write also marks the photos added since as analysed,
-   * drops the find's representative picture and self-check (its picture's file goes at the next
-   * opening), and starts a new self-check, waiting, when the answer names a species and the find
-   * has text and no photo, so the answer is from the text alone (docs/SPEC.md 3.9).
+   * Stores the first answer, with what its analysis sent (`AnalysisSent`). Every answer write
+   * also sets the photos added since: waiting when the find holds a photo the analysis did not
+   * send (one added while it ran), and analysed otherwise. It drops the find's representative
+   * picture and self-check (the picture's file goes at the next opening), and starts a new
+   * self-check, waiting, when the analysis sent no photo and the answer names a species of a find
+   * with text, so the answer is from the text alone (docs/SPEC.md 3.9). A find whose photos
+   * cannot be read is refused as `corrupt`, and nothing is stored.
    */
-  setAnswer(id: number, analysed: AnalysedAnswer): Promise<void>;
-  replaceAnswer(id: number, analysed: AnalysedAnswer): Promise<void>;
+  setAnswer(id: number, analysed: AnalysedAnswer, sent: AnalysisSent): Promise<void>;
+  replaceAnswer(id: number, analysed: AnalysedAnswer, sent: AnalysisSent): Promise<void>;
   markFailed(id: number, failure: FindFailure): Promise<void>;
   markWaiting(id: number): Promise<void>;
   /**
@@ -111,15 +116,16 @@ export interface FindStore {
   setPosition(id: number, position: Position): Promise<void>;
   /**
    * Deletes the find, then its photos and its picture. `photoRemoved` is false when a file could
-   * not be removed, or not be named from what is stored: the find is gone all the same, and the
-   * next opening of the store removes the file. A DELETE that changed no row gives `not-found` and
-   * removes no file (PBI-1.27).
+   * not be removed, or when what is stored does not name them all, and then none is removed,
+   * since a damaged list may name another find's file: the find is gone all the same, and the
+   * next opening of the store removes its files. A DELETE that changed no row gives `not-found`
+   * and removes no file (PBI-1.27).
    */
   delete(id: number): Promise<{ photoRemoved: boolean }>;
   /**
    * Deletes a find whose ID the store cannot read (an ID of 0 or below, or one past 2^53, which
-   * only a damaged file can hold), named by the `storedId` the list gives it, then the files it
-   * can name (PBI-1.26). `photoRemoved` is false when one could not be. A find whose ID the store
+   * only a damaged file can hold), named by the `storedId` the list gives it, then its files, as
+   * `delete` does (PBI-1.26). `photoRemoved` is false as there. A find whose ID the store
    * can read is never deleted here: for its ID this gives `not-found`. So does a DELETE that
    * changed no row, which removes no file (PBI-1.27).
    */
@@ -260,12 +266,21 @@ const FILES_OF_STORED = `SELECT photos, picture_file FROM finds WHERE CAST(id AS
 const DELETE_STORED = `DELETE FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
 /** An SQLite integer's decimal form, as CAST(… AS TEXT) writes it: at most 19 digits. */
 const STORED_ID = /^(0|-?[1-9][0-9]{0,18})$/;
+/**
+ * An answer's columns, set from what its analysis sent against what the find holds as it is
+ * stored (review of #49, fix 1): the photos added since are waiting when the find now holds a
+ * photo whose name is not among the names sent (a JSON array), and analysed otherwise; the
+ * self-check waits only when the number of photos sent is 0, the answer is a match and the find
+ * has text, so the answer is from the text alone (docs/SPEC.md 3.9).
+ */
 const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL,
   answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?,
-  name_it = ?, edibility = ?, confidence = ?, added_photos = 'analysed', picture_file = NULL,
-  picture_author = NULL, picture_licence = NULL, picture_page = NULL,
-  self_check = CASE WHEN ? = 'match' AND text IS NOT NULL AND ${PHOTO_COUNT} = 0
-    THEN 'waiting' END,
+  name_it = ?, edibility = ?, confidence = ?,
+  added_photos = CASE WHEN EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(finds.photos)
+    THEN finds.photos ELSE '[]' END) WHERE json_extract(value, '$.file') NOT IN
+    (SELECT value FROM json_each(?))) THEN 'waiting' ELSE 'analysed' END,
+  picture_file = NULL, picture_author = NULL, picture_licence = NULL, picture_page = NULL,
+  self_check = CASE WHEN ? = 0 AND ? = 'match' AND text IS NOT NULL THEN 'waiting' END,
   check_name_sv = NULL, check_name_en = NULL, check_name_la = NULL, check_name_it = NULL`;
 const SET_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state IN ('waiting', 'failed')`;
 const REPLACE_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state = 'done'`;
@@ -357,9 +372,30 @@ export async function createFindStore(
     });
   }
 
-  async function answer(id: number, analysed: AnalysedAnswer, sql: string): Promise<void> {
+  /**
+   * Stores an answer with what its analysis sent. The find's photos are read only to name the
+   * photos sent; the UPDATE itself compares those names with the photos the find holds then, so a
+   * photo added after the read, too, is seen as not sent (review of #49, fix 1). A URI sent that
+   * names no photo the find holds is of a photo removed since, and covers nothing.
+   */
+  async function answer(
+    id: number,
+    analysed: AnalysedAnswer,
+    sent: AnalysisSent,
+    sql: string,
+  ): Promise<void> {
     checkId(id);
-    await update(id, sql, answerColumns(analysed));
+    checkSent(sent);
+    const columns = answerColumns(analysed);
+    const row = await db.getFirstAsync(PHOTOS_OF, [id]);
+    if (row === null) {
+      throw new StoreError("not-found", `no find has the ID ${id}`);
+    }
+    const byUri = new Map(readPhotoNames(record(row)).map((name) => [photos.uriOf(name), name]));
+    const sentNames = sent.photoUris.flatMap((uri) => byUri.get(uri) ?? []);
+    // The answer's result, the fourth of its columns, once more for the self-check.
+    const result = columns[3] ?? null;
+    await update(id, sql, [...columns, JSON.stringify(sentNames), sent.photoUris.length, result]);
   }
 
   /** Copies a file in, then runs `save` with its name; removes the copy when `save` fails. */
@@ -398,7 +434,12 @@ export async function createFindStore(
     if (changes === 0) {
       throw new StoreError("not-found", `no find has the ID ${key}`);
     }
-    let removed = files.complete;
+    // A list damaged past naming every file may also name another find's file, so then none is
+    // removed; the next opening removes those that were this find's (review of #49, note 1).
+    if (!files.complete) {
+      return { photoRemoved: false };
+    }
+    let removed = true;
     for (const name of files.names) {
       removed = removeQuietly(photos, name) && removed;
     }
@@ -466,9 +507,9 @@ export async function createFindStore(
       }
     },
 
-    setAnswer: (id, analysed) => answer(id, analysed, SET_ANSWER),
+    setAnswer: (id, analysed, sent) => answer(id, analysed, sent, SET_ANSWER),
 
-    replaceAnswer: (id, analysed) => answer(id, analysed, REPLACE_ANSWER),
+    replaceAnswer: (id, analysed, sent) => answer(id, analysed, sent, REPLACE_ANSWER),
 
     async markFailed(id, failure) {
       checkId(id);
@@ -721,22 +762,10 @@ function answerColumns(analysed: AnalysedAnswer): Params {
   }
   const valid = checked.answer;
   if (valid.result !== "match") {
-    const { result } = valid;
-    return [json, model, analysedAtMs, result, null, null, null, null, null, result];
+    return [json, model, analysedAtMs, valid.result, null, null, null, null, null];
   }
   const { sv, en, it } = valid.names;
-  return [
-    json,
-    model,
-    analysedAtMs,
-    "match",
-    sv,
-    en,
-    it,
-    valid.edibility,
-    valid.confidence,
-    "match",
-  ];
+  return [json, model, analysedAtMs, "match", sv, en, it, valid.edibility, valid.confidence];
 }
 
 type Row = Record<string, unknown>;
