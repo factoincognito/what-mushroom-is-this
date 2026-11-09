@@ -34,8 +34,9 @@ function insert(id: bigint | null, timeSource: string, photo: string): string {
   try {
     const { lastInsertRowid } = sqlite
       .prepare(
-        `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, photo_file, state)
-          VALUES (?, 1000, 0, ?, ?, 'waiting')`,
+        `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, photos, batches,
+          batch_open, state) VALUES (?, 1000, 0, ?, json_array(json_object('file', ?, 'batch', 1)),
+          1, 0, 'waiting')`,
       )
       .run(id, timeSource, photo);
     return lastInsertRowid.toString();

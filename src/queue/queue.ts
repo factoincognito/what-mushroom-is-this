@@ -25,7 +25,7 @@ import type { Answer } from "../analysis/answer";
 import type { AnalysisError } from "../analysis/errors";
 import type { PreparedPhoto } from "../image/prepareForAnalysis";
 import type { ReadKeyResult } from "../key/apiKey";
-import { type Find, type FindFailure, StoreError } from "../store/find";
+import { type AnalysisSent, type Find, type FindFailure, StoreError } from "../store/find";
 import type { FindStore } from "../store/findStore";
 
 /** Why the finds wait after a run: no network, the time limit passed, or a fault on Anthropic's side. */
@@ -217,7 +217,8 @@ export class AnalysisQueue {
             model: attempt.model,
             analysedAtMs: this.deps.now(),
           };
-          await (analysed ? log.replaceAnswer(id, answer) : log.setAnswer(id, answer));
+          const sent = sentOf(find);
+          await (analysed ? log.replaceAnswer(id, answer, sent) : log.setAnswer(id, answer, sent));
           return { ok: true };
         }
         case "find-failed":
@@ -306,11 +307,11 @@ export class AnalysisQueue {
     const attempt = await this.attempt(find, count);
     switch (attempt.type) {
       case "answered":
-        await log.setAnswer(id, {
-          answer: attempt.answer,
-          model: attempt.model,
-          analysedAtMs: this.deps.now(),
-        });
+        await log.setAnswer(
+          id,
+          { answer: attempt.answer, model: attempt.model, analysedAtMs: this.deps.now() },
+          sentOf(find),
+        );
         return "next";
       case "find-failed":
         await log.markFailed(id, attempt.failure);
@@ -423,6 +424,11 @@ export class AnalysisQueue {
 }
 
 /** The outcome of SPEC 3.3's table for an error class. */
+/** What an analysis of the find sends: its one photo, so the store knows what the answer saw. */
+function sentOf(find: Find): AnalysisSent {
+  return { photoUris: [find.photoUri] };
+}
+
 function outcomeOf(error: AnalysisError, accessResumesAtMs: number | null): Attempt {
   switch (error.kind) {
     case "stays-waiting":

@@ -35,6 +35,13 @@ export type AppConfig = {
    * whose limits are within those of every model, so a photo sized to them is never downscaled.
    */
   readonly unlistedModelImageLimits: ImageLimits;
+  /** The most photos a find holds (docs/SPEC.md 3.9, Batches). */
+  readonly maxPhotosPerFind: number;
+  /**
+   * The longest text a lookup takes, in characters (docs/SPEC.md 3.9, Lookups), each counted as
+   * one Unicode code point.
+   */
+  readonly lookupTextMaxLength: number;
 };
 
 /**
@@ -79,4 +86,7 @@ export const config: AppConfig = Object.freeze({
   // use, start with Claude Opus 5.5 for most workloads."
   defaultModelId: "claude-opus-5-5",
   unlistedModelImageLimits: STANDARD_TIER,
+  // Both docs/SPEC.md 3.9, Clead's limits, kept as configuration as the spec says.
+  maxPhotosPerFind: 5,
+  lookupTextMaxLength: 2000,
 });

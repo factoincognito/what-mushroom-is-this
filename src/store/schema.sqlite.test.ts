@@ -1,6 +1,8 @@
 /**
  * The schema and the store against a real SQLite (`src/testing/sqliteDatabase.ts`): every
- * statement the store sends, and the constraints of schema version 1.
+ * statement the store sends, and the constraints of the current schema. Those schema version 2
+ * added, and the store's Phase 2 statements, are in `lookups.sqlite.test.ts`; the migration from
+ * version 1 in `migration.sqlite.test.ts`.
  */
 
 import { EDIBILITIES, type Match } from "../analysis/answer";
@@ -67,12 +69,25 @@ afterEach(() => {
   sqlite.close();
 });
 
+/** What an analysis of the find sent, as the queue sends it: the find's photo (PBI-2.2). */
+async function sentPhoto(id: number): Promise<{ photoUris: string[] }> {
+  const find = await store.get(id);
+  return { photoUris: find === null ? [] : [find.photoUri] };
+}
+
+/**
+ * The columns and values of a find's one photo, named by a parameter, in its first batch, the
+ * batch complete (schema version 2, PBI-2.2).
+ */
+const PHOTO_COLUMNS = "photos, batches, batch_open";
+const PHOTO = "json_array(json_object('file', ?, 'batch', 1)), 1, 0";
+
 /** Inserts a failed find straight into the table, past the store's own checks. */
 function insertFailed(cause: string): void {
   sqlite
     .prepare(
-      `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state,
-        failure_cause, failure_detail) VALUES (1, 0, 'saved', ?, 'failed', ?, 'why')`,
+      `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state,
+        failure_cause, failure_detail) VALUES (1, 0, 'saved', ${PHOTO}, 'failed', ?, 'why')`,
     )
     .run(`f-${cause}.jpg`, cause);
 }
@@ -81,10 +96,10 @@ function insertFailed(cause: string): void {
 function insertMatch(edibility: string): void {
   sqlite
     .prepare(
-      `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state,
-        answer_json, model, analysed_at_ms, result, name_sv, name_en, name_it, edibility,
-        confidence) VALUES (1, 0, 'saved', ?, 'done', '{}', 'm', 1, 'match', 's', 'e', 'i', ?,
-        'high')`,
+      `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state,
+        answer_json, model, analysed_at_ms, added_photos, result, name_sv, name_en, name_it,
+        edibility, confidence) VALUES (1, 0, 'saved', ${PHOTO}, 'done', '{}', 'm', 1,
+        'analysed', 'match', 's', 'e', 'i', ?, 'high')`,
     )
     .run(`m-${edibility}.jpg`, edibility);
 }
@@ -105,8 +120,8 @@ function insertPastChecks(sql: string, ...params: unknown[]): number {
 /** Inserts a waiting find, taken latest, whose time source the store does not know. */
 function insertUnreadableWaiting(photo: string): number {
   return insertPastChecks(
-    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
-      VALUES (9000000, 0, 'gps', ?, 'waiting')`,
+    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state)
+      VALUES (9000000, 0, 'gps', ${PHOTO}, 'waiting')`,
     photo,
   );
 }
@@ -115,7 +130,8 @@ function insertUnreadableWaiting(photo: string): number {
 function insertWaitingWithUnreadablePosition(photo: string): number {
   return insertPastChecks(
     `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude,
-      position_source, photo_file, state) VALUES (9000000, 0, 'saved', 1, 2, 'gps', ?, 'waiting')`,
+      position_source, ${PHOTO_COLUMNS}, state)
+      VALUES (9000000, 0, 'saved', 1, 2, 'gps', ${PHOTO}, 'waiting')`,
     photo,
   );
 }
@@ -126,8 +142,8 @@ const PAST_SAFE = 2n ** 53n + 1n;
 /** Inserts a waiting find taken at a time past 2^53, which no JavaScript number holds exactly. */
 function insertWaitingPastSafeTime(photo: string): number {
   return insertPastChecks(
-    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
-      VALUES (?, 0, 'saved', ?, 'waiting')`,
+    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state)
+      VALUES (?, 0, 'saved', ${PHOTO}, 'waiting')`,
     PAST_SAFE,
     photo,
   );
@@ -136,8 +152,8 @@ function insertWaitingPastSafeTime(photo: string): number {
 /** Inserts a waiting find, taken latest, with the UTC offset given, past the CHECKs. */
 function insertWaitingWithOffset(offset: bigint | number, photo: string): number {
   return insertPastChecks(
-    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
-      VALUES (9000000, ?, 'saved', ?, 'waiting')`,
+    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state)
+      VALUES (9000000, ?, 'saved', ${PHOTO}, 'waiting')`,
     offset,
     photo,
   );
@@ -148,21 +164,21 @@ function insertTimes(takenAtMs: bigint | number, analysedAtMs: bigint | number |
   sqlite
     .prepare(
       analysedAtMs === null
-        ? `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
-            VALUES (?, 0, 'saved', 't.jpg', 'waiting')`
-        : `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state,
-            answer_json, model, analysed_at_ms, result) VALUES (?, 0, 'saved', 't.jpg', 'done',
-            '{"result":"no_mushroom"}', 'm', ?, 'no_mushroom')`,
+        ? `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state)
+            VALUES (?, 0, 'saved', ${PHOTO}, 'waiting')`
+        : `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state,
+            answer_json, model, analysed_at_ms, added_photos, result) VALUES (?, 0, 'saved',
+            ${PHOTO}, 'done', '{"result":"no_mushroom"}', 'm', ?, 'analysed', 'no_mushroom')`,
     )
-    .run(...(analysedAtMs === null ? [takenAtMs] : [takenAtMs, analysedAtMs]));
+    .run(...(analysedAtMs === null ? [takenAtMs, "t.jpg"] : [takenAtMs, "t.jpg", analysedAtMs]));
 }
 
 function stateOf(id: number): unknown {
   return sqlite.prepare("SELECT state FROM finds WHERE id = ?").get(id);
 }
 
-describe("schema version 1 on a real SQLite", () => {
-  it("is accepted by SQLite, at user_version 1", () => {
+describe("the current schema on a real SQLite", () => {
+  it("is accepted by SQLite, at user_version 2 (PBI-2.2)", () => {
     expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({
       user_version: MIGRATIONS.length,
     });
@@ -176,10 +192,10 @@ describe("schema version 1 on a real SQLite", () => {
 
   it("refuses a value of the wrong type, which SQLite would otherwise store as it is (PBI-1.16)", () => {
     const insert = sqlite.prepare(
-      `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
-        VALUES ('soon', 0, 'saved', 'p.jpg', 'waiting')`,
+      `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state)
+        VALUES ('soon', 0, 'saved', ${PHOTO}, 'waiting')`,
     );
-    expect(() => insert.run()).toThrow(/cannot store TEXT value in INTEGER column/);
+    expect(() => insert.run("p.jpg")).toThrow(/cannot store TEXT value in INTEGER column/);
   });
 
   it.each(FAILURE_CAUSES)("accepts the failure cause %s the store knows", (cause) => {
@@ -282,7 +298,7 @@ describe("the store's statements on a real SQLite", () => {
 
   it("stores an answer, which the find and the list then show", async () => {
     const id = await store.add(newFind(1_000));
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentPhoto(id));
     await expect(store.get(id)).resolves.toMatchObject({
       analysis: { state: "done", answer: match, model: "claude-model-x", analysedAtMs: 5_000 },
     });
@@ -305,7 +321,11 @@ describe("the store's statements on a real SQLite", () => {
 
   it("stores an answer without a match, with none of the match's columns", async () => {
     const id = await store.add(newFind(1_000));
-    await store.setAnswer(id, { ...analysed, answer: { result: "no_mushroom" } });
+    await store.setAnswer(
+      id,
+      { ...analysed, answer: { result: "no_mushroom" } },
+      await sentPhoto(id),
+    );
     const [entry] = await store.list();
     expect(entry).toMatchObject({ analysis: { state: "done", result: "no_mushroom" } });
   });
@@ -313,7 +333,7 @@ describe("the store's statements on a real SQLite", () => {
   it("stores the answer of a failed find, clearing why it failed", async () => {
     const id = await store.add(newFind(1_000));
     await store.markFailed(id, { cause: "request", detail: "request-wrong (status 400)" });
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentPhoto(id));
     expect(
       sqlite.prepare("SELECT failure_cause, failure_detail FROM finds WHERE id = ?").get(id),
     ).toEqual({ failure_cause: null, failure_detail: null });
@@ -321,18 +341,27 @@ describe("the store's statements on a real SQLite", () => {
 
   it("refuses to store a second answer with setAnswer, as wrong-state", async () => {
     const id = await store.add(newFind(1_000));
-    await store.setAnswer(id, analysed);
-    await expect(store.setAnswer(id, analysed)).rejects.toMatchObject({ code: "wrong-state" });
+    await store.setAnswer(id, analysed, await sentPhoto(id));
+    await expect(store.setAnswer(id, analysed, await sentPhoto(id))).rejects.toMatchObject({
+      code: "wrong-state",
+    });
   });
 
   it("says no find has the ID when a change finds none", async () => {
-    await expect(store.setAnswer(99, analysed)).rejects.toMatchObject({ code: "not-found" });
+    await expect(store.setAnswer(99, analysed, { photoUris: [] })).rejects.toMatchObject({
+      code: "not-found",
+    });
   });
 
   it("replaces the answer of a done find", async () => {
     const id = await store.add(newFind(1_000));
-    await store.setAnswer(id, { ...analysed, answer: { result: "cannot_tell" } });
-    await store.replaceAnswer(id, { ...analysed, model: "claude-model-y", analysedAtMs: 6_000 });
+    const sent = await sentPhoto(id);
+    await store.setAnswer(id, { ...analysed, answer: { result: "cannot_tell" } }, sent);
+    await store.replaceAnswer(
+      id,
+      { ...analysed, model: "claude-model-y", analysedAtMs: 6_000 },
+      sent,
+    );
     await expect(store.get(id)).resolves.toMatchObject({
       analysis: { state: "done", answer: match, model: "claude-model-y", analysedAtMs: 6_000 },
     });
@@ -340,7 +369,9 @@ describe("the store's statements on a real SQLite", () => {
 
   it("refuses to replace the answer of a find that has none, as wrong-state", async () => {
     const id = await store.add(newFind(1_000));
-    await expect(store.replaceAnswer(id, analysed)).rejects.toMatchObject({ code: "wrong-state" });
+    await expect(store.replaceAnswer(id, analysed, await sentPhoto(id))).rejects.toMatchObject({
+      code: "wrong-state",
+    });
   });
 
   it("marks a find failed for its photo and reads it back", async () => {
@@ -357,7 +388,7 @@ describe("the store's statements on a real SQLite", () => {
 
   it("refuses to mark a done find failed, as wrong-state", async () => {
     const id = await store.add(newFind(1_000));
-    await store.setAnswer(id, analysed);
+    await store.setAnswer(id, analysed, await sentPhoto(id));
     await expect(store.markFailed(id, { cause: "answer", detail: "shape" })).rejects.toMatchObject({
       code: "wrong-state",
     });
@@ -404,7 +435,7 @@ describe("the store's statements on a real SQLite", () => {
 
   it.each<[string, (id: number) => Promise<void>]>([
     ["waiting", async () => undefined],
-    ["done", (id) => store.setAnswer(id, analysed)],
+    ["done", async (id) => store.setAnswer(id, analysed, await sentPhoto(id))],
     ["failed", (id) => store.markFailed(id, { cause: "request", detail: "status 400" })],
   ])("adds a fix to a %s find and changes nothing else of it (PBI-1.20)", async (_state, into) => {
     const id = await store.add(newFind(1_000));
@@ -467,8 +498,8 @@ describe("finds whose ID the store cannot read, on a real SQLite (PBI-1.26)", ()
   function insertWithId(id: bigint, photo: string): string {
     sqlite
       .prepare(
-        `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, photo_file, state)
-          VALUES (?, 9000000, 0, 'saved', ?, 'waiting')`,
+        `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state)
+          VALUES (?, 9000000, 0, 'saved', ${PHOTO}, 'waiting')`,
       )
       .run(id, photo);
     return id.toString();
@@ -525,8 +556,8 @@ describe("the ID of a new find, on a real SQLite (PBI-1.27)", () => {
   function insertWithId(id: bigint, photo: string): void {
     sqlite
       .prepare(
-        `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, photo_file, state)
-          VALUES (?, 9000000, 0, 'saved', ?, 'waiting')`,
+        `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state)
+          VALUES (?, 9000000, 0, 'saved', ${PHOTO}, 'waiting')`,
       )
       .run(id, photo);
   }
@@ -685,7 +716,7 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
     "marks a done find with %s unreadable in the list, by its ID, which get refuses and delete still removes",
     async (_name, damage) => {
       const id = await store.add(newFind(1_000));
-      await store.setAnswer(id, analysed);
+      await store.setAnswer(id, analysed, await sentPhoto(id));
       const other = await store.add(newFind(500));
       damage(id);
       await expect(store.list()).resolves.toEqual([

@@ -22,6 +22,14 @@ describe("config", () => {
     expect(config.analysisJpegQuality).toBe(0.9);
   });
 
+  it("holds the most photos a find holds, 5, of SPEC 3.9 (PBI-2.2)", () => {
+    expect(config.maxPhotosPerFind).toBe(5);
+  });
+
+  it("holds the longest text a lookup takes, 2,000 characters, of SPEC 3.9 (PBI-2.2)", () => {
+    expect(config.lookupTextMaxLength).toBe(2000);
+  });
+
   it("keeps each model's image limits in the image module's ImageLimits type", () => {
     const limits: ImageLimits = { maxEdge: 1568, maxTokens: 1568, patchSize: 28 };
     const model: ModelConfig = { id: "a-model", imageLimits: limits };
