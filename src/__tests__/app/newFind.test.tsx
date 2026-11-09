@@ -13,6 +13,7 @@ import { Alert, Linking } from "react-native";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { STRINGS } from "../../i18n/strings";
 import type { NewFind, Position } from "../../store/find";
+import { warmUpRouter } from "../../testing/warmUpRouter";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
@@ -103,7 +104,8 @@ function phoneIn(languageCode: string): void {
     ]);
 }
 
-beforeEach(async () => {
+/** Sets the stand-ins each test starts from. */
+async function resetStandIns(): Promise<void> {
   jest.clearAllMocks();
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
@@ -142,7 +144,9 @@ beforeEach(async () => {
   jest
     .mocked(ImagePicker.launchImageLibraryAsync)
     .mockResolvedValue(wrong({ canceled: true, assets: null }));
-});
+}
+
+beforeEach(resetStandIns);
 
 /**
  * Lets the screen's chain of promises run. (The router's test renderer runs Jest's fake timers,
@@ -193,6 +197,12 @@ async function openNewFind(): Promise<{ pathname: () => string }> {
   await settle();
   return { pathname: () => app.getPathname() };
 }
+
+// The router's first load is paid before the tests, not in the first of them (PBI-1.28).
+warmUpRouter(async () => {
+  await resetStandIns();
+  await openNewFind();
+});
 
 function fix(latitude: number, longitude: number, accuracy: number) {
   return { coords: { latitude, longitude, accuracy }, timestamp: Date.now() };
