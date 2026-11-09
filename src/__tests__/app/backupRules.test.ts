@@ -243,6 +243,35 @@ describe("Android: the rules files the plugin writes", () => {
     }
   });
 
+  /** The start tag of each <include> or <exclude> element of a file, in order. */
+  const ruleTags = (xml: string, kind: "include" | "exclude") =>
+    [...xml.matchAll(new RegExp(`<${kind}\\s[^>]*/>`, "g"))].map((match) => match[0]);
+
+  it("declares the tools namespace on each file's root element, for tools:ignore (PBI-1.10)", () => {
+    const tools = 'xmlns:tools="http://schemas.android.com/tools"';
+    expect(/<full-backup-content\s[^>]*>/.exec(backupFile())?.[0]).toContain(tools);
+    expect(/<data-extraction-rules\s[^>]*>/.exec(extractionFile())?.[0]).toContain(tools);
+  });
+
+  it("marks every exclude tools:ignore FullBackupContent, the Android lint check that stops a release build over an exclude outside every include (PBI-1.10)", () => {
+    for (const file of [backupFile(), extractionFile()]) {
+      const excludes = ruleTags(file, "exclude");
+      expect(excludes.length).toBe(rulesIn(file).filter((r) => r.kind === "exclude").length);
+      expect(excludes.length).toBeGreaterThan(0);
+      for (const tag of excludes) {
+        expect(tag).toContain('tools:ignore="FullBackupContent"');
+      }
+    }
+  });
+
+  it("marks no include, so the check still runs on them (PBI-1.10)", () => {
+    for (const file of [backupFile(), extractionFile()]) {
+      for (const tag of ruleTags(file, "include")) {
+        expect(tag).not.toContain("tools:");
+      }
+    }
+  });
+
   it("starts each file with an XML declaration", () => {
     expect(backupFile().startsWith('<?xml version="1.0" encoding="utf-8"?>\n')).toBe(true);
     expect(extractionFile().startsWith('<?xml version="1.0" encoding="utf-8"?>\n')).toBe(true);
