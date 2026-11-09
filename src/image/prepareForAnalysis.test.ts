@@ -117,6 +117,7 @@ describe("preparePhotoForAnalysis", () => {
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
     ).resolves.toEqual({
       ok: false,
+      loaded: true,
       failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
     });
     expect(encoder.released).toBe(1);
@@ -126,7 +127,11 @@ describe("preparePhotoForAnalysis", () => {
     encoder.bytes = CLEAN.slice(0, CLEAN.length - 2);
     await expect(
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
-    ).resolves.toEqual({ ok: false, failure: { cause: "segment-check", detail: "truncated" } });
+    ).resolves.toEqual({
+      ok: false,
+      loaded: true,
+      failure: { cause: "segment-check", detail: "truncated" },
+    });
   });
 
   it("fails the find on the segment check when bytes follow the end of the image", async () => {
@@ -135,6 +140,7 @@ describe("preparePhotoForAnalysis", () => {
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
     ).resolves.toEqual({
       ok: false,
+      loaded: true,
       failure: { cause: "segment-check", detail: "trailing-data" },
     });
   });
@@ -144,7 +150,7 @@ describe("preparePhotoForAnalysis", () => {
     ["no height", 4032, 0],
     ["a width that is not whole", 4032.5, 3024],
   ])(
-    "fails the find (photo) for a decoded photo with %s, naming the size, and releases it",
+    "fails the find (photo) for a decoded photo with %s, naming the size, and says the photo loaded (PBI-1.25), and releases it",
     async (_, width, height) => {
       encoder.width = width;
       encoder.height = height;
@@ -152,6 +158,7 @@ describe("preparePhotoForAnalysis", () => {
         preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
       ).resolves.toEqual({
         ok: false,
+        loaded: true,
         failure: {
           cause: "photo",
           detail: `invalid-size: the photo of ${width} x ${height} px cannot be sized for claude-opus-5-5`,
@@ -180,12 +187,13 @@ describe("preparePhotoForAnalysis", () => {
     expect(encoder.loaded).toEqual([]);
   });
 
-  it("fails the find (photo) for a photo that cannot be loaded or decoded, with the reason (PBI-1.21)", async () => {
+  it("fails the find (photo) for a photo that cannot be loaded or decoded, with the reason, and says the photo did not load (PBI-1.21, PBI-1.25)", async () => {
     encoder.loadError = new Error("unsupported image format");
     await expect(
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
     ).resolves.toEqual({
       ok: false,
+      loaded: false,
       failure: { cause: "photo", detail: "load-failed: unsupported image format" },
     });
     expect(encoder.encoded).toEqual([]);
@@ -200,7 +208,11 @@ describe("preparePhotoForAnalysis", () => {
     };
     await expect(
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
-    ).resolves.toEqual({ ok: false, failure: { cause: "photo", detail: "load-failed" } });
+    ).resolves.toEqual({
+      ok: false,
+      loaded: false,
+      failure: { cause: "photo", detail: "load-failed" },
+    });
   });
 
   it.each([

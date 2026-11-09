@@ -130,7 +130,8 @@ function KeySection() {
       <Pressable accessibilityRole="button" onPress={onSave} style={styles.button}>
         <Text style={styles.optionText}>{t.save}</Text>
       </Pressable>
-      {status === "stored" && (
+      {/* A key store that cannot be read may still hold a key: Remove is offered for it too. */}
+      {(status === "stored" || status === "unreadable") && (
         <Pressable accessibilityRole="button" onPress={onRemove} style={styles.button}>
           <Text style={styles.optionText}>{t.remove}</Text>
         </Pressable>

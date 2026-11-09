@@ -34,8 +34,10 @@ export type PreparedPhoto =
   /**
    * The find is marked failed: the encoder wrote something the segment check refuses
    * (`segment-check`), or the photo itself cannot be loaded, decoded or sized (`photo`).
+   * `loaded` is false only when the encoder could not load the photo: on Android such a failure
+   * does not say why, so the queue counts these (PBI-1.25).
    */
-  | { ok: false; failure: FindFailure };
+  | { ok: false; loaded: boolean; failure: FindFailure };
 
 export type PhotoPreparationErrorCode =
   /** The model's image limits in the config are not whole numbers the rule can use. */
@@ -80,14 +82,14 @@ export async function preparePhotoForAnalysis(
     image = await encoder.load(photoUri);
   } catch (error) {
     const reason = error instanceof Error ? error.message.trim() : "";
-    return photoFailure(reason === "" ? "load-failed" : `load-failed: ${reason}`);
+    return photoFailure(reason === "" ? "load-failed" : `load-failed: ${reason}`, false);
   }
   try {
     const size = resizedSize(image.width, image.height, limits);
     if (!size.ok) {
       const what = `the photo of ${image.width} x ${image.height} px cannot be sized for ${modelId}`;
       if (size.reason === "invalid-size") {
-        return photoFailure(`invalid-size: ${what}`);
+        return photoFailure(`invalid-size: ${what}`, true);
       }
       throw new PhotoPreparationError(size.reason, what);
     }
@@ -95,7 +97,11 @@ export async function preparePhotoForAnalysis(
     const check = checkJpegSegments(bytes);
     if (!check.ok) {
       const marker = check.marker === null ? "" : ` ${markerName(check.marker)}`;
-      return { ok: false, failure: { cause: "segment-check", detail: `${check.reason}${marker}` } };
+      return {
+        ok: false,
+        loaded: true,
+        failure: { cause: "segment-check", detail: `${check.reason}${marker}` },
+      };
     }
     return { ok: true, imageBase64: bytesToBase64(bytes), width: size.width, height: size.height };
   } finally {
@@ -103,8 +109,8 @@ export async function preparePhotoForAnalysis(
   }
 }
 
-function photoFailure(detail: string): PreparedPhoto {
-  return { ok: false, failure: { cause: "photo", detail } };
+function photoFailure(detail: string, loaded: boolean): PreparedPhoto {
+  return { ok: false, loaded, failure: { cause: "photo", detail } };
 }
 
 /** A two-byte marker as the segment check's tests write it: 0xFFE1. */
