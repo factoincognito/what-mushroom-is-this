@@ -34,6 +34,7 @@ import {
 } from "../../testing/failureDetails";
 import { memoryFindLog } from "../../testing/memoryFindLog";
 import { memoryPhotos, memorySqlite, sqliteDatabase } from "../../testing/sqliteDatabase";
+import { warmUpRouter } from "../../testing/warmUpRouter";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
@@ -164,7 +165,8 @@ async function startApp(initialUrl = "/find/1"): Promise<{ pathname: () => strin
 
 const fetchMock = jest.fn();
 
-beforeEach(async () => {
+/** Sets the stand-ins each test starts from. */
+async function resetStandIns(): Promise<void> {
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
   await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
@@ -179,6 +181,16 @@ beforeEach(async () => {
     .mocked(preparePhotoForAnalysis)
     .mockResolvedValue({ ok: true, imageBase64: "AAAA", width: 2212, height: 1659 });
   Object.defineProperty(AppState, "currentState", { value: "background", configurable: true });
+}
+
+beforeEach(resetStandIns);
+
+// The router's first load is paid before the tests, not in the first of them (PBI-1.28).
+warmUpRouter(async () => {
+  await resetStandIns();
+  mockLog.finds.set(1, aFind(done(CHANTERELLE)));
+  await startApp();
+  await screen.findByTestId("match-names");
 });
 
 afterAll(() => {
