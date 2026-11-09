@@ -285,6 +285,11 @@ export type Strings = {
  * removed once a speaker has checked it. Every string is listed but the disclaimer, which is the
  * approved text of docs/SPEC.md 3.5, its Italian checked by an Italian speaker. The two lists
  * are kept apart, as each language is checked by its own speaker.
+ *
+ * No speaker has checked the iOS permission texts in `locales/sv.json` and `locales/it.json`
+ * either (`ios.NSCameraUsageDescription` and `ios.NSPhotoLibraryUsageDescription`, four texts in
+ * all, PBI-1.20). They are not in this file, so the lists cannot name them; they are recorded
+ * here so that a speaker's check finds them too.
  */
 export const NOT_CHECKED_BY_A_SPEAKER: {
   readonly sv: readonly string[];
