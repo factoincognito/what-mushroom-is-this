@@ -143,21 +143,24 @@ describe("preparePhotoForAnalysis", () => {
     ["no width", 0, 3024],
     ["no height", 4032, 0],
     ["a width that is not whole", 4032.5, 3024],
-  ])("fails the find (photo) for a decoded photo with %s, naming the size, and releases it", async (_, width, height) => {
-    encoder.width = width;
-    encoder.height = height;
-    await expect(
-      preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
-    ).resolves.toEqual({
-      ok: false,
-      failure: {
-        cause: "photo",
-        detail: `invalid-size: the photo of ${width} x ${height} px cannot be sized for claude-opus-5-5`,
-      },
-    });
-    expect(encoder.encoded).toEqual([]);
-    expect(encoder.released).toBe(1);
-  });
+  ])(
+    "fails the find (photo) for a decoded photo with %s, naming the size, and releases it",
+    async (_, width, height) => {
+      encoder.width = width;
+      encoder.height = height;
+      await expect(
+        preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
+      ).resolves.toEqual({
+        ok: false,
+        failure: {
+          cause: "photo",
+          detail: `invalid-size: the photo of ${width} x ${height} px cannot be sized for claude-opus-5-5`,
+        },
+      });
+      expect(encoder.encoded).toEqual([]);
+      expect(encoder.released).toBe(1);
+    },
+  );
 
   it("refuses limits in the config that are not whole numbers", async () => {
     const custom: AppConfig = {
@@ -201,7 +204,10 @@ describe("preparePhotoForAnalysis", () => {
   });
 
   it.each([
-    ["full storage, when the encoded copy is written", new Error("ENOSPC: no space left on device")],
+    [
+      "full storage, when the encoded copy is written",
+      new Error("ENOSPC: no space left on device"),
+    ],
     ["a failed read of the encoded bytes", new Error("File could not be read")],
     ["a programming error", new TypeError("Cannot read properties of undefined")],
     ["out of memory", new Error("out of memory")],

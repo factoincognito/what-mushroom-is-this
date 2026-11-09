@@ -266,10 +266,7 @@ describe("a refused answer (PBI-1.21)", () => {
     mockFinds.set(2, waitingFind(2));
     fetchMock
       .mockResolvedValueOnce(
-        answer(
-          200,
-          JSON.stringify({ type: "message", content: [], stop_reason: "refusal" }),
-        ),
+        answer(200, JSON.stringify({ type: "message", content: [], stop_reason: "refusal" })),
       )
       .mockResolvedValueOnce(ANSWERED);
     await startApp();

@@ -11,7 +11,8 @@ import { isRecord } from "./answer";
  * (SPEC 3.3, "as 429 without `retry-after`").
  */
 
-const RESUMES = /\bon (\d{4})-(\d{2})-(\d{2}) at (\d{2}):(\d{2}) UTC\b/;
+/** "UTC" itself, followed by the end, a space or a punctuation mark: not "UTC+2" (PBI-1.21). */
+const RESUMES = /\bon (\d{4})-(\d{2})-(\d{2}) at (\d{2}):(\d{2}) UTC(?=$|[\s.,;:!?)])/;
 
 /** The time in ms since the epoch, or null when the body is no error message stating one. */
 export function accessResumesAt(body: string): number | null {

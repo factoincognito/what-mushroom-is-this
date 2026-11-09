@@ -443,11 +443,7 @@ describe("the error classes of SPEC 3.3 in a run", () => {
   });
 
   it.each([
-    [
-      "401, 403",
-      { kind: "key-refused", status: 401, cause: "refused" },
-      { reason: "key-refused" },
-    ],
+    ["401, 403", { kind: "key-refused", status: 401, cause: "refused" }, { reason: "key-refused" }],
     [
       "a key that cannot be sent",
       { kind: "key-refused", status: null, cause: "refused" },
@@ -608,7 +604,10 @@ describe("the photo for analysis (SPEC 3.3)", () => {
     t.log.addFind(2);
     t.setPreparation(async (uri) =>
       uri.endsWith("/1.jpg")
-        ? { ok: false, failure: { cause: "photo", detail: "load-failed: unsupported image format" } }
+        ? {
+            ok: false,
+            failure: { cause: "photo", detail: "load-failed: unsupported image format" },
+          }
         : { ok: true, imageBase64: "BBBB", width: 1, height: 1 },
     );
     await t.queue.trigger();

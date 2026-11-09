@@ -80,6 +80,7 @@ export function failureMessage(failure: FindFailure, strings: Strings): string {
     request: t.request,
     answer: t.answer,
     photo: t.photo,
+    refused: t.refused,
   }[failure.cause];
   return fill(template, { detail: failure.detail });
 }
