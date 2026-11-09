@@ -118,6 +118,7 @@ beforeEach(async () => {
   mockSecrets.set(API_KEY_STORE_KEY, "sk-ant-api03-abcDEF_123");
   mockLog.finds.clear();
   mockLog.unreadable.clear();
+  mockLog.withoutId.length = 0;
   phoneIn("en");
   fetchMock.mockReset();
   globalThis.fetch = fetchMock;
@@ -300,8 +301,8 @@ describe("a find the store cannot read, in the list (PBI-1.16)", () => {
     const errors = jest.spyOn(console, "error").mockImplementation(() => undefined);
     const { photoUri, time } = find(1, 0, { state: "waiting" });
     const entries: ListedFind[] = [
-      { readable: false, id: null },
-      { readable: false, id: null },
+      { readable: false, id: null, storedId: null },
+      { readable: false, id: null, storedId: null },
       {
         readable: true,
         id: 1,
@@ -326,8 +327,114 @@ describe("a find the store cannot read, in the list (PBI-1.16)", () => {
     expect(app.pathname()).toBe("/");
     expect(within(screen.getByTestId("find-row-1")).getByText(en.log.waiting)).toBeOnTheScreen();
     expect(errors.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+    expect(screen.queryByRole("button", { name: en.find.delete })).not.toBeOnTheScreen();
     errors.mockRestore();
     jest.mocked(mockLog.list).mockRestore();
+  });
+});
+
+describe("a find whose ID the store cannot read, in the list (PBI-1.26)", () => {
+  it("offers Delete in its row, which asks first and deletes nothing when the user cancels", async () => {
+    mockLog.withoutId.push("9007199254740993");
+    await startApp();
+    const row = within(await screen.findByTestId("unreadable-row"));
+    await fireEvent.press(row.getByRole("button", { name: en.find.delete }));
+    expect(row.getByText(en.find.deleteConfirm)).toBeOnTheScreen();
+    await fireEvent.press(row.getByRole("button", { name: en.find.deleteCancel }));
+    expect(row.queryByText(en.find.deleteConfirm)).not.toBeOnTheScreen();
+    expect(mockLog.withoutId).toEqual(["9007199254740993"]);
+  });
+
+  it("deletes that find, and only it, once confirmed, and lists the others", async () => {
+    mockLog.withoutId.push("0", "-3");
+    mockLog.finds.set(1, find(1, 0, { state: "waiting" }));
+    const remove = jest.spyOn(mockLog, "deleteUnreadable");
+    await startApp();
+    const [first] = await screen.findAllByTestId("unreadable-row");
+    if (first === undefined) {
+      throw new Error("no row without an ID");
+    }
+    await fireEvent.press(within(first).getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(within(first).getByRole("button", { name: en.find.deleteYes }));
+    expect(remove).toHaveBeenCalledWith("0");
+    const left = await screen.findAllByTestId("unreadable-row");
+    expect(left).toHaveLength(1);
+    expect(mockLog.withoutId).toEqual(["-3"]);
+    expect(screen.getByTestId("find-row-1")).toBeOnTheScreen();
+    // The "-3" row does not inherit the deleted row's open question (Clead's review of #33, fix 1).
+    const [other] = left;
+    if (other === undefined) {
+      throw new Error("no row without an ID left");
+    }
+    expect(within(other).getByRole("button", { name: en.find.delete })).toBeOnTheScreen();
+    expect(screen.queryByText(en.find.deleteConfirm)).not.toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.find.deleteYes })).not.toBeOnTheScreen();
+    remove.mockRestore();
+  });
+
+  it("keeps a question the user opened on another such row with that row when one is deleted", async () => {
+    mockLog.withoutId.push("0", "-3");
+    await startApp();
+    const [first, second] = await screen.findAllByTestId("unreadable-row");
+    if (first === undefined || second === undefined) {
+      throw new Error("not two rows without an ID");
+    }
+    await fireEvent.press(within(second).getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(within(first).getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(within(first).getByRole("button", { name: en.find.deleteYes }));
+    const left = await screen.findAllByTestId("unreadable-row");
+    expect(mockLog.withoutId).toEqual(["-3"]);
+    expect(left).toHaveLength(1);
+    expect(screen.getAllByText(en.find.deleteConfirm)).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: en.find.delete })).not.toBeOnTheScreen();
+  });
+
+  it("closes its question once the delete succeeds, even while the list still shows the find", async () => {
+    mockLog.withoutId.push("0");
+    jest.spyOn(mockLog, "deleteUnreadable").mockResolvedValueOnce({ photoRemoved: true });
+    await startApp();
+    const row = within(await screen.findByTestId("unreadable-row"));
+    await fireEvent.press(row.getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(row.getByRole("button", { name: en.find.deleteYes }));
+    expect(await row.findByRole("button", { name: en.find.delete })).toBeOnTheScreen();
+    expect(row.queryByText(en.find.deleteConfirm)).not.toBeOnTheScreen();
+    jest.mocked(mockLog.deleteUnreadable).mockRestore();
+  });
+
+  it("says so in its row when the find cannot be deleted, without the error's text, and keeps it", async () => {
+    mockLog.withoutId.push("0");
+    jest.spyOn(mockLog, "deleteUnreadable").mockRejectedValueOnce(new Error("database is locked"));
+    await startApp();
+    const row = within(await screen.findByTestId("unreadable-row"));
+    await fireEvent.press(row.getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(row.getByRole("button", { name: en.find.deleteYes }));
+    expect(await row.findByText(en.find.deleteFailed)).toBeOnTheScreen();
+    expect(screen.queryByText(/locked/)).not.toBeOnTheScreen();
+    expect(mockLog.withoutId).toEqual(["0"]);
+    jest.mocked(mockLog.deleteUnreadable).mockRestore();
+  });
+
+  it("drops the row when the find was deleted already", async () => {
+    mockLog.withoutId.push("0");
+    jest.spyOn(mockLog, "deleteUnreadable").mockImplementationOnce(async (storedId) => {
+      mockLog.withoutId.length = 0;
+      throw new StoreError("not-found", `no find has the ID ${storedId}`);
+    });
+    await startApp();
+    const row = within(await screen.findByTestId("unreadable-row"));
+    await fireEvent.press(row.getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(row.getByRole("button", { name: en.find.deleteYes }));
+    expect(await screen.findByText(en.log.empty)).toBeOnTheScreen();
+    expect(screen.queryByText(en.find.deleteFailed)).not.toBeOnTheScreen();
+    jest.mocked(mockLog.deleteUnreadable).mockRestore();
+  });
+
+  it.each(["sv", "it"] as const)("offers it in %s", async (lang) => {
+    phoneIn(lang);
+    mockLog.withoutId.push("0");
+    await startApp();
+    const row = within(await screen.findByTestId("unreadable-row"));
+    expect(row.getByRole("button", { name: STRINGS[lang].find.delete })).toBeOnTheScreen();
   });
 });
 
