@@ -6,17 +6,35 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "android": {
+      "allowBackup": false
+    },
+    "ios": {
+      "infoPlist": {
+        "RCTAsyncStorageExcludeFromBackup": true
+      }
+    },
     "plugins": [
       ["expo-router", { "sitemap": false }],
       "expo-localization",
       "expo-sqlite",
-      ["expo-secure-store", { "faceIDPermission": false }],
+      ["expo-secure-store", { "faceIDPermission": false, "configureAndroidBackup": false }],
       [
         "expo-image-picker",
         {
           "cameraPermission": "The camera takes the photo of a mushroom for your find log.",
           "photosPermission": "A photo you pick from your library is saved as a find in your log.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "./plugins/withBackupRules",
+        {
+          "exclude": [
+            { "domain": "file", "path": "SQLite" },
+            { "domain": "file", "path": "photos" },
+            { "domain": "database", "path": "." }
+          ]
         }
       ]
     ]
