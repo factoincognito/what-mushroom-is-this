@@ -7,8 +7,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { getLocales } from "expo-localization";
+import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen } from "expo-router/testing-library";
-import { Linking } from "react-native";
+import { Alert, Linking } from "react-native";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { STRINGS } from "../../i18n/strings";
@@ -218,6 +219,7 @@ describe("a photo from the camera", () => {
       .mockResolvedValueOnce(wrong({ canceled: false, assets: [cameraPhoto] }));
     await openNewFind();
     await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.discardPhoto }));
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.discardYes }));
     await settle();
     expect(mockLog.added).toEqual([]);
     expect(
@@ -248,6 +250,83 @@ describe("a photo from the camera", () => {
     await openNewFind();
     expect(screen.getByText(STRINGS.en.newFind.pickFailed)).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: STRINGS.en.newFind.takePhoto })).toBeOnTheScreen();
+  });
+});
+
+describe("dropping a kept photo asks first (PBI-1.20, SPEC 3.1)", () => {
+  /** Opens New find with a camera photo whose save failed, so that it is kept. */
+  async function withKeptPhoto(): Promise<{ pathname: () => string }> {
+    mockLog.addErrors = [new Error("database is locked")];
+    jest
+      .mocked(ImagePicker.launchCameraAsync)
+      .mockResolvedValue(wrong({ canceled: false, assets: [cameraPhoto] }));
+    const app = await openNewFind();
+    expect(screen.getByRole("button", { name: STRINGS.en.newFind.retrySave })).toBeOnTheScreen();
+    return app;
+  }
+
+  /** Leaves the screen as the header's back button or Android's back button would. */
+  async function goBack(): Promise<void> {
+    await act(async () => {
+      router.back();
+    });
+    await settle();
+  }
+
+  it("Discard the photo asks on the screen, not in a system alert, and offers only the answers", async () => {
+    const alert = jest.spyOn(Alert, "alert");
+    await withKeptPhoto();
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.discardPhoto }));
+    expect(screen.getByText(STRINGS.en.newFind.discardConfirm)).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: STRINGS.en.newFind.discardYes })).toBeOnTheScreen();
+    expect(
+      screen.getByRole("button", { name: STRINGS.en.newFind.discardCancel }),
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByRole("button", { name: STRINGS.en.newFind.retrySave }),
+    ).not.toBeOnTheScreen();
+    expect(alert).not.toHaveBeenCalled();
+    alert.mockRestore();
+  });
+
+  it("keeps the photo when the user answers Keep, which Save again then saves", async () => {
+    await withKeptPhoto();
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.discardPhoto }));
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.discardCancel }));
+    expect(screen.queryByText(STRINGS.en.newFind.discardConfirm)).not.toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.retrySave }));
+    await settle();
+    expect(mockLog.added.map((find) => find.photoUri)).toEqual([cameraPhoto.uri]);
+  });
+
+  it("asks before the screen is left with a kept photo, and stays when the user answers Stay", async () => {
+    const app = await withKeptPhoto();
+    await goBack();
+    expect(app.pathname()).toBe("/new-find");
+    expect(screen.getByText(STRINGS.en.newFind.leaveConfirm)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.leaveCancel }));
+    await settle();
+    expect(app.pathname()).toBe("/new-find");
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.retrySave }));
+    await settle();
+    expect(mockLog.added.map((find) => find.photoUri)).toEqual([cameraPhoto.uri]);
+  });
+
+  it("leaves, dropping the kept photo, once the user confirms", async () => {
+    const app = await withKeptPhoto();
+    await goBack();
+    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.leaveYes }));
+    await settle();
+    expect(app.pathname()).toBe("/");
+    expect(await screen.findByText(STRINGS.en.log.empty)).toBeOnTheScreen();
+    expect(mockLog.added).toEqual([]);
+  });
+
+  it("leaves without asking when no photo is kept", async () => {
+    const app = await openNewFind();
+    await goBack();
+    expect(app.pathname()).toBe("/");
+    expect(screen.queryByText(STRINGS.en.newFind.leaveConfirm)).not.toBeOnTheScreen();
   });
 });
 

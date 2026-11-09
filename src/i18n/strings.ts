@@ -80,8 +80,16 @@ export type Strings = {
     readonly back: string;
     readonly saveFailed: string;
     readonly retrySave: string;
-    /** Drops the photo whose save failed, so that a new one can be taken. */
+    /** Drops the photo whose save failed, so that a new one can be taken; asks first. */
     readonly discardPhoto: string;
+    /** The question "Discard the photo" asks first (PBI-1.20), and its two answers. */
+    readonly discardConfirm: string;
+    readonly discardYes: string;
+    readonly discardCancel: string;
+    /** The question asked when the screen is left while a photo is kept, and its two answers. */
+    readonly leaveConfirm: string;
+    readonly leaveYes: string;
+    readonly leaveCancel: string;
     /** The camera or the gallery failed to give a photo. */
     readonly pickFailed: string;
     /** The camera permission was refused; the app may ask again. */
@@ -380,6 +388,13 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       saveFailed: "Fyndet gick inte att spara. Försök igen.",
       retrySave: "Spara igen",
       discardPhoto: "Släng fotot",
+      discardConfirm: "Slänga fotot? Det är inte sparat och går inte att få tillbaka.",
+      discardYes: "Släng",
+      discardCancel: "Behåll fotot",
+      leaveConfirm:
+        "Lämna sidan och slänga fotot? Det är inte sparat och går inte att få tillbaka.",
+      leaveYes: "Släng och lämna",
+      leaveCancel: "Stanna kvar",
       pickFailed: "Fotot gick inte att ta eller välja. Försök igen.",
       cameraDenied:
         "Appen får inte använda kameran, så den kan inte ta något foto. Du kan välja ett foto i galleriet i stället.",
@@ -598,6 +613,12 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       saveFailed: "The find could not be saved. Try again.",
       retrySave: "Save again",
       discardPhoto: "Discard the photo",
+      discardConfirm: "Discard the photo? It is not saved, and it cannot be got back.",
+      discardYes: "Discard",
+      discardCancel: "Keep the photo",
+      leaveConfirm: "Leave and discard the photo? It is not saved, and it cannot be got back.",
+      leaveYes: "Discard and leave",
+      leaveCancel: "Stay",
       pickFailed: "The photo could not be taken or picked. Try again.",
       cameraDenied:
         "The app may not use the camera, so it cannot take a photo. You can pick a photo from the gallery instead.",
@@ -817,6 +838,12 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       saveFailed: "Non è stato possibile salvare il ritrovamento. Riprova.",
       retrySave: "Salva di nuovo",
       discardPhoto: "Scarta la foto",
+      discardConfirm: "Scartare la foto? Non è stata salvata e non si potrà recuperare.",
+      discardYes: "Scarta",
+      discardCancel: "Tieni la foto",
+      leaveConfirm: "Uscire e scartare la foto? Non è stata salvata e non si potrà recuperare.",
+      leaveYes: "Scarta ed esci",
+      leaveCancel: "Resta",
       pickFailed: "Non è stato possibile scattare o scegliere la foto. Riprova.",
       cameraDenied:
         "L'app non può usare la fotocamera, quindi non può scattare foto. Puoi invece scegliere una foto dalla galleria.",

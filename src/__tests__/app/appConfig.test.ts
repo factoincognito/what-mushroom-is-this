@@ -11,6 +11,9 @@ import { PROJECT_ROOT } from "../../testing/projectFiles";
 type PluginEntry = string | [string, Record<string, unknown>?];
 type ExpoConfig = {
   plugins?: PluginEntry[];
+  ios?: { infoPlist?: Record<string, unknown> };
+  /** Per language, the path of a JSON file of texts for the platforms (PBI-1.20). */
+  locales?: Record<string, string>;
   /** What introspection leaves of the files the mods would write. */
   _internal?: {
     modResults?: {
@@ -115,6 +118,75 @@ describe("the expo-image-picker config plugin in app.json (PBI-1.6)", () => {
 
   it("asks for no microphone, as the app takes no video: RECORD_AUDIO is blocked on Android", () => {
     expect(pluginEntry("expo-image-picker")?.[1].microphonePermission).toBe(false);
+  });
+});
+
+/** The keys of the texts iOS shows when the app asks for the camera and the photo library. */
+const PERMISSION_KEYS = ["NSCameraUsageDescription", "NSPhotoLibraryUsageDescription"];
+
+type ResolvedLocales = { localesMap: Record<string, Record<string, unknown>> };
+
+/**
+ * The app's locales as the real reader of `@expo/config-plugins` resolves them for a platform,
+ * the one its iOS and Android locale plugins use at prebuild (PBI-1.20).
+ */
+function resolvedLocales(platform: "ios" | "android"): Promise<ResolvedLocales> {
+  const { getResolvedLocalesAsync } = jest.requireActual(
+    "@expo/config-plugins/build/utils/locales.js",
+  );
+  return getResolvedLocalesAsync(PROJECT_ROOT, appJson.expo.locales ?? {}, platform);
+}
+
+describe("the iOS permission texts in the app's three languages (PBI-1.20)", () => {
+  let ios: ResolvedLocales;
+  let android: ResolvedLocales;
+
+  beforeAll(async () => {
+    ios = await resolvedLocales("ios");
+    android = await resolvedLocales("android");
+  });
+
+  it("let iOS use the app's own translations of its Info.plist (CFBundleAllowMixedLocalizations)", () => {
+    expect(appJson.expo.ios?.infoPlist?.CFBundleAllowMixedLocalizations).toBe(true);
+  });
+
+  it("are given in Swedish, English and Italian, each with the camera and photo library texts only", () => {
+    expect(Object.keys(ios.localesMap).sort()).toEqual(["en", "it", "sv"]);
+    for (const texts of Object.values(ios.localesMap)) {
+      expect(Object.keys(texts).sort()).toEqual(PERMISSION_KEYS);
+      for (const key of PERMISSION_KEYS) {
+        expect(isPurposeText(texts[key])).toBe(true);
+      }
+    }
+  });
+
+  it("are in English those the image picker's plugin writes into the Info.plist itself", () => {
+    const options = pluginEntry("expo-image-picker")?.[1];
+    expect(ios.localesMap.en).toEqual({
+      NSCameraUsageDescription: options?.cameraPermission,
+      NSPhotoLibraryUsageDescription: options?.photosPermission,
+    });
+  });
+
+  it.each(["sv", "it"])("are translated in %s, not left in English", (language) => {
+    for (const key of PERMISSION_KEYS) {
+      expect(ios.localesMap[language]?.[key]).not.toBe(ios.localesMap.en?.[key]);
+    }
+  });
+
+  it("hold no double quote, backslash or line break, which the plugin writes into InfoPlist.strings unescaped", () => {
+    for (const texts of Object.values(ios.localesMap)) {
+      for (const text of Object.values(texts)) {
+        expect(text).not.toMatch(/["\\\n\r]/);
+      }
+    }
+  });
+
+  it("give Android no strings: the texts are iOS's alone", () => {
+    expect(Object.keys(android.localesMap).sort()).toEqual(["en", "it", "sv"]);
+    for (const texts of Object.values(android.localesMap)) {
+      expect(texts).toEqual({});
+    }
   });
 });
 

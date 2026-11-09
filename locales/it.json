@@ -1,0 +1,6 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "La fotocamera scatta la foto di un fungo per il tuo registro dei ritrovamenti.",
+    "NSPhotoLibraryUsageDescription": "Una foto che scegli dalla tua libreria viene salvata come ritrovamento nel tuo registro."
+  }
+}

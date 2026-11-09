@@ -1,8 +1,9 @@
-import { router } from "expo-router";
+import { router, useNavigation } from "expo-router";
+import { type NavigationAction, usePreventRemove } from "expo-router/react-navigation";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
-
 import { useLanguage } from "../i18n/LanguageContext";
+import type { Strings } from "../i18n/strings";
 import { cameraPermission, pickFromGallery, takePhoto } from "../newFind/devicePicker";
 import { INITIAL_VIEW, NewFindFlow, type NewFindView } from "../newFind/newFindFlow";
 import { useFindLog } from "../store/FindLogContext";
@@ -10,6 +11,10 @@ import { useFindLog } from "../store/FindLogContext";
 /**
  * The New find screen (docs/SPEC.md 3.1): opens the camera at once; a photo can also be picked
  * from the gallery. The find is saved before any analysis; no analysis is started here.
+ *
+ * A photo whose save failed is kept, and is dropped only after a question on the screen: when
+ * "Discard the photo" is tapped, and when the screen is left in any way (the header's back
+ * button, Android's back button or gesture), which waits for the answer (PBI-1.20).
  */
 export default function NewFindScreen() {
   const { strings } = useLanguage();
@@ -34,6 +39,23 @@ export default function NewFindScreen() {
     return () => flow.close();
   }, [flow]);
 
+  const navigation = useNavigation();
+  /** The leaving that waits for the answer to "leave" (null when none waits). */
+  const [leaving, setLeaving] = useState<NavigationAction | null>(null);
+  usePreventRemove(view.canRetrySave, ({ data }) => {
+    if (flow.askToLeave()) {
+      setLeaving(data.action);
+    }
+  });
+  // The leaving goes on only once the photo is dropped and the screen no longer prevents it:
+  // this effect runs after the hook's own, in the render where `canRetrySave` turned false.
+  useEffect(() => {
+    if (leaving !== null && !view.canRetrySave) {
+      setLeaving(null);
+      navigation.dispatch(leaving);
+    }
+  }, [leaving, view.canRetrySave, navigation]);
+
   const canChoose = view.phase === "ready";
 
   return (
@@ -57,6 +79,16 @@ export default function NewFindScreen() {
             <Text style={styles.buttonText}>{t.back}</Text>
           </Pressable>
         </>
+      ) : view.confirming !== null ? (
+        <Question
+          question={view.confirming}
+          strings={strings}
+          onYes={() => flow.discardPending()}
+          onNo={() => {
+            flow.keepPhoto();
+            setLeaving(null);
+          }}
+        />
       ) : view.canRetrySave ? (
         // The photo whose save failed is kept until it is saved or discarded (SPEC 3.1: a find
         // is never lost), so no new photo is offered meanwhile.
@@ -72,7 +104,7 @@ export default function NewFindScreen() {
           <Pressable
             accessibilityRole="button"
             disabled={!canChoose}
-            onPress={() => flow.discardPending()}
+            onPress={() => flow.askToDiscard()}
             style={[styles.button, !canChoose && styles.disabled]}
           >
             <Text style={styles.buttonText}>{t.discardPhoto}</Text>
@@ -104,6 +136,35 @@ export default function NewFindScreen() {
         </Pressable>
       )}
     </View>
+  );
+}
+
+type QuestionProps = {
+  readonly question: "discard" | "leave";
+  readonly strings: Strings;
+  readonly onYes: () => void;
+  readonly onNo: () => void;
+};
+
+/** The question asked on the screen before a kept photo is dropped, with its two answers. */
+function Question({ question, strings, onYes, onNo }: QuestionProps) {
+  const t = strings.newFind;
+  const [text, yes, no] =
+    question === "discard"
+      ? [t.discardConfirm, t.discardYes, t.discardCancel]
+      : [t.leaveConfirm, t.leaveYes, t.leaveCancel];
+  return (
+    <>
+      <Text accessibilityLiveRegion="polite" style={styles.text}>
+        {text}
+      </Text>
+      <Pressable accessibilityRole="button" onPress={onYes} style={styles.button}>
+        <Text style={styles.buttonText}>{yes}</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={onNo} style={styles.button}>
+        <Text style={styles.buttonText}>{no}</Text>
+      </Pressable>
+    </>
   );
 }
 
