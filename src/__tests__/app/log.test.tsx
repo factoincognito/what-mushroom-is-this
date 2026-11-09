@@ -17,6 +17,7 @@ import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { answerToJson } from "../../store/answerJson";
 import { type Find, type ListedFind, StoreError } from "../../store/find";
 import { memoryFindLog } from "../../testing/memoryFindLog";
+import { warmUpRouter } from "../../testing/warmUpRouter";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
@@ -110,7 +111,8 @@ async function startApp(initialUrl = "/"): Promise<{ pathname: () => string }> {
 
 const fetchMock = jest.fn();
 
-beforeEach(async () => {
+/** Sets the stand-ins each test starts from. */
+async function resetStandIns(): Promise<void> {
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
   await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
@@ -124,6 +126,16 @@ beforeEach(async () => {
   globalThis.fetch = fetchMock;
   // In the background: no run starts by itself unless a test brings the app to the front.
   Object.defineProperty(AppState, "currentState", { value: "background", configurable: true });
+}
+
+beforeEach(resetStandIns);
+
+// The router's first load is paid before the tests, not in the first of them (PBI-1.28).
+warmUpRouter(async () => {
+  await resetStandIns();
+  mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+  await startApp();
+  await screen.findByTestId("find-row-1");
 });
 
 afterAll(() => {
