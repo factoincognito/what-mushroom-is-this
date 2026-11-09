@@ -135,6 +135,11 @@ describe("schema version 1 on a real SQLite", () => {
     expect(() => insertFailed("photo")).not.toThrow();
   });
 
+  it("accepts the failure cause refused, for an answer Claude declined (PBI-1.21)", () => {
+    expect(FAILURE_CAUSES).toContain("refused");
+    expect(() => insertFailed("refused")).not.toThrow();
+  });
+
   it("refuses a failure cause the store does not know", () => {
     expect(() => insertFailed("bad-luck")).toThrow(/CHECK constraint failed/);
   });

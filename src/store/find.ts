@@ -20,10 +20,10 @@ export type FindState = (typeof FIND_STATES)[number];
 
 /**
  * Why an analysis failed: the photo failed the segment check, the API refused the request
- * (400, 413), the answer did not fit the shape or was not from the API, or the photo could not be
- * read for analysis (PBI-1.7).
+ * (400, 413), the answer did not fit the shape or was not from the API, the photo could not be
+ * loaded, decoded or sized (PBI-1.7, PBI-1.21), or Claude declined to answer (PBI-1.21).
  */
-export const FAILURE_CAUSES = ["segment-check", "request", "answer", "photo"] as const;
+export const FAILURE_CAUSES = ["segment-check", "request", "answer", "photo", "refused"] as const;
 export type FailureCause = (typeof FAILURE_CAUSES)[number];
 
 /** The time a find was taken, as an instant, with the UTC offset it was taken at. */

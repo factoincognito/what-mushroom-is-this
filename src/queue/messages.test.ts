@@ -29,6 +29,10 @@ const NOTICES: readonly QueueNotice[] = [
   { kind: "find-failed", failure: { cause: "request", detail: "request-wrong (status 400)" } },
   { kind: "find-failed", failure: { cause: "answer", detail: "the answer is not JSON" } },
   { kind: "find-failed", failure: { cause: "photo", detail: "the image could not be loaded" } },
+  {
+    kind: "find-failed",
+    failure: { cause: "refused", detail: "the answer was refused (stop_reason refusal)" },
+  },
 ];
 
 describe("noticeMessage", () => {
@@ -127,6 +131,7 @@ describe("failureMessage", () => {
     ["request", "request"],
     ["answer", "answer"],
     ["photo", "photo"],
+    ["refused", "refused"],
   ] as const)("gives a failed find's cause %s its message, with the detail", (cause, key) => {
     expect(failureMessage({ cause, detail: "D" }, STRINGS.en)).toBe(
       STRINGS.en.queue.failed[key].replace("{detail}", "D"),
@@ -158,6 +163,21 @@ describe("stopNeedsSettings", () => {
         reason === "model-unknown",
     );
   });
+});
+
+describe("the message for a refused answer (PBI-1.21)", () => {
+  it.each(LANGUAGES)(
+    "in %s says that Claude declined, not that the answer had the wrong form",
+    (language) => {
+      const message = failureMessage(
+        { cause: "refused", detail: "the answer was refused (stop_reason refusal)" },
+        STRINGS[language],
+      );
+      expect(message).toBe(STRINGS[language].queue.failed.refused);
+      expect(message).not.toContain("stop_reason");
+      expect(message).toContain("Claude");
+    },
+  );
 });
 
 describe("the message for a key not scoped to a workspace (Clead's decision on #18, note 4)", () => {

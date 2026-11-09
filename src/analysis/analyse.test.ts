@@ -343,7 +343,10 @@ describe("analysePhoto, a key that cannot be sent as a header value", () => {
       Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
     );
     const result = await analysePhoto({ ...input, apiKey: key }, { fetch, now: clock });
-    expect(result).toEqual({ ok: false, error: { kind: "key-refused", status: null } });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "key-refused", status: null, cause: "refused" },
+    });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -353,7 +356,10 @@ describe("analysePhoto, a key that cannot be sent as a header value", () => {
       Promise.resolve(response(200, message('{"result":"no_mushroom"}'))),
     );
     const result = await analysePhoto({ ...input, apiKey: key }, { fetch, now: clock });
-    expect(result).toEqual({ ok: false, error: { kind: "key-refused", status: null } });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "key-refused", status: null, cause: "refused" },
+    });
     expect(JSON.stringify(result)).not.toContain("secret-key-1234567890");
     expect(fetch).not.toHaveBeenCalled();
   });

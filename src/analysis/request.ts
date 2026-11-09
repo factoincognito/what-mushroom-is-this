@@ -78,7 +78,7 @@ export function buildAnalysisRequest(
   }
   const apiKey = input.apiKey.trim();
   if (!isSendableKey(apiKey)) {
-    return { ok: false, error: { kind: "key-refused", status: null } };
+    return { ok: false, error: { kind: "key-refused", status: null, cause: "refused" } };
   }
   const model = checkModelId(input.model);
   if (!model.ok) {

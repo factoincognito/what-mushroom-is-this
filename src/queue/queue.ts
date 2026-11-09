@@ -6,8 +6,9 @@
  * run starts no second run, and one request at most is sent at a time.
  *
  * Errors the queue does not know how to handle pass through: a programming or configuration error
- * (the time limit's RangeError, an image limit or JPEG quality the image module refuses) and a
- * store error reject the run, leave the find as it was, and end the run. Whoever started the run
+ * (the time limit's RangeError, an image limit or JPEG quality the image module refuses), an
+ * error while preparing a photo that is not the photo's own fault (full storage, for example) and
+ * a store error reject the run, leave the find as it was, and end the run. Whoever started the run
  * then stops the queue with `stopForInternalError` (the provider for the runs it starts, the
  * queue for the restart after a `retry-after`), so no rejection goes unhandled.
  */
@@ -15,7 +16,7 @@
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
 import type { Answer } from "../analysis/answer";
 import type { AnalysisError } from "../analysis/errors";
-import { PhotoPreparationError, type PreparedPhoto } from "../image/prepareForAnalysis";
+import type { PreparedPhoto } from "../image/prepareForAnalysis";
 import type { ReadKeyResult } from "../key/apiKey";
 import { type Find, type FindFailure, StoreError } from "../store/find";
 import type { FindStore } from "../store/findStore";
@@ -316,20 +317,9 @@ export class AnalysisQueue {
       return { type: "stop", stop: { reason: "no-key" } };
     }
     const model = await this.deps.readModelId();
-    let photo: PreparedPhoto;
-    try {
-      photo = await this.deps.preparePhoto(find.photoUri, model);
-    } catch (error) {
-      if (error instanceof PhotoPreparationError && error.code !== "invalid-size") {
-        throw error;
-      }
-      // The photo of this find cannot be read: it fails, and the queue goes on (Clead, #17).
-      return {
-        type: "find-failed",
-        failure: { cause: "photo", detail: photoReason(error) },
-        stop: null,
-      };
-    }
+    // A photo that cannot be loaded, decoded or sized comes back as a failure; any other error
+    // while preparing it is not the photo's and passes through (Clead's decision for PBI-1.21).
+    const photo = await this.deps.preparePhoto(find.photoUri, model);
     if (!photo.ok) {
       return { type: "find-failed", failure: photo.failure, stop: null };
     }
@@ -404,17 +394,6 @@ export class AnalysisQueue {
   }
 }
 
-/**
- * Why a photo could not be read, for the failed find's detail: the encoder's message, with the
- * code of a `PhotoPreparationError` before it; never empty.
- */
-function photoReason(error: unknown): string {
-  if (!(error instanceof Error) || error.message.trim() === "") {
-    return "the photo could not be read";
-  }
-  return error instanceof PhotoPreparationError ? `${error.code}: ${error.message}` : error.message;
-}
-
 /** The outcome of SPEC 3.3's table for an error class. */
 function outcomeOf(error: AnalysisError, accessResumesAtMs: number | null): Attempt {
   switch (error.kind) {
@@ -426,21 +405,20 @@ function outcomeOf(error: AnalysisError, accessResumesAtMs: number | null): Atte
         stop: { reason: "rate-limited", retryAtMs: error.retryAt, accessResumesAtMs },
       };
     case "key-refused":
-      // A refused key with status 400 is only the key not scoped to a workspace (errors.ts).
       return {
         type: "stop",
-        stop: { reason: error.status === 400 ? "key-not-scoped" : "key-refused" },
+        stop: { reason: error.cause === "not-scoped" ? "key-not-scoped" : "key-refused" },
       };
     case "no-credit":
       return { type: "stop", stop: { reason: "no-credit" } };
     case "model-unknown":
       return { type: "stop", stop: { reason: "model-unknown" } };
     case "find-failed": {
-      // By the class's own fields, not its reasons: an answer's failure has a detail, a refused
-      // request a status.
+      // An answer's failure has a detail, a refused request a status; a refusal has its own cause
+      // (PBI-1.21).
       const failure: FindFailure =
         "detail" in error
-          ? { cause: "answer", detail: error.detail }
+          ? { cause: error.reason === "refused" ? "refused" : "answer", detail: error.detail }
           : { cause: "request", detail: `${error.reason} (status ${error.status})` };
       return {
         type: "find-failed",

@@ -123,6 +123,8 @@ export type Strings = {
       readonly answer: string;
       /** The photo could not be read for analysis. */
       readonly photo: string;
+      /** Claude declined to analyse the photo (`stop_reason` `refusal`); no detail is shown. */
+      readonly refused: string;
     };
     /** A failed new analysis of a find that has an answer. */
     readonly answerKept: string;
@@ -293,6 +295,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         request: "Claude-API:t avvisade förfrågan ({detail}).",
         answer: "Svaret hade inte den väntade formen ({detail}).",
         photo: "Fotot gick inte att läsa för analys ({detail}).",
+        refused: "Claude avböjde att analysera det här fotot.",
       },
       answerKept: "Den nya analysen misslyckades. Det tidigare svaret finns kvar.",
     },
@@ -412,6 +415,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         request: "The Claude API refused the request ({detail}).",
         answer: "The answer did not have the expected form ({detail}).",
         photo: "The photo could not be read for analysis ({detail}).",
+        refused: "Claude declined to analyse this photo.",
       },
       answerKept: "The new analysis failed. The earlier answer is kept.",
     },
@@ -537,6 +541,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         request: "L'API di Claude ha rifiutato la richiesta ({detail}).",
         answer: "La risposta non aveva la forma prevista ({detail}).",
         photo: "Non è stato possibile leggere la foto per l'analisi ({detail}).",
+        refused: "Claude ha rifiutato di analizzare questa foto.",
       },
       answerKept: "La nuova analisi non è riuscita. La risposta precedente è mantenuta.",
     },

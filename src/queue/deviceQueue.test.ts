@@ -88,6 +88,29 @@ describe("createDeviceQueue", () => {
     );
   });
 
+  it("gives each request the config's time limit, no less and no more (PBI-1.21)", async () => {
+    jest.useFakeTimers({ now: Date.UTC(2026, 10, 9) });
+    // A fetch that answers only when its signal is aborted, as the platform fetch does.
+    fetchMock.mockImplementation(
+      (_url: string, init: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          init.signal.addEventListener("abort", () => reject(new Error("Aborted")));
+        }),
+    );
+    const queue = createDeviceQueue({
+      findLog: async () => log(),
+      readKey: async () => ({ ok: true, key: "sk-ant-k" }),
+    });
+    queue.setInFront(true);
+    const run = queue.trigger();
+    await jest.advanceTimersByTimeAsync(config.requestTimeoutMs - 1);
+    expect(queue.getState()).toMatchObject({ running: true, pause: null });
+    await jest.advanceTimersByTimeAsync(1);
+    await run;
+    expect(queue.getState()).toEqual({ running: false, stop: null, pause: "time-out" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("starts again by itself when a 429's retry-after has passed, and can cancel that", async () => {
     jest.useFakeTimers({ now: Date.UTC(2026, 10, 9) });
     fetchMock.mockResolvedValueOnce(answer(429, "{}", "30")).mockResolvedValue(ANSWERED);

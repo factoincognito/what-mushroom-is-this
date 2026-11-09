@@ -104,7 +104,9 @@ function Probe() {
 }
 
 /** Renders the provider with fakes; gives the queue it made and the deps it made it with. */
-async function renderQueue(options: { appState?: string; log?: FindStore } = {}) {
+async function renderQueue(
+  options: { appState?: string; log?: FindStore; preparePhoto?: QueueDeps["preparePhoto"] } = {},
+) {
   const log = options.log ?? emptyLog();
   const appState = fakeAppState(options.appState ?? "active");
   const network = fakeNetwork();
@@ -114,7 +116,9 @@ async function renderQueue(options: { appState?: string; log?: FindStore } = {})
       {
         ...deps,
         readModelId: async () => "claude-opus-5-5",
-        preparePhoto: async () => ({ ok: true, imageBase64: "AAAA", width: 1, height: 1 }),
+        preparePhoto:
+          options.preparePhoto ??
+          (async () => ({ ok: true, imageBase64: "AAAA", width: 1, height: 1 })),
         analyse: async () => ({ ok: false, error: { kind: "no-credit", status: 402 } }),
         now: () => 0,
         schedule: () => () => undefined,
@@ -371,6 +375,27 @@ describe("QueueProvider, a run that rejects (Clead's decision on #17)", () => {
       await expect(current().analyseFind(4)).rejects.toBeInstanceOf(RangeError);
     });
     expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("when storage is full while the photo is prepared: the queue stops and the find stays waiting (PBI-1.21)", async () => {
+    const log = emptyLog();
+    jest.mocked(log.oldestWaiting).mockResolvedValueOnce(1);
+    jest.mocked(log.get).mockResolvedValue({
+      id: 1,
+      photoUri: "file:///p/1.jpg",
+      time: NEW_FIND.time,
+      position: null,
+      analysis: { state: "waiting" },
+    });
+    await renderQueue({
+      log,
+      preparePhoto: async () => {
+        throw new Error("ENOSPC: no space left on device");
+      },
+    });
+    expect(shownState()).toEqual(INTERNAL);
+    expect(log.markFailed).not.toHaveBeenCalled();
+    expect(log.setAnswer).not.toHaveBeenCalled();
   });
 
   it("analyse now after it starts the queue again", async () => {
