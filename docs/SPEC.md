@@ -347,8 +347,8 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   has the outcome it has for a find analysed from its screen, with the
   screen in place of the find (**[Clead]**):
   - those that leave a find waiting (no network, time limit, 500, 504,
-    529), and a stopped queue, keep the lookup on the screen with
-    "Analyse" and an offer to turn "Save" on, so it waits in the queue;
+    529) keep the lookup on the screen with "Analyse" and an offer to
+    turn "Save" on, so it waits in the queue;
   - those that mark a find failed show the failure, and "Analyse" can be
     tapped again;
   - those that stop the queue (429, the spend limits, 401, 403, 402, 404,
@@ -356,6 +356,16 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
     find, and the screen shows the same message;
   - without a key, the screen says a key is needed, links to Settings and
     offers to turn "Save" on.
+  "Analyse" sends the lookup even while the queue is stopped, as "analyse
+  again" does for a find (**[Clead]**).
+- A saved text lookup becomes a find when the user taps "Analyse" or
+  leaves the screen with text entered; its position is asked for when the
+  screen opens, as the camera's is (3.6) (**[Clead]**). Leaving the
+  screen with an unsaved lookup asks first, on the screen, as 3.1 does
+  for a photo (**[Clead]**).
+- The position is asked for when the camera opens whether or not "Save"
+  is on. A lookup saved after its first photo was taken keeps that
+  photo's time and position by the rules of 3.1 and 3.6 (**[Clead]**).
 - Photos from the phone's files are images only; a file the app cannot
   load as an image is refused with a message (**[Clead]**). A photo from
   the files has no position or time of its own, as a gallery photo
@@ -374,15 +384,18 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   its batch is open (**[Clead]**). The batch is complete when the user
   taps "Analyse" or leaves the screen; a batch still open when the app
   starts is complete then (**[Clead]**). Completing a batch is a queue
-  trigger, in addition to those of 3.4; saving a photo is not
-  (**[Clead]**).
+  trigger, in addition to those of 3.4. Saving a photo is not, and the
+  saving of a photo find with its first photo is not the trigger of 3.4
+  "a new find is saved" (**[Clead]**).
 - Each completed batch brings a new analysis (Adam). On a find that has
   no answer, the find waits as in 3.4. On a find that has an answer, the
-  find keeps its answer, which is shown and used by the filters, and is
-  marked as having new photos waiting for analysis (**[Clead]**). If that
-  analysis fails, the find keeps its answer as 3.3 says, its new photos
-  stay, and it is marked as having photos not yet analysed; the user can
-  analyse again (**[Clead]**).
+  find keeps its answer, which is shown and used by the filters, and its
+  new photos wait for analysis in the queue (**[Clead]**). When that
+  analysis meets an error class of 3.3 that leaves a find waiting, the
+  photos stay waiting and the queue takes the find again at its next run.
+  Any other class marks them as not yet analysed, and they are analysed
+  only when the user asks. Either way the find keeps its answer, as 3.3
+  says (**[Clead]**).
 - An analysis sends all of the find's photos, in the order added, each
   labelled "Image 1:", "Image 2:" and so on, each resized and checked as
   in 3.3, in one request, and the find's text when it has one
@@ -397,7 +410,8 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   (**[Clead]**).
 - A photo can be removed from a find, but not the last photo of a find
   without text (**[Clead]**). The find is then analysed again only when
-  the user asks.
+  the user asks. It keeps its time and position, also when its first
+  photo is removed (**[Clead]**).
 
 **Answers.**
 
@@ -412,16 +426,19 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
 - For a text lookup, "no mushroom" means the description is not of a
   mushroom, and "cannot tell" that it does not say enough (**[Clead]**).
 - The disclaimer of 3.5 speaks of "the mushroom in your photo". For a
-  find without photos, its wording is Adam's to decide (Clead proposes:
-  "There is no guarantee that the mushroom you described is that
-  species", and its Swedish and Italian counterparts, the Italian checked
-  as before). Until then, a text find shows the disclaimer of 3.5.
+  lookup without photos, saved or not, its wording is Adam's to decide
+  (Clead proposes: "There is no guarantee that the mushroom you described
+  is that species", and its Swedish and Italian counterparts, the Italian
+  checked as before). Until then, such a lookup shows the disclaimer of
+  3.5.
 
 **The store** (3.6 for Phase 2; **[Clead]**).
 
 - A find holds, besides 3.6: its text or none; its photos in the order
   added, up to 5, each with its file and the batch it came in; whether a
-  batch is open; whether it has photos not yet analysed; and its
+  batch is open; the state of its newest photos on a find with an answer:
+  analysed, waiting for the queue, or not yet analysed after a failure;
+  and its
   confidence as a level (Phase 1) or a number from 1 to 100.
 - The database moves to schema version 2 by a migration that keeps every
   Phase 1 find, its photo as its first photo and its answer as it was.
