@@ -57,7 +57,7 @@ its own tests; the screens only wire them together. The modules:
 
 | Module | Holds |
 |---|---|
-| config | the API address, the default model, each model's image limits, the request time limit, the position limits (section 3.6) |
+| config | the API address, the default model, each model's image limits, the request time limit, the API version, `max_tokens`, the bound on `retry-after`, the position limits (section 3.6) |
 | i18n | the strings of the three app languages, and the language choice |
 | key | the API key in the secure store; the first-start-after-install clearing |
 | image | the resize rule and the check of a JPEG's application segments |
@@ -153,8 +153,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   - input that is not a JPEG, or is cut short or malformed, fails.
   Not checked yet: what the phone's image encoder writes (Known unknown
   2); if it writes something this check refuses, every analysis fails,
-  so it is checked as early as it can be: in PBI-1.6 if the encoder can
-  be run off a phone, otherwise in Adam's test session on his phone.
+  so it is checked in Adam's test session on his phone, since the encoder
+  cannot be run off a phone (#14).
   A JPEG that fails the check is not sent; the find is marked failed.
 - The prompt asks for one answer in a fixed JSON shape:
   - the best match: its names in Swedish, English, Latin and Italian;
@@ -187,20 +187,28 @@ When the queue has stopped (3.3), the Log screen says why and offers
   | no network, time limit passed, 500, 504, 529 | not reachable, or a fault on Anthropic's side | the find stays waiting; the queue tries it again at its next run |
   | 429 | rate limit or spend limit | the queue stops until the time the answer's `retry-after` gives; without one, until the user starts it again |
   | 400 `invalid_request_error` whose message starts "You have reached your specified API usage limits" or "You have reached your specified workspace API usage limits" | the key owner's own spend limit, or a workspace's, which the API reports this way (**[Clead]**, from the API's "Rate limits" page, read by Crog on 2026-11-08 for PBI-1.4 and #9) | as 429 without `retry-after` |
-  | 400 `invalid_request_error` whose message starts "This API key is not scoped to a workspace" | the key needs the `anthropic-workspace-id` header (Known unknown 8; **[Clead]**, from the API's "Authentication" page as Crog read it on 2026-11-08, to be checked against that page when implemented) | as 401, 403 |
+  | 400 `invalid_request_error` whose message starts "This API key is not scoped to a workspace" | the key needs the `anthropic-workspace-id` header (Known unknown 8; **[Clead]**, from the API's "Authentication" page as Crog read it on 2026-11-08, checked against that page on 2026-11-09 for PBI-1.13) | as 401, 403 |
   | 401, 403 | the key is refused or lacks permission | the queue stops; Settings asks for a key |
   | 402 or a billing error | no credit on the key's account | the queue stops; the message says so |
   | 404 | the model is not known (for example retired) | the queue stops; Settings asks for a model |
   | 400, 413 | the request is wrong or too large | that find is marked failed; the queue goes on with the next |
-  | an answer that does not fit the shape, or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops |
+  | an answer whose `stop_reason` is `refusal` | Claude declined to answer (**[Clead]**, PBI-1.13) | that find is marked failed; the queue goes on with the next |
+  | an answer that does not fit the shape, is cut off (`stop_reason` `max_tokens` or `model_context_window_exceeded`), or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops |
   | any other status | | the queue stops; the message gives the status |
 
   **[Clead]**, both: a billing error is told apart from other 400 answers
   by the error type in the answer's body, and a `retry-after` value that
-  is not a number of seconds or a date is treated as missing.
+  is not a number of seconds or a date, or is more than a day ahead, is
+  treated as missing.
+  **[Clead]**, PBI-1.14: the request sets no thinking or effort, so each
+  model uses its own default; since its thinking counts toward
+  `max_tokens`, `max_tokens` is 16,000. A model ID the app cannot send is
+  handled as 404. The text of the answer is that of its text blocks, in
+  order (PBI-1.13).
   **[Clead]**: a row that names a 400 by its error type and message takes
   precedence over the "400, 413" row; it matches only when both the type
-  and the start of the message match.
+  and the start of the message match. The refusal row takes precedence
+  over the shape row (PBI-1.13).
   A failed find is tried again only when the user asks. When a new
   analysis of a find that already has an answer fails, whatever the
   error class, the find keeps its answer and stays analysed, the failure
@@ -292,7 +300,9 @@ this?" app.
 
 1. That each expected Expo library has a version for SDK 57.
 2. What `expo-image-manipulator` keeps of a photo's metadata (the segment
-   check of 3.3 guards the result either way).
+   check of 3.3 guards the result either way). The phone's own encoder
+   writes the JPEG, so this can be checked only on a phone, in Adam's test
+   session (Crog, #14).
 3. How the database and photos are excluded from iOS backups under Expo,
    and the Android data extraction rules (3.6).
 4. The default model, chosen at the build.
@@ -301,9 +311,17 @@ this?" app.
    links the project.
 6. A library for the network state, which the queue's "network is back"
    trigger needs (3.4); not in the expected list above.
-7. Whether reading a gallery photo's position on Android needs the
-   `ACCESS_MEDIA_LOCATION` permission (Crog's reading, not checked).
+7. Whether a gallery photo's position arrives on Android. Android's
+   documentation says reading it needs the `ACCESS_MEDIA_LOCATION`
+   permission, and `expo-image-picker` does not ask for it, so it most
+   likely does not (Crog's reading of the documentation and the library's
+   source for #14, 2026-11-09; to be checked on a phone, PBI-1.18).
 8. Whether a user's API key can be one that needs the
    `anthropic-workspace-id` header, which the API documentation says a key
-   not scoped to a workspace needs (Crog's reading for PBI-1.4, not
-   checked by Clead); the app does not send it.
+   not scoped to a workspace needs (Crog's reading for PBI-1.4, checked
+   against the "Authentication" page on 2026-11-09 for PBI-1.13); the app
+   does not send it, and handles that answer as 401, 403 (3.3).
+9. Whether a request keeps to the 60-second time limit while the model
+   thinks, which on the current models it always may (PBI-1.14). If not, a
+   find times out, stays waiting and is sent again at each run; the time
+   limit is then the setting to change (Clead-role reviewer on #15).
