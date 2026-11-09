@@ -11,6 +11,13 @@
  * a store error reject the run, leave the find as it was, and end the run. Whoever started the run
  * then stops the queue with `stopForInternalError` (the provider for the runs it starts, the
  * queue for the restart after a `retry-after`), so no rejection goes unhandled.
+ *
+ * A photo the encoder cannot load fails its find. But on Android a failed load does not say why,
+ * so low memory or a missing native module looks the same and would fail every waiting find: when
+ * the photos of two finds in a row in one run do not load, the second find stays waiting and the
+ * run stops with `internal-error` (Clead's decision for PBI-1.25). The count is kept per run: a
+ * photo that loads ends it, whatever then comes of its find, and each run starts at nought, the run
+ * "analyse now" starts too. A find analysed from its screen is not in a run and is not counted.
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
@@ -49,7 +56,8 @@ export type QueueStop =
   | { reason: "answer" }
   /**
    * A run rejected with an error the queue does not handle (a programming, configuration or store
-   * error), or a find's analysis did. The finds are as they were; only "analyse now" lifts it.
+   * error), or a find's analysis did, or the photos of two finds in a row in a run did not load
+   * (PBI-1.25). The finds are as they were; only "analyse now" lifts it.
    */
   | { reason: "internal-error" }
   /** Any other status. */
@@ -114,6 +122,15 @@ type Attempt =
 
 /** What one step of a run came to: the next find, none left, or the end of the run. */
 type Step = "next" | "none" | "end";
+
+/** The finds in a row in one run whose photos did not load, at which the run stops (PBI-1.25). */
+const FAILED_LOADS_THAT_STOP = 2;
+
+/** What a run carries from one find to the next. */
+interface RunCount {
+  /** The finds in a row, in this run, whose photo did not load. */
+  failedLoads: number;
+}
 
 export class AnalysisQueue {
   private state: QueueState = { running: false, stop: null, pause: null };
@@ -192,7 +209,7 @@ export class AnalysisQueue {
         throw new StoreError("not-found", `no find has the ID ${id}`);
       }
       const analysed = find.analysis.state === "done";
-      const attempt = await this.attempt(find);
+      const attempt = await this.attempt(find, null);
       switch (attempt.type) {
         case "answered": {
           const answer = {
@@ -264,9 +281,10 @@ export class AnalysisQueue {
   }
 
   private async runLoop(): Promise<void> {
+    const count: RunCount = { failedLoads: 0 };
     while (this.inFront && this.state.stop === null) {
       this.triggered = false;
-      const step = await this.exclusive(() => this.stepOldest());
+      const step = await this.exclusive(() => this.stepOldest(count));
       if (step === "end" || (step === "none" && !this.triggered)) {
         return;
       }
@@ -274,7 +292,7 @@ export class AnalysisQueue {
   }
 
   /** Analyses the oldest waiting find, and stores what came of it. */
-  private async stepOldest(): Promise<Step> {
+  private async stepOldest(count: RunCount): Promise<Step> {
     const log = await this.deps.findLog();
     const id = await log.oldestWaiting();
     if (id === null) {
@@ -285,7 +303,7 @@ export class AnalysisQueue {
       // Deleted or analysed from its screen since; take the next.
       return "next";
     }
-    const attempt = await this.attempt(find);
+    const attempt = await this.attempt(find, count);
     switch (attempt.type) {
       case "answered":
         await log.setAnswer(id, {
@@ -310,8 +328,11 @@ export class AnalysisQueue {
     }
   }
 
-  /** Prepares the find's photo and sends it once. Stores nothing. */
-  private async attempt(find: Find): Promise<Attempt> {
+  /**
+   * Prepares the find's photo and sends it once. Stores nothing. `count` is the run's, or null for
+   * a find analysed from its screen.
+   */
+  private async attempt(find: Find, count: RunCount | null): Promise<Attempt> {
     const key = await this.deps.readKey();
     if (!key.ok || key.key === null) {
       return { type: "stop", stop: { reason: "no-key" } };
@@ -320,6 +341,13 @@ export class AnalysisQueue {
     // A photo that cannot be loaded, decoded or sized comes back as a failure; any other error
     // while preparing it is not the photo's and passes through (Clead's decision for PBI-1.21).
     const photo = await this.deps.preparePhoto(find.photoUri, model);
+    if (count !== null) {
+      count.failedLoads = !photo.ok && !photo.loaded ? count.failedLoads + 1 : 0;
+      if (count.failedLoads >= FAILED_LOADS_THAT_STOP) {
+        // Not this photo's fault, most likely: the find stays waiting (PBI-1.25).
+        return { type: "stop", stop: { reason: "internal-error" } };
+      }
+    }
     if (!photo.ok) {
       return { type: "find-failed", failure: photo.failure, stop: null };
     }
