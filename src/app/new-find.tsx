@@ -14,7 +14,9 @@ import { useFindLog } from "../store/FindLogContext";
  *
  * A photo whose save failed is kept, and is dropped only after a question on the screen: when
  * "Discard the photo" is tapped, and when the screen is left in any way (the header's back
- * button, Android's back button or gesture), which waits for the answer (PBI-1.20).
+ * button, Android's back button or gesture), which waits for the answer (PBI-1.20). A leave while
+ * the photo is being saved, the first save or Save again, waits for the save: it goes ahead once
+ * the save succeeds, and is asked once it fails (Clead's fix 1 on #32).
  */
 export default function NewFindScreen() {
   const { strings } = useLanguage();
@@ -40,21 +42,29 @@ export default function NewFindScreen() {
   }, [flow]);
 
   const navigation = useNavigation();
-  /** The leaving that waits for the answer to "leave" (null when none waits). */
+  /**
+   * The leaving that waits, for the answer to "leave" or for the end of the save under way (null
+   * when none waits).
+   */
   const [leaving, setLeaving] = useState<NavigationAction | null>(null);
-  usePreventRemove(view.canRetrySave, ({ data }) => {
+  // The screen holds a leave while a photo is kept or being saved (Clead's fix 1 on #32).
+  const holdsPhoto = view.canRetrySave || view.phase === "saving";
+  usePreventRemove(holdsPhoto, ({ data }) => {
     if (flow.askToLeave()) {
       setLeaving(data.action);
     }
   });
-  // The leaving goes on only once the photo is dropped and the screen no longer prevents it:
-  // this effect runs after the hook's own, in the render where `canRetrySave` turned false.
+  // The held leaving goes on once nothing holds the screen: the photo was saved, or dropped. The
+  // hook's `beforeRemove` listener reads `holdsPhoto` through a ref that React updates in an
+  // insertion effect, before any effect of the same render runs, so the listener lets this
+  // dispatch through. The hook's own effect, which tells the navigator that the screen no longer
+  // prevents removal, is what lifts the native hold (the native stack's `preventNativeDismiss`).
   useEffect(() => {
-    if (leaving !== null && !view.canRetrySave) {
+    if (leaving !== null && !holdsPhoto) {
       setLeaving(null);
       navigation.dispatch(leaving);
     }
-  }, [leaving, view.canRetrySave, navigation]);
+  }, [leaving, holdsPhoto, navigation]);
 
   const canChoose = view.phase === "ready";
 
@@ -96,7 +106,9 @@ export default function NewFindScreen() {
           <Pressable
             accessibilityRole="button"
             disabled={!canChoose}
-            onPress={() => flow.retrySave()}
+            // The save's promise is not given back: a press does nothing with it, and the screen
+            // follows the save through the view it is shown.
+            onPress={() => void flow.retrySave()}
             style={[styles.button, !canChoose && styles.disabled]}
           >
             <Text style={styles.buttonText}>{t.retrySave}</Text>

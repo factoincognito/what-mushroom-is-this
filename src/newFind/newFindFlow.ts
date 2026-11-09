@@ -52,6 +52,8 @@ export class NewFindFlow {
   private pending: Pending | null = null;
   private started = false;
   private closed = false;
+  /** Whether the screen was left during the save under way, so the leave waits for its end. */
+  private leaveWaits = false;
 
   constructor(
     private readonly deps: NewFindDeps,
@@ -114,10 +116,16 @@ export class NewFindFlow {
   }
 
   /**
-   * The screen is about to be left: asks first, while a photo whose save failed is kept. Says
-   * whether it asked, that is, whether the leaving waits for the answer.
+   * The screen is about to be left: asks first, while a photo whose save failed is kept. While
+   * the photo is being saved, the first save and Save again alike, it asks nothing yet: the leave
+   * waits for the save, and is asked once the save fails (Clead's fix 1 on #32). Says whether the
+   * leaving waits, for the answer or for the save.
    */
   askToLeave(): boolean {
+    if (this.view.phase === "saving") {
+      this.leaveWaits = true;
+      return true;
+    }
     return this.ask("leave");
   }
 
@@ -182,9 +190,12 @@ export class NewFindFlow {
         await saveGalleryFind(pending.photo, deps);
       }
       this.pending = null;
+      this.leaveWaits = false;
       this.show({ phase: "saved" });
     } catch {
-      this.show({ phase: "ready", message: "saveFailed", canRetrySave: true });
+      const confirming = this.leaveWaits ? "leave" : null;
+      this.leaveWaits = false;
+      this.show({ phase: "ready", message: "saveFailed", canRetrySave: true, confirming });
     }
   }
 

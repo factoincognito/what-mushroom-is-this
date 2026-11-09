@@ -5,10 +5,14 @@ import { INITIAL_VIEW, NewFindFlow, type NewFindView } from "./newFindFlow";
 const granted = { status: "granted", granted: true, canAskAgain: true, expires: "never" };
 const photo = (uri: string): PickResult => ({ kind: "photo", uri, exif: null });
 
-/** A flow with stand-ins: a store whose first `failures` saves fail, a camera and a gallery. */
+/**
+ * A flow with stand-ins: a store whose first `failures` saves fail, a camera and a gallery.
+ * `holdNextSave()` holds the next save open until the function it gives is called.
+ */
 function setUp(failures: number) {
   const added: NewFind[] = [];
   let failing = failures;
+  const holds: Promise<void>[] = [];
   const views: NewFindView[] = [];
   const take = jest.fn(async () => photo("file:///cache/first.jpg"));
   const pick = jest.fn(async () => photo("file:///cache/second.jpg"));
@@ -16,6 +20,10 @@ function setUp(failures: number) {
     {
       findLog: async () => ({
         add: async (find: NewFind) => {
+          const hold = holds.shift();
+          if (hold !== undefined) {
+            await hold;
+          }
           if (failing > 0) {
             failing -= 1;
             throw new Error("database is locked");
@@ -30,7 +38,24 @@ function setUp(failures: number) {
     },
     (view) => views.push(view),
   );
-  return { flow, added, views, take, pick, last: () => views.at(-1) ?? INITIAL_VIEW };
+  const holdNextSave = (): (() => void) => {
+    let release: () => void = () => undefined;
+    holds.push(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    return release;
+  };
+  const last = () => views.at(-1) ?? INITIAL_VIEW;
+  /** Lets the flow run until its save is under way (a bounded number of turns). */
+  const untilSaving = async (): Promise<void> => {
+    for (let i = 0; i < 50 && last().phase !== "saving"; i += 1) {
+      await Promise.resolve();
+    }
+    expect(last()).toMatchObject({ phase: "saving" });
+  };
+  return { flow, added, views, take, pick, last, holdNextSave, untilSaving };
 }
 
 describe("NewFindFlow: a photo whose save failed", () => {
@@ -138,14 +163,98 @@ describe("NewFindFlow: dropping a kept photo asks first (PBI-1.20)", () => {
     expect(last()).toMatchObject({ confirming: null });
   });
 
-  it("asks nothing while Save again is under way, as the photo is then being saved", async () => {
+  it("opens no question while Save again is under way, as the photo is then being saved", async () => {
     const { flow, last } = setUp(1);
     await flow.start();
     const saving = flow.retrySave();
     expect(last()).toMatchObject({ phase: "saving" });
-    expect(flow.askToLeave()).toBe(false);
     flow.askToDiscard();
+    expect(flow.askToLeave()).toBe(true);
     expect(last()).toMatchObject({ confirming: null });
     await saving;
+  });
+});
+
+describe("NewFindFlow: leaving while the photo is being saved (PBI-1.20, Clead's fix 1 on #32)", () => {
+  it("holds a leave during the first save, and asks nothing once that save succeeds", async () => {
+    const { flow, added, last, holdNextSave, untilSaving } = setUp(0);
+    const release = holdNextSave();
+    const starting = flow.start();
+    await untilSaving();
+    expect(flow.askToLeave()).toBe(true);
+    expect(last()).toMatchObject({ phase: "saving", confirming: null });
+    release();
+    await starting;
+    expect(added.map((find) => find.photoUri)).toEqual(["file:///cache/first.jpg"]);
+    expect(last()).toMatchObject({ phase: "saved", canRetrySave: false, confirming: null });
+  });
+
+  it("holds a leave during the first save, and asks it once that save fails", async () => {
+    const { flow, added, last, holdNextSave, untilSaving } = setUp(1);
+    const release = holdNextSave();
+    const starting = flow.start();
+    await untilSaving();
+    expect(flow.askToLeave()).toBe(true);
+    release();
+    await starting;
+    expect(added).toEqual([]);
+    expect(last()).toMatchObject({
+      phase: "ready",
+      message: "saveFailed",
+      canRetrySave: true,
+      confirming: "leave",
+    });
+    expect(flow.discardPending()).toBe(true);
+  });
+
+  it("holds a leave during Save again, and asks nothing once that save succeeds", async () => {
+    const { flow, added, last, holdNextSave } = setUp(1);
+    await flow.start();
+    const release = holdNextSave();
+    const saving = flow.retrySave();
+    expect(flow.askToLeave()).toBe(true);
+    expect(last()).toMatchObject({ phase: "saving", confirming: null });
+    release();
+    await saving;
+    expect(added.map((find) => find.photoUri)).toEqual(["file:///cache/first.jpg"]);
+    expect(last()).toMatchObject({ phase: "saved", canRetrySave: false, confirming: null });
+  });
+
+  it("holds a leave during Save again, and asks it once that save fails", async () => {
+    const { flow, added, last, holdNextSave } = setUp(2);
+    await flow.start();
+    const release = holdNextSave();
+    const saving = flow.retrySave();
+    expect(flow.askToLeave()).toBe(true);
+    release();
+    await saving;
+    expect(added).toEqual([]);
+    expect(last()).toMatchObject({
+      phase: "ready",
+      message: "saveFailed",
+      canRetrySave: true,
+      confirming: "leave",
+    });
+  });
+
+  it("asks a held leave only once: a later failed save, after Stay, asks nothing", async () => {
+    const { flow, last, holdNextSave } = setUp(3);
+    await flow.start();
+    const release = holdNextSave();
+    const saving = flow.retrySave();
+    flow.askToLeave();
+    release();
+    await saving;
+    expect(last()).toMatchObject({ confirming: "leave" });
+    flow.keepPhoto();
+    await flow.retrySave();
+    expect(last()).toMatchObject({ message: "saveFailed", canRetrySave: true, confirming: null });
+  });
+
+  it("asks nothing on a failed save when no leave was held during it", async () => {
+    const { flow, last } = setUp(2);
+    await flow.start();
+    await flow.retrySave();
+    expect(last()).toMatchObject({ message: "saveFailed", canRetrySave: true, confirming: null });
   });
 });

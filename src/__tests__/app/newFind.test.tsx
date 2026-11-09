@@ -35,7 +35,13 @@ jest.mock("expo-image-picker", () => ({
 const mockLog = {
   added: [] as NewFind[],
   addErrors: [] as Error[],
+  /** Saves held open, one per call to `add`, until released (`holdNextAdd`). */
+  addHolds: [] as Promise<void>[],
   async add(find: NewFind): Promise<number> {
+    const hold = mockLog.addHolds.shift();
+    if (hold !== undefined) {
+      await hold;
+    }
     const error = mockLog.addErrors.shift();
     if (error !== undefined) {
       throw error;
@@ -90,6 +96,7 @@ beforeEach(async () => {
   phoneIn("en");
   mockLog.added = [];
   mockLog.addErrors = [];
+  mockLog.addHolds = [];
   jest
     .mocked(ImagePicker.getCameraPermissionsAsync)
     .mockResolvedValue(wrong(permission("granted")));
@@ -115,6 +122,36 @@ async function settle(): Promise<void> {
     }
   });
 }
+
+/** Runs the timers the router has pending (its test renderer runs Jest's fake timers). */
+async function runTimers(): Promise<void> {
+  await act(async () => {
+    jest.runOnlyPendingTimers();
+  });
+}
+
+/** The releases of the saves `holdNextAdd` holds, so that a failed test leaves none held. */
+const heldAdds: (() => void)[] = [];
+
+/** Holds the next save to the find log open until the function it gives is called. */
+function holdNextAdd(): () => void {
+  let release: () => void = () => undefined;
+  mockLog.addHolds.push(
+    new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  );
+  heldAdds.push(release);
+  return release;
+}
+
+afterEach(async () => {
+  for (const release of heldAdds.splice(0)) {
+    release();
+  }
+  // The released saves end here, not in the next test, where they would take its stand-ins.
+  await settle();
+});
 
 async function openNewFind(): Promise<{ pathname: () => string }> {
   const app = renderRouter(APP_DIR, { initialUrl: "/" });
@@ -271,7 +308,89 @@ describe("dropping a kept photo asks first (PBI-1.20, SPEC 3.1)", () => {
       router.back();
     });
     await settle();
+    await runTimers();
   }
+
+  /** Ends a save held open by `holdNextAdd`, and lets the screen and the router run after it. */
+  async function endSave(release: () => void): Promise<void> {
+    await act(async () => {
+      release();
+    });
+    await settle();
+    await runTimers();
+    await settle();
+  }
+
+  describe("leaving while the photo is being saved is held until the save ends (Clead's fix 1 on #32)", () => {
+    it("the first save: once it succeeds, the held leave goes ahead, asking nothing", async () => {
+      const release = holdNextAdd();
+      jest
+        .mocked(ImagePicker.launchCameraAsync)
+        .mockResolvedValue(wrong({ canceled: false, assets: [cameraPhoto] }));
+      const app = await openNewFind();
+      expect(screen.getByText(STRINGS.en.newFind.saving)).toBeOnTheScreen();
+      await goBack();
+      expect(app.pathname()).toBe("/new-find");
+      expect(screen.queryByText(STRINGS.en.newFind.leaveConfirm)).not.toBeOnTheScreen();
+      await endSave(release);
+      expect(mockLog.added.map((find) => find.photoUri)).toEqual([cameraPhoto.uri]);
+      expect(app.pathname()).toBe("/");
+      expect(await screen.findByText(STRINGS.en.log.empty)).toBeOnTheScreen();
+    });
+
+    it("the first save: once it fails, the screen stays and asks the leave question", async () => {
+      const release = holdNextAdd();
+      mockLog.addErrors = [new Error("database is locked")];
+      jest
+        .mocked(ImagePicker.launchCameraAsync)
+        .mockResolvedValue(wrong({ canceled: false, assets: [cameraPhoto] }));
+      const app = await openNewFind();
+      await goBack();
+      expect(app.pathname()).toBe("/new-find");
+      await endSave(release);
+      expect(app.pathname()).toBe("/new-find");
+      expect(mockLog.added).toEqual([]);
+      expect(screen.getByText(STRINGS.en.newFind.leaveConfirm)).toBeOnTheScreen();
+      await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.leaveYes }));
+      await settle();
+      expect(app.pathname()).toBe("/");
+    });
+
+    it("Save again: once it succeeds, the held leave goes ahead, asking nothing", async () => {
+      const app = await withKeptPhoto();
+      const release = holdNextAdd();
+      await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.retrySave }));
+      await settle();
+      expect(screen.getByText(STRINGS.en.newFind.saving)).toBeOnTheScreen();
+      await goBack();
+      expect(app.pathname()).toBe("/new-find");
+      expect(screen.queryByText(STRINGS.en.newFind.leaveConfirm)).not.toBeOnTheScreen();
+      await endSave(release);
+      expect(mockLog.added.map((find) => find.photoUri)).toEqual([cameraPhoto.uri]);
+      expect(app.pathname()).toBe("/");
+      expect(await screen.findByText(STRINGS.en.log.empty)).toBeOnTheScreen();
+    });
+
+    it("Save again: once it fails, the screen stays and asks the leave question, and Stay keeps the photo", async () => {
+      const app = await withKeptPhoto();
+      const release = holdNextAdd();
+      mockLog.addErrors = [new Error("database is locked")];
+      await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.retrySave }));
+      await settle();
+      await goBack();
+      await endSave(release);
+      expect(app.pathname()).toBe("/new-find");
+      expect(mockLog.added).toEqual([]);
+      expect(screen.getByText(STRINGS.en.newFind.leaveConfirm)).toBeOnTheScreen();
+      await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.leaveCancel }));
+      await settle();
+      await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.retrySave }));
+      await settle();
+      await runTimers();
+      expect(mockLog.added.map((find) => find.photoUri)).toEqual([cameraPhoto.uri]);
+      expect(app.pathname()).toBe("/new-find");
+    });
+  });
 
   it("Discard the photo asks on the screen, not in a system alert, and offers only the answers", async () => {
     const alert = jest.spyOn(Alert, "alert");
@@ -309,7 +428,11 @@ describe("dropping a kept photo asks first (PBI-1.20, SPEC 3.1)", () => {
     expect(app.pathname()).toBe("/new-find");
     await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.retrySave }));
     await settle();
+    await runTimers();
     expect(mockLog.added.map((find) => find.photoUri)).toEqual([cameraPhoto.uri]);
+    // Stay ends the leave for good: once the photo is saved, the screen does not leave unasked.
+    expect(screen.getByText(STRINGS.en.newFind.saved)).toBeOnTheScreen();
+    expect(app.pathname()).toBe("/new-find");
   });
 
   it("leaves, dropping the kept photo, once the user confirms", async () => {
