@@ -323,13 +323,16 @@ this?" app.
    session (Crog, #14).
 3. How the database and photos are excluded from iOS backups under Expo,
    and the Android data extraction rules (3.6). Android settled in #21;
-   iOS needs native code (PBI-1.23). Whether Android lint's
-   `FullBackupContent` check stops a release build over excludes outside
-   every include is checked at the first release build (PBI-1.10).
+   iOS needs native code (PBI-1.23). Android lint's `FullBackupContent`
+   check did not stop the first release build (PBI-1.10, 2026-11-09):
+   it finished, and Adam found no `FullBackupContent` in its log. The
+   excludes have carried `tools:ignore` since #40, so the log cannot show
+   what lint would do without it. The question is moot while they carry it.
 4. The default model, chosen at the build.
-5. EAS Build's setup for this project (its project ID and build profile),
-   which needs Adam's Expo account: `eas init` signed in to that account
-   links the project.
+5. EAS Build's setup for this project (its project ID and build profile).
+   Settled: the Expo project `factoincognito/what-mushroom-is-this` (#42;
+   its owner since #39) and the `preview` profile (#40), with which the
+   first build was made (PBI-1.10).
 6. A library for the network state, which the queue's "network is back"
    trigger needs (3.4). Settled for #17:
    `expo-network`, not NetInfo, whose reachability check can send a
