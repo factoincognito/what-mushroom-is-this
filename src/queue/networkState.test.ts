@@ -36,11 +36,19 @@ describe("isOnline", () => {
   it.each([
     ["reachable", ONLINE, true],
     ["not connected", OFFLINE, false],
-    ["connected, but the internet is not reachable (Android: not validated)", { type: "WIFI", isConnected: true, isInternetReachable: false }, false],
+    [
+      "connected, but the internet is not reachable (Android: not validated)",
+      { type: "WIFI", isConnected: true, isInternetReachable: false },
+      false,
+    ],
     ["connected, reachability not reported", { type: "WIFI", isConnected: true }, true],
     ["not connected, reachability not reported", { type: "NONE", isConnected: false }, false],
     ["nothing reported", {}, false],
-    ["a reachability that is not a boolean", { isConnected: true, isInternetReachable: "yes" }, true],
+    [
+      "a reachability that is not a boolean",
+      { isConnected: true, isInternetReachable: "yes" },
+      true,
+    ],
     ["a connection that is not a boolean", { isConnected: "true" }, false],
     ["null", null, false],
     ["not an object", "online", false],
@@ -150,7 +158,8 @@ describe("the device network source", () => {
       const remove = jest.fn();
       const addNetworkStateListener = jest.fn(() => ({ remove }));
       jest.doMock("expo-network", () => ({ getNetworkStateAsync, addNetworkStateListener }));
-      const { watchNetworkBack: watch } = require("./networkState") as typeof import("./networkState");
+      const { watchNetworkBack: watch } =
+        require("./networkState") as typeof import("./networkState");
       const stop = watch(jest.fn());
       expect(getNetworkStateAsync).toHaveBeenCalledTimes(1);
       expect(addNetworkStateListener).toHaveBeenCalledTimes(1);

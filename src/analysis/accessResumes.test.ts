@@ -23,11 +23,26 @@ describe("accessResumesAt", () => {
   });
 
   it.each([
-    ["a message with no time", errorBody("invalid_request_error", "You have reached your specified API usage limits.")],
-    ["a time in another form", errorBody("rate_limit_error", "You will regain access on 1 September 2026.")],
-    ["a date that does not exist", errorBody("rate_limit_error", "You will regain access on 2026-02-30 at 00:00 UTC.")],
-    ["an hour that does not exist", errorBody("rate_limit_error", "You will regain access on 2026-09-01 at 24:00 UTC.")],
-    ["a minute that does not exist", errorBody("rate_limit_error", "You will regain access on 2026-09-01 at 10:60 UTC.")],
+    [
+      "a message with no time",
+      errorBody("invalid_request_error", "You have reached your specified API usage limits."),
+    ],
+    [
+      "a time in another form",
+      errorBody("rate_limit_error", "You will regain access on 1 September 2026."),
+    ],
+    [
+      "a date that does not exist",
+      errorBody("rate_limit_error", "You will regain access on 2026-02-30 at 00:00 UTC."),
+    ],
+    [
+      "an hour that does not exist",
+      errorBody("rate_limit_error", "You will regain access on 2026-09-01 at 24:00 UTC."),
+    ],
+    [
+      "a minute that does not exist",
+      errorBody("rate_limit_error", "You will regain access on 2026-09-01 at 10:60 UTC."),
+    ],
     ["a message that is not text", errorBody("rate_limit_error", 20260901)],
     ["a body that is not JSON", "<html>Sign in to the Wi-Fi</html>"],
     ["a body that is not an error", JSON.stringify({ type: "message" })],

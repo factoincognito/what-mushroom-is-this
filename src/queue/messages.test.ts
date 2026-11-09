@@ -30,14 +30,19 @@ const NOTICES: readonly QueueNotice[] = [
 ];
 
 describe("noticeMessage", () => {
-  it.each(LANGUAGES)("gives each error class and stop its own message in %s, with no placeholder left", (language) => {
-    const messages = NOTICES.map((notice) => noticeMessage(notice, STRINGS[language], formatTime));
-    expect(new Set(messages).size).toBe(NOTICES.length);
-    for (const message of messages) {
-      expect(message).not.toMatch(/[{}]/);
-      expect(message.trim()).not.toBe("");
-    }
-  });
+  it.each(LANGUAGES)(
+    "gives each error class and stop its own message in %s, with no placeholder left",
+    (language) => {
+      const messages = NOTICES.map((notice) =>
+        noticeMessage(notice, STRINGS[language], formatTime),
+      );
+      expect(new Set(messages).size).toBe(NOTICES.length);
+      for (const message of messages) {
+        expect(message).not.toMatch(/[{}]/);
+        expect(message.trim()).not.toBe("");
+      }
+    },
+  );
 
   it("shows the time a 429's retry-after gives, when the queue starts again by itself", () => {
     const message = noticeMessage(
@@ -48,19 +53,30 @@ describe("noticeMessage", () => {
     expect(message).toBe(STRINGS.en.queue.stopped.rateLimitedUntil.replace("{time}", `<${AT}>`));
   });
 
-  it.each(LANGUAGES)("shows in %s the time access resumes after a spend limit, when the answer gives it", (language) => {
-    const message = noticeMessage(
-      { kind: "stopped", stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: AT } },
-      STRINGS[language],
-      formatTime,
-    );
-    expect(message).toContain(`<${AT}>`);
-    expect(message).toBe(STRINGS[language].queue.stopped.spendLimitUntil.replace("{time}", `<${AT}>`));
-  });
+  it.each(LANGUAGES)(
+    "shows in %s the time access resumes after a spend limit, when the answer gives it",
+    (language) => {
+      const message = noticeMessage(
+        {
+          kind: "stopped",
+          stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: AT },
+        },
+        STRINGS[language],
+        formatTime,
+      );
+      expect(message).toContain(`<${AT}>`);
+      expect(message).toBe(
+        STRINGS[language].queue.stopped.spendLimitUntil.replace("{time}", `<${AT}>`),
+      );
+    },
+  );
 
   it("says nothing of a time when the answer gives none", () => {
     const message = noticeMessage(
-      { kind: "stopped", stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null } },
+      {
+        kind: "stopped",
+        stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
+      },
       STRINGS.en,
       formatTime,
     );
@@ -69,13 +85,20 @@ describe("noticeMessage", () => {
 
   it("gives the status of any other answer", () => {
     expect(
-      noticeMessage({ kind: "stopped", stop: { reason: "other", status: 418 } }, STRINGS.en, formatTime),
+      noticeMessage(
+        { kind: "stopped", stop: { reason: "other", status: 418 } },
+        STRINGS.en,
+        formatTime,
+      ),
     ).toBe(STRINGS.en.queue.stopped.other.replace("{status}", "418"));
   });
 
   it.each(LANGUAGES)("names the marker the segment check refused in %s", (language) => {
     const message = noticeMessage(
-      { kind: "find-failed", failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" } },
+      {
+        kind: "find-failed",
+        failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+      },
       STRINGS[language],
       formatTime,
     );

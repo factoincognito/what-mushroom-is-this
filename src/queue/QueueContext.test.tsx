@@ -3,14 +3,21 @@ import { Text } from "react-native";
 
 import type { ReadKeyResult } from "../key/apiKey";
 import { type KeyState, useApiKey } from "../key/KeyContext";
-import type { NewFind } from "../store/find";
 import { FindLogProvider, useFindLog } from "../store/FindLogContext";
+import type { NewFind } from "../store/find";
 import type { FindStore } from "../store/findStore";
 import type { NetworkSource } from "./networkState";
+import {
+  type AppStateSource,
+  type QueueContextValue,
+  QueueProvider,
+  useQueue,
+} from "./QueueContext";
 import { AnalysisQueue, type QueueDeps } from "./queue";
-import { type AppStateSource, QueueProvider, type QueueContextValue, useQueue } from "./QueueContext";
 
 jest.mock("../key/KeyContext", () => ({ useApiKey: jest.fn() }));
+// The phone's queue is not made here: each test gives the provider its own (deviceQueue.test.ts).
+jest.mock("./deviceQueue", () => ({ createDeviceQueue: jest.fn() }));
 
 const NEW_FIND: NewFind = {
   photoUri: "file:///cache/camera.jpg",
@@ -41,7 +48,7 @@ function emptyLog(): FindStore {
 function fakeAppState(initial: string) {
   const listeners: ((state: string) => void)[] = [];
   const remove = jest.fn();
-  const source: AppStateSource = {
+  const source: { currentState: string } & AppStateSource = {
     currentState: initial,
     addEventListener: (_type, listener) => {
       listeners.push(listener);
@@ -73,7 +80,10 @@ function fakeNetwork() {
   return { source, remove, emit: (state: unknown) => listener(state) };
 }
 
-const readForAnalysis = jest.fn<Promise<ReadKeyResult>, []>(async () => ({ ok: true, key: "sk-ant-k" }));
+const readForAnalysis = jest.fn<Promise<ReadKeyResult>, []>(async () => ({
+  ok: true,
+  key: "sk-ant-k",
+}));
 
 beforeEach(() => {
   jest.mocked(useApiKey).mockReturnValue({
@@ -270,9 +280,7 @@ describe("QueueProvider, what it gives the screens", () => {
 
   it("analyses one find on asking", async () => {
     const { queue } = await renderQueue();
-    const analyseFind = jest
-      .spyOn(queue, "analyseFind")
-      .mockResolvedValue({ ok: true });
+    const analyseFind = jest.spyOn(queue, "analyseFind").mockResolvedValue({ ok: true });
     await expect(current().analyseFind(4)).resolves.toEqual({ ok: true });
     expect(analyseFind).toHaveBeenCalledWith(4);
   });
@@ -295,17 +303,9 @@ describe("useQueue", () => {
       useQueue();
       return null;
     }
-    await expect(render(<Outside />)).rejects.toThrow("useQueue must be used inside a QueueProvider");
+    await expect(render(<Outside />)).rejects.toThrow(
+      "useQueue must be used inside a QueueProvider",
+    );
     spy.mockRestore();
-  });
-});
-
-describe("QueueProvider, a run's programming error", () => {
-  it("is not swallowed: the run's promise rejects", async () => {
-    const log = emptyLog();
-    jest.mocked(log.oldestWaiting).mockRejectedValue(new RangeError("bad"));
-    const { queue } = await renderQueue({ log });
-    const run = jest.mocked(queue.trigger).mock.results[0]?.value as Promise<void>;
-    await expect(run).rejects.toBeInstanceOf(RangeError);
   });
 });

@@ -1,4 +1,4 @@
-import type { AnalysisInput, AnalysisCallResult } from "../analysis/analyse";
+import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
 import { analysePhoto } from "../analysis/analyse";
 import type { Answer } from "../analysis/answer";
 import type { AnalysisError } from "../analysis/errors";
@@ -229,6 +229,22 @@ describe("the run (SPEC 3.4)", () => {
     expect(t.states.at(-1)).toEqual({ running: false, stop: null, pause: null });
   });
 
+  it("goes on with the next find when one is deleted between finding it and reading it", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.log.addFind(2);
+    const original = t.log.get.bind(t.log);
+    t.log.get = async (id) => {
+      if (id === 1) {
+        t.log.finds.delete(1);
+        return null;
+      }
+      return original(id);
+    };
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["setAnswer 2"]);
+  });
+
   it("takes a find saved during the run in the same run", async () => {
     const t = setup();
     t.log.addFind(1);
@@ -342,17 +358,24 @@ describe("the error classes of SPEC 3.3 in a run", () => {
   it.each([
     ["no network", { kind: "stays-waiting", cause: "network", status: null }, "network"],
     ["the time limit", { kind: "stays-waiting", cause: "time-out", status: null }, "time-out"],
-    ["a fault on Anthropic's side", { kind: "stays-waiting", cause: "server", status: 529 }, "server"],
-  ] as const)("%s: the find stays waiting and the run ends, not stopped", async (_name, error, cause) => {
-    const t = setup();
-    t.log.addFind(1);
-    t.log.addFind(2);
-    t.replies.push(fail(error));
-    await t.queue.trigger();
-    expect(t.calls).toHaveLength(1);
-    expect(t.log.changes).toEqual([]);
-    expect(t.queue.getState()).toEqual({ running: false, stop: null, pause: cause });
-  });
+    [
+      "a fault on Anthropic's side",
+      { kind: "stays-waiting", cause: "server", status: 529 },
+      "server",
+    ],
+  ] as const)(
+    "%s: the find stays waiting and the run ends, not stopped",
+    async (_name, error, cause) => {
+      const t = setup();
+      t.log.addFind(1);
+      t.log.addFind(2);
+      t.replies.push(fail(error));
+      await t.queue.trigger();
+      expect(t.calls).toHaveLength(1);
+      expect(t.log.changes).toEqual([]);
+      expect(t.queue.getState()).toEqual({ running: false, stop: null, pause: cause });
+    },
+  );
 
   it("tries a find that stayed waiting again at the next run, and clears the pause", async () => {
     const t = setup();
@@ -402,7 +425,11 @@ describe("the error classes of SPEC 3.3 in a run", () => {
     const t = setup();
     t.log.addFind(1);
     const resumes = Date.UTC(2026, 11, 1);
-    t.replies.push({ ok: false, error: { kind: "rate-limited", retryAt: null }, accessResumesAtMs: resumes });
+    t.replies.push({
+      ok: false,
+      error: { kind: "rate-limited", retryAt: null },
+      accessResumesAtMs: resumes,
+    });
     await t.queue.trigger();
     expect(t.queue.getState().stop).toEqual({
       reason: "rate-limited",
@@ -434,36 +461,53 @@ describe("the error classes of SPEC 3.3 in a run", () => {
   it.each([
     ["400", "request-wrong", 400],
     ["413", "request-too-large", 413],
-  ] as const)("%s: that find is marked failed and the queue goes on", async (_name, reason, status) => {
-    const t = setup();
-    t.log.addFind(1);
-    t.log.addFind(2);
-    t.replies.push(fail({ kind: "find-failed", reason, status, queue: "goes-on" }));
-    await t.queue.trigger();
-    expect(t.log.changes).toEqual([`markFailed 1 request: ${reason} (status ${status})`, "setAnswer 2"]);
-    expect(t.queue.getState().stop).toBeNull();
-  });
+  ] as const)(
+    "%s: that find is marked failed and the queue goes on",
+    async (_name, reason, status) => {
+      const t = setup();
+      t.log.addFind(1);
+      t.log.addFind(2);
+      t.replies.push(fail({ kind: "find-failed", reason, status, queue: "goes-on" }));
+      await t.queue.trigger();
+      expect(t.log.changes).toEqual([
+        `markFailed 1 request: ${reason} (status ${status})`,
+        "setAnswer 2",
+      ]);
+      expect(t.queue.getState().stop).toBeNull();
+    },
+  );
 
   it.each([
     ["does not fit the shape", "shape"],
     ["is not from the API", "not-api"],
-  ] as const)("an answer that %s: that find is marked failed and the queue stops", async (_name, reason) => {
-    const t = setup();
-    t.log.addFind(1);
-    t.log.addFind(2);
-    t.replies.push(
-      fail({ kind: "find-failed", reason, detail: "the answer is not JSON", status: 200, queue: "stops" }),
-    );
-    await t.queue.trigger();
-    expect(t.log.changes).toEqual(["markFailed 1 answer: the answer is not JSON"]);
-    expect(t.log.state(2)).toEqual({ state: "waiting" });
-    expect(t.queue.getState().stop).toEqual({ reason: "answer" });
-  });
+  ] as const)(
+    "an answer that %s: that find is marked failed and the queue stops",
+    async (_name, reason) => {
+      const t = setup();
+      t.log.addFind(1);
+      t.log.addFind(2);
+      t.replies.push(
+        fail({
+          kind: "find-failed",
+          reason,
+          detail: "the answer is not JSON",
+          status: 200,
+          queue: "stops",
+        }),
+      );
+      await t.queue.trigger();
+      expect(t.log.changes).toEqual(["markFailed 1 answer: the answer is not JSON"]);
+      expect(t.log.state(2)).toEqual({ state: "waiting" });
+      expect(t.queue.getState().stop).toEqual({ reason: "answer" });
+    },
+  );
 
   it("a failed find is not tried again by the queue", async () => {
     const t = setup();
     t.log.addFind(1);
-    t.replies.push(fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }));
+    t.replies.push(
+      fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+    );
     await t.queue.trigger();
     await t.queue.trigger();
     expect(t.calls).toHaveLength(1);
@@ -474,16 +518,19 @@ describe("the key (SPEC 3.2)", () => {
   it.each([
     ["no key is saved", { ok: true, key: null }],
     ["the key cannot be read", { ok: false }],
-  ] as const)("when %s, sends nothing: the find waits and the queue stops for a key", async (_name, key) => {
-    const t = setup();
-    t.setKey(key);
-    t.log.addFind(1);
-    await t.queue.trigger();
-    expect(t.calls).toEqual([]);
-    expect(t.prepared).toEqual([]);
-    expect(t.log.state(1)).toEqual({ state: "waiting" });
-    expect(t.queue.getState().stop).toEqual({ reason: "no-key" });
-  });
+  ] as const)(
+    "when %s, sends nothing: the find waits and the queue stops for a key",
+    async (_name, key) => {
+      const t = setup();
+      t.setKey(key);
+      t.log.addFind(1);
+      await t.queue.trigger();
+      expect(t.calls).toEqual([]);
+      expect(t.prepared).toEqual([]);
+      expect(t.log.state(1)).toEqual({ state: "waiting" });
+      expect(t.queue.getState().stop).toEqual({ reason: "no-key" });
+    },
+  );
 
   it("reads no key when no find is waiting", async () => {
     const t = setup();
@@ -615,14 +662,17 @@ describe("restarts (SPEC 3.3)", () => {
   it.each([
     ["key", { kind: "key-refused", status: 403 }],
     ["model", { kind: "model-unknown" }],
-  ] as const)("a change of the %s setting starts the queue stopped for it again", async (setting, error) => {
-    const t = setup();
-    t.log.addFind(1);
-    t.replies.push(fail(error));
-    await t.queue.trigger();
-    await t.queue.settingChanged(setting);
-    expect(t.log.changes).toEqual(["setAnswer 1"]);
-  });
+  ] as const)(
+    "a change of the %s setting starts the queue stopped for it again",
+    async (setting, error) => {
+      const t = setup();
+      t.log.addFind(1);
+      t.replies.push(fail(error));
+      await t.queue.trigger();
+      await t.queue.settingChanged(setting);
+      expect(t.log.changes).toEqual(["setAnswer 1"]);
+    },
+  );
 
   it("a change of the key starts the queue stopped for a missing key again", async () => {
     const t = setup();
@@ -638,15 +688,18 @@ describe("restarts (SPEC 3.3)", () => {
     ["model", { kind: "key-refused", status: 401 }, { reason: "key-refused" }],
     ["key", { kind: "model-unknown" }, { reason: "model-unknown" }],
     ["key", { kind: "no-credit", status: 402 }, { reason: "no-credit" }],
-  ] as const)("a change of the %s setting does not start a queue stopped for another cause", async (setting, error, stop) => {
-    const t = setup();
-    t.log.addFind(1);
-    t.replies.push(fail(error));
-    await t.queue.trigger();
-    await t.queue.settingChanged(setting);
-    expect(t.calls).toHaveLength(1);
-    expect(t.queue.getState().stop).toEqual(stop);
-  });
+  ] as const)(
+    "a change of the %s setting does not start a queue stopped for another cause",
+    async (setting, error, stop) => {
+      const t = setup();
+      t.log.addFind(1);
+      t.replies.push(fail(error));
+      await t.queue.trigger();
+      await t.queue.settingChanged(setting);
+      expect(t.calls).toHaveLength(1);
+      expect(t.queue.getState().stop).toEqual(stop);
+    },
+  );
 
   it("dispose cancels a pending restart", async () => {
     const t = setup();
@@ -716,7 +769,9 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
   it("marks a waiting find failed on a 400 and says why", async () => {
     const t = setup();
     t.log.addFind(1);
-    t.replies.push(fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }));
+    t.replies.push(
+      fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+    );
     await expect(t.queue.analyseFind(1)).resolves.toEqual({
       ok: false,
       notice: {
@@ -768,26 +823,84 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
   });
 
   describe("a failed new analysis of an analysed find keeps its answer, whatever the class", () => {
-    const analysed: Analysis = { state: "done", answer: OTHER_ANSWER, model: "old", analysedAtMs: 1 };
+    const analysed: Analysis = {
+      state: "done",
+      answer: OTHER_ANSWER,
+      model: "old",
+      analysedAtMs: 1,
+    };
 
     it.each([
-      ["no network", fail({ kind: "stays-waiting", cause: "network", status: null }), { kind: "paused", cause: "network" }, null],
-      ["400", fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }), { kind: "find-failed", failure: { cause: "request", detail: "request-wrong (status 400)" } }, null],
-      ["an answer not of the shape", fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }), { kind: "find-failed", failure: { cause: "answer", detail: "bad" } }, { reason: "answer" }],
-      ["401", fail({ kind: "key-refused", status: 401 }), { kind: "stopped", stop: { reason: "key-refused" } }, { reason: "key-refused" }],
-      ["404", fail({ kind: "model-unknown" }), { kind: "stopped", stop: { reason: "model-unknown" } }, { reason: "model-unknown" }],
-      ["402", fail({ kind: "no-credit", status: 402 }), { kind: "stopped", stop: { reason: "no-credit" } }, { reason: "no-credit" }],
-      ["429", fail({ kind: "rate-limited", retryAt: null }), { kind: "stopped", stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null } }, { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null }],
-      ["any other status", fail({ kind: "other", status: 418 }), { kind: "stopped", stop: { reason: "other", status: 418 } }, { reason: "other", status: 418 }],
-    ] as const)("%s: the answer is kept, nothing is stored, and the table's outcome for the queue applies", async (_name, reply, notice, stop) => {
-      const t = setup();
-      t.log.addFind(1, analysed);
-      t.replies.push(reply);
-      await expect(t.queue.analyseFind(1)).resolves.toEqual({ ok: false, notice, answerKept: true });
-      expect(t.log.changes).toEqual([]);
-      expect(t.log.state(1)).toEqual(analysed);
-      expect(t.queue.getState().stop).toEqual(stop);
-    });
+      [
+        "no network",
+        fail({ kind: "stays-waiting", cause: "network", status: null }),
+        { kind: "paused", cause: "network" },
+        null,
+      ],
+      [
+        "400",
+        fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+        {
+          kind: "find-failed",
+          failure: { cause: "request", detail: "request-wrong (status 400)" },
+        },
+        null,
+      ],
+      [
+        "an answer not of the shape",
+        fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
+        { kind: "find-failed", failure: { cause: "answer", detail: "bad" } },
+        { reason: "answer" },
+      ],
+      [
+        "401",
+        fail({ kind: "key-refused", status: 401 }),
+        { kind: "stopped", stop: { reason: "key-refused" } },
+        { reason: "key-refused" },
+      ],
+      [
+        "404",
+        fail({ kind: "model-unknown" }),
+        { kind: "stopped", stop: { reason: "model-unknown" } },
+        { reason: "model-unknown" },
+      ],
+      [
+        "402",
+        fail({ kind: "no-credit", status: 402 }),
+        { kind: "stopped", stop: { reason: "no-credit" } },
+        { reason: "no-credit" },
+      ],
+      [
+        "429",
+        fail({ kind: "rate-limited", retryAt: null }),
+        {
+          kind: "stopped",
+          stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
+        },
+        { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
+      ],
+      [
+        "any other status",
+        fail({ kind: "other", status: 418 }),
+        { kind: "stopped", stop: { reason: "other", status: 418 } },
+        { reason: "other", status: 418 },
+      ],
+    ] as const)(
+      "%s: the answer is kept, nothing is stored, and the table's outcome for the queue applies",
+      async (_name, reply, notice, stop) => {
+        const t = setup();
+        t.log.addFind(1, analysed);
+        t.replies.push(reply);
+        await expect(t.queue.analyseFind(1)).resolves.toEqual({
+          ok: false,
+          notice,
+          answerKept: true,
+        });
+        expect(t.log.changes).toEqual([]);
+        expect(t.log.state(1)).toEqual(analysed);
+        expect(t.queue.getState().stop).toEqual(stop);
+      },
+    );
 
     it("a photo that fails the segment check: the answer is kept", async () => {
       const t = setup();
@@ -798,7 +911,10 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
       }));
       await expect(t.queue.analyseFind(1)).resolves.toEqual({
         ok: false,
-        notice: { kind: "find-failed", failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" } },
+        notice: {
+          kind: "find-failed",
+          failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+        },
         answerKept: true,
       });
       expect(t.log.changes).toEqual([]);

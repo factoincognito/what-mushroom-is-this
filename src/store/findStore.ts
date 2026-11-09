@@ -58,6 +58,11 @@ export interface FindStore {
   get(id: number): Promise<Find | null>;
   /** What the Log list shows of every find, the latest taken first. */
   list(): Promise<FindSummary[]>;
+  /**
+   * The ID of the waiting find saved first, or null when none waits: the queue's "oldest first" is
+   * the order of saving, the find's ID, not the time taken (docs/SPEC.md 3.4).
+   */
+  oldestWaiting(): Promise<number | null>;
   setAnswer(id: number, analysed: AnalysedAnswer): Promise<void>;
   replaceAnswer(id: number, analysed: AnalysedAnswer): Promise<void>;
   markFailed(id: number, failure: FindFailure): Promise<void>;
@@ -88,6 +93,7 @@ const GET = `SELECT id, taken_at_ms, utc_offset_min, time_source, latitude, long
 const LIST = `SELECT id, taken_at_ms, utc_offset_min, time_source, photo_file, state, failure_cause,
   failure_detail, result, name_sv, name_en, name_it, edibility, confidence FROM finds
   ORDER BY taken_at_ms DESC, id DESC`;
+const OLDEST_WAITING = "SELECT id FROM finds WHERE state = 'waiting' ORDER BY id ASC LIMIT 1";
 const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL,
   answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?,
   name_it = ?, edibility = ?, confidence = ?`;
@@ -169,6 +175,11 @@ export async function createFindStore(
     async list() {
       const rows = await db.getAllAsync(LIST, []);
       return rows.map((row) => readSummary(record(row), photos));
+    },
+
+    async oldestWaiting() {
+      const row = await db.getFirstAsync(OLDEST_WAITING, []);
+      return row === null ? null : integerOf(record(row), "id");
     },
 
     setAnswer: (id, analysed) => answer(id, analysed, SET_ANSWER),

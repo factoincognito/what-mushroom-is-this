@@ -103,10 +103,10 @@ function phoneIn(languageCode: string): void {
     ]);
 }
 
-async function startApp(initialUrl = "/") {
+async function startApp(initialUrl = "/"): Promise<{ pathname: () => string }> {
   const app = renderRouter(APP_DIR, { initialUrl });
   await app;
-  return app;
+  return { pathname: () => app.getPathname() };
 }
 
 beforeEach(async () => {
@@ -119,7 +119,7 @@ beforeEach(async () => {
   mockFinds.set(1, waitingFind(1));
   phoneIn("en");
   fetchMock.mockReset();
-  global.fetch = fetchMock;
+  globalThis.fetch = fetchMock;
   Object.defineProperty(AppState, "currentState", { value: "active", configurable: true });
 });
 
@@ -143,7 +143,10 @@ describe("the queue at the app's start", () => {
 describe("the Log screen when the queue has stopped (SPEC 3.1)", () => {
   it("says why and offers analyse now, which starts the queue again", async () => {
     fetchMock.mockResolvedValueOnce(
-      answer(402, JSON.stringify({ type: "error", error: { type: "billing_error", message: "x" } })),
+      answer(
+        402,
+        JSON.stringify({ type: "error", error: { type: "billing_error", message: "x" } }),
+      ),
     );
     await startApp();
     expect(await screen.findByText(en.stopped.noCredit)).toBeOnTheScreen();
@@ -172,7 +175,9 @@ describe("the Log screen when the queue has stopped (SPEC 3.1)", () => {
     );
     await startApp();
     expect(
-      await screen.findByText(en.stopped.spendLimitUntil.replace("{time}", formatTimeIn("en")(resumes))),
+      await screen.findByText(
+        en.stopped.spendLimitUntil.replace("{time}", formatTimeIn("en")(resumes)),
+      ),
     ).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: en.analyseNow })).toBeOnTheScreen();
   });
@@ -193,7 +198,7 @@ describe("the Log screen when the queue has stopped (SPEC 3.1)", () => {
     expect(await screen.findByText(en.stopped.noKey)).toBeOnTheScreen();
     expect(fetchMock).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByRole("link", { name: en.openSettings }));
-    expect(app.getPathname()).toBe("/settings");
+    expect(app.pathname()).toBe("/settings");
   });
 });
 

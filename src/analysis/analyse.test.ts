@@ -456,7 +456,8 @@ describe("analysePhoto, the time access resumes after a spend limit (PBI-1.7)", 
     type: "error",
     error: {
       type: "rate_limit_error",
-      message: "You have reached your API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+      message:
+        "You have reached your API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
     },
   });
   const ownLimit = JSON.stringify({
