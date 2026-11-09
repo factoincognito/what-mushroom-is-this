@@ -106,6 +106,22 @@ describe("positionNow", () => {
     await expect(tracker.positionNow()).resolves.toMatchObject({ latitude: 59.1, accuracyM: 500 });
   });
 
+  it("takes a fix with an accuracy that comes after one without", async () => {
+    const tracker = startPositionTracker(location, OPTIONS);
+    await settle();
+    location.send(reading(59.1, 17.1, null));
+    location.send(reading(59.2, 17.2, 500));
+    await expect(tracker.positionNow()).resolves.toMatchObject({ latitude: 59.2, accuracyM: 500 });
+  });
+
+  it("takes the later of two fixes without an accuracy", async () => {
+    const tracker = startPositionTracker(location, OPTIONS);
+    await settle();
+    location.send(reading(59.1, 17.1, null));
+    location.send(reading(59.2, 17.2, null));
+    await expect(tracker.positionNow()).resolves.toMatchObject({ latitude: 59.2, accuracyM: null });
+  });
+
   it("keeps a fix without an accuracy when it is the only one", async () => {
     const tracker = startPositionTracker(location, OPTIONS);
     await settle();
@@ -179,12 +195,13 @@ describe("firstFix", () => {
     await expect(tracker.firstFix()).resolves.toMatchObject({ latitude: 59.2, source: "fix" });
   });
 
-  it("waits for the first fix that comes, then stops watching", async () => {
+  it("waits for the first fix that comes, up to the last millisecond of the wait, then stops watching", async () => {
     jest.useFakeTimers();
     const tracker = startPositionTracker(location, OPTIONS);
     await settle();
     const first = tracker.firstFix();
-    jest.advanceTimersByTime(29_000);
+    jest.advanceTimersByTime(29_999);
+    expect(location.stopped).toBe(0);
     location.send(reading(59.3, 17.3, 15));
     await expect(first).resolves.toEqual({
       latitude: 59.3,

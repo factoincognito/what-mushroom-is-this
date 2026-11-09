@@ -34,22 +34,23 @@ function pluginEntry(name: string): [string, Record<string, unknown>] | undefine
 }
 
 /**
- * The iOS Info.plist and the Android manifest after the real expo-secure-store plugin has run over
+ * The iOS Info.plist and the Android manifest after a library's real config plugin has run over
  * app.json with the options app.json gives it, and its mods have been run without writing files.
  */
-async function afterSecureStorePlugin(): Promise<{
+async function afterPlugin(
+  name: "expo-secure-store" | "expo-location",
+  plugin: { default: (config: ExpoConfig, props: unknown) => ExpoConfig },
+): Promise<{
   infoPlist: Record<string, unknown>;
   application: Record<string, string>;
 }> {
-  const entry = pluginEntry("expo-secure-store");
+  const entry = pluginEntry(name);
   if (entry === undefined) {
-    throw new Error("app.json registers no expo-secure-store plugin");
+    throw new Error(`app.json registers no ${name} plugin`);
   }
-  const withSecureStore: { default: (config: ExpoConfig, props: unknown) => ExpoConfig } =
-    jest.requireActual("expo-secure-store/app.plugin");
   // Through `expo`, a direct dependency, not an internal path of @expo/config-plugins (PBI-1.26).
   const { compileModsAsync } = jest.requireActual("expo/config-plugins");
-  const config = withSecureStore.default(structuredClone(appJson.expo), entry[1]);
+  const config = plugin.default(structuredClone(appJson.expo), entry[1]);
   await compileModsAsync(config, {
     projectRoot: PROJECT_ROOT,
     introspect: true,
@@ -66,10 +67,13 @@ async function afterSecureStorePlugin(): Promise<{
 }
 
 describe("the expo-secure-store config plugin in app.json", () => {
-  let after: Awaited<ReturnType<typeof afterSecureStorePlugin>>;
+  let after: Awaited<ReturnType<typeof afterPlugin>>;
 
   beforeAll(async () => {
-    after = await afterSecureStorePlugin();
+    after = await afterPlugin(
+      "expo-secure-store",
+      jest.requireActual("expo-secure-store/app.plugin"),
+    );
   }, 120_000);
 
   it("is registered", () => {
@@ -132,4 +136,18 @@ describe("the expo-location config plugin in app.json (PBI-1.6)", () => {
     expect(options?.isAndroidForegroundServiceEnabled ?? false).toBe(false);
     expect(options?.isIosBackgroundLocationEnabled ?? false).toBe(false);
   });
+
+  it("writes only the while-in-use location text on iOS: no Always and no motion text (the real plugin)", async () => {
+    const { infoPlist } = await afterPlugin(
+      "expo-location",
+      jest.requireActual("expo-location/app.plugin"),
+    );
+    expect(infoPlist.NSLocationWhenInUseUsageDescription).toBe(
+      pluginEntry("expo-location")?.[1].locationWhenInUsePermission,
+    );
+    expect(infoPlist).not.toHaveProperty("NSLocationAlwaysAndWhenInUseUsageDescription");
+    expect(infoPlist).not.toHaveProperty("NSLocationAlwaysUsageDescription");
+    expect(infoPlist).not.toHaveProperty("NSMotionUsageDescription");
+    expect(infoPlist.UIBackgroundModes ?? []).not.toContain("location");
+  }, 120_000);
 });

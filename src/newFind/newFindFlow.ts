@@ -56,7 +56,10 @@ type Pending = { from: "camera"; uri: string } | { from: "gallery"; photo: Galle
 export class NewFindFlow {
   private view: NewFindView = INITIAL_VIEW;
   private tracker: PositionTracker | null = null;
-  /** Set once a save has taken the tracker over, to wait for a fix after the screen is gone. */
+  /**
+   * Set from the start of a camera save, which then owns the tracker (it may wait for a fix after
+   * the screen is gone); cleared when that save fails.
+   */
   private trackerHandedOff = false;
   private pending: Pending | null = null;
   private started = false;
@@ -164,13 +167,16 @@ export class NewFindFlow {
 
   private async save(pending: Pending): Promise<void> {
     this.pending = pending;
+    // A camera save owns the tracker from its start, before anything is awaited, so that closing
+    // the screen meanwhile does not stop it: the find may still need its later fix (SPEC 3.6).
+    this.trackerHandedOff = pending.from === "camera";
     this.show({ phase: "saving", message: null, canRetrySave: false });
     try {
       const store = await this.deps.findLog();
       const deps = { store, now: this.deps.now };
       if (pending.from === "camera") {
-        const saved = await saveCameraFind(pending.uri, this.tracker, deps);
-        this.trackerHandedOff = saved.positionLater !== null;
+        // saveCameraFind stops the tracker itself unless the find waits for its first fix.
+        await saveCameraFind(pending.uri, this.tracker, deps);
       } else {
         await saveGalleryFind(pending.photo, deps);
         this.tracker?.stop();
@@ -178,6 +184,12 @@ export class NewFindFlow {
       this.pending = null;
       this.show({ phase: "saved" });
     } catch {
+      // Nothing waits for a fix: the tracker goes back to the screen, for Save again, or stops
+      // if the screen has closed meanwhile.
+      this.trackerHandedOff = false;
+      if (this.closed) {
+        this.tracker?.stop();
+      }
       this.show({ phase: "ready", message: "saveFailed", canRetrySave: true });
     }
   }

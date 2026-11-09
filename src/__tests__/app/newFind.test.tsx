@@ -433,6 +433,26 @@ describe("leaving the screen", () => {
     expect(app.pathname()).toBe("/");
     expect(watchRemoved).toBe(1);
   });
+
+  it("keeps waiting for the first fix after a camera find saved without one, and adds it", async () => {
+    jest
+      .mocked(ImagePicker.launchCameraAsync)
+      .mockResolvedValue(wrong({ canceled: false, assets: [cameraPhoto] }));
+    const app = await openNewFind();
+    expect(mockLog.added[0]?.position).toBeNull();
+    await act(async () => {
+      router.back();
+    });
+    await settle();
+    expect(app.pathname()).toBe("/");
+    expect(watchRemoved).toBe(0);
+    await act(async () => sendFix?.(fix(59.66, 17.1, 9)));
+    await settle();
+    expect(mockLog.positions).toEqual([
+      [1, { latitude: 59.66, longitude: 17.1, accuracyM: 9, source: "fix" }],
+    ]);
+    expect(watchRemoved).toBe(1);
+  });
 });
 
 /** A value of a type the test does not build in full. */

@@ -30,7 +30,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Your location is saved with each new find, so your log shows where you found it. It is not sent anywhere."
+          "locationWhenInUsePermission": "Your location is saved with each new find, so your log shows where you found it. It is not sent anywhere.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "motionUsagePermission": false
         }
       ],
       [
