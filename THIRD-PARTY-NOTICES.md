@@ -46,6 +46,7 @@ shipped in the app (internal tooling).
 | `expo-secure-store` | 57.0.4 | MIT | depend | https://github.com/expo/expo, `packages/expo-secure-store` | the API key in the secure store (PBI-1.2) |
 | `expo-image-manipulator` | 57.0.22 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-manipulator` | resizing and re-encoding the photo for analysis as JPEG (PBI-1.6) |
 | `expo-image-loader` | 57.0.1 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-loader` | a dependency of `expo-image-picker` and `expo-image-manipulator`, installed with them (PBI-1.6) |
+| `expo-location` | 57.0.23 | MIT | depend | https://github.com/expo/expo, `packages/expo-location` | the position of a new find (PBI-1.6). **Parked**: its Android side builds in `com.google.android.gms:play-services-location` 21.0.1 from Maven (its `android/build.gradle`), Google's vendor SDK under Google's terms, which the policy escalates (Appendix A.2, A.3); it is not used until the Product Office decides in writing |
 | `expo-image-picker` | 57.0.21 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-picker` | the camera and the gallery of a new find (PBI-1.6). Its Android side builds in the native libraries below, from Maven, not npm (its `android/build.gradle`) |
 
 ### The Android libraries `expo-image-picker` builds in

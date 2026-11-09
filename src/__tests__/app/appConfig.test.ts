@@ -61,8 +61,19 @@ describe("the expo-image-picker config plugin in app.json (PBI-1.6)", () => {
   });
 });
 
-describe("the phone's location (PBI-1.6)", () => {
-  it("is not configured: expo-location waits for its escalation (the parked PR on feat/pbi-1.6-position)", () => {
-    expect(pluginEntry("expo-location")).toBeUndefined();
+describe("the expo-location config plugin in app.json (PBI-1.6)", () => {
+  it("is registered", () => {
+    expect(pluginEntry("expo-location")).toBeDefined();
+  });
+
+  it("gives the message iOS shows when it asks for the location while the app is in use", () => {
+    expect(isPurposeText(pluginEntry("expo-location")?.[1].locationWhenInUsePermission)).toBe(true);
+  });
+
+  it("asks for no location in the background (SPEC 3.4: nothing runs while the app is closed)", () => {
+    const options = pluginEntry("expo-location")?.[1];
+    expect(options?.isAndroidBackgroundLocationEnabled ?? false).toBe(false);
+    expect(options?.isAndroidForegroundServiceEnabled ?? false).toBe(false);
+    expect(options?.isIosBackgroundLocationEnabled ?? false).toBe(false);
   });
 });

@@ -18,6 +18,12 @@
           "photosPermission": "A photo you pick from your library is saved as a find in your log.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Your location is saved with each new find, so your log shows where you found it. It is not sent anywhere."
+        }
       ]
     ]
   }
