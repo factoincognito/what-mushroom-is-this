@@ -42,6 +42,7 @@ function emptyLog(): FindStore {
     markWaiting: jest.fn(),
     setPosition: jest.fn(),
     delete: jest.fn(),
+    deleteUnreadable: jest.fn(),
   };
 }
 

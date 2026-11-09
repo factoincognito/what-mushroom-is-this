@@ -146,10 +146,16 @@ const safeTime = (column: string) =>
 /** The UTC offset, given back only within the schema's 18 hours, else as NULL. */
 const SAFE_OFFSET =
   "CASE WHEN utc_offset_min BETWEEN -1080 AND 1080 THEN utc_offset_min END AS utc_offset_min";
-const FIND_COLUMNS = `id, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}`;
-const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE id = ?`;
-const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND id > ? ORDER BY id ASC LIMIT 1`;
-const LIST = `SELECT ${FIND_COLUMNS}, result, name_sv, name_en, name_it, edibility, confidence FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
+/** The ID, given back only as a positive safe integer, else as NULL (PBI-1.26). */
+const SAFE_ID = "CASE WHEN id BETWEEN 1 AND 9007199254740991 THEN id END AS id";
+const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}`;
+const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
+const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND finds.id > ? AND finds.id <= 9007199254740991 ORDER BY finds.id ASC LIMIT 1`;
+const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv, name_en, name_it, edibility, confidence FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
+/** Only among the IDs the store cannot read: a readable find is deleted by `delete` alone. */
+const UNREADABLE_ID = "(id < 1 OR id > 9007199254740991)";
+const PHOTO_OF_STORED = `SELECT photo_file FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
+const DELETE_STORED = `DELETE FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
 const ANSWER_COLUMNS =
   "state = 'done', failure_cause = NULL, failure_detail = NULL, answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?, name_it = ?, edibility = ?, confidence = ?";
 const SET_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state IN ('waiting', 'failed')`;
@@ -278,8 +284,19 @@ describe("opening the store", () => {
     expect([...photos.files]).toEqual(["a.jpg"]);
   });
 
-  it("refuses to open when the finds' photo names cannot be read", async () => {
-    db.reply("all", ALL_PHOTOS, [{ photo_file: 3 }]);
+  it("still opens when a find's photo name cannot be read, and then removes no photo, since that find's could be any (PBI-1.26)", async () => {
+    photos.files.add("p7.jpg");
+    photos.files.add("unknown.jpg");
+    db.reply("all", ALL_PHOTOS, [{ photo_file: "p7.jpg" }, { photo_file: 3 }]);
+    await expect(open()).resolves.toBeDefined();
+    expect([...photos.files].sort()).toEqual(["p7.jpg", "unknown.jpg"]);
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ photo: expect.stringMatching(/^remove/) }),
+    );
+  });
+
+  it("refuses to open when a stored row of the photo names is not an object", async () => {
+    db.reply("all", ALL_PHOTOS, ["a row"]);
     await expect(open()).rejects.toMatchObject({ code: "corrupt" });
   });
 
@@ -642,9 +659,48 @@ describe("list", () => {
   ])("marks %s as unreadable without an ID (PBI-1.16)", async (_, stored) => {
     db.reply("all", LIST, [stored, summaryRow({ id: 7 })]);
     await expect(store.list()).resolves.toEqual([
-      { readable: false, id: null },
+      { readable: false, id: null, storedId: null },
       expect.objectContaining({ readable: true, id: 7 }),
     ]);
+  });
+
+  it.each<[string, Record<string, unknown>, string]>([
+    [
+      "an ID past 2^53, which the database gives back as NULL",
+      summaryRow({ id: null, stored_id: "9007199254740993" }),
+      "9007199254740993",
+    ],
+    ["an ID of 0", summaryRow({ id: 0, stored_id: "0" }), "0"],
+    ["a negative ID", summaryRow({ id: -3, stored_id: "-3" }), "-3"],
+  ])(
+    "marks a row with %s unreadable without an ID, with the ID as SQLite writes it, so it can still be removed (PBI-1.26)",
+    async (_, stored, storedId) => {
+      db.reply("all", LIST, [stored, summaryRow({ id: 7, stored_id: "7" })]);
+      await expect(store.list()).resolves.toEqual([
+        { readable: false, id: null, storedId },
+        expect.objectContaining({ readable: true, id: 7 }),
+      ]);
+    },
+  );
+
+  it.each<[string, unknown]>([
+    ["a number", 5],
+    ["not an integer's digits", "5.5"],
+    ["a number with a leading zero", "05"],
+    ["empty", ""],
+  ])(
+    "gives no stored ID for a row without an ID whose stored ID is %s (PBI-1.26)",
+    async (_, storedId) => {
+      db.reply("all", LIST, [summaryRow({ id: null, stored_id: storedId })]);
+      await expect(store.list()).resolves.toEqual([{ readable: false, id: null, storedId: null }]);
+    },
+  );
+
+  it("lists a readable find by its ID alone, not by the ID as SQLite writes it (PBI-1.26)", async () => {
+    db.reply("all", LIST, [summaryRow({ id: 7, stored_id: "7" })]);
+    const [entry] = await store.list();
+    expect(entry).not.toHaveProperty("storedId");
+    expect(entry).toMatchObject({ readable: true, id: 7 });
   });
 
   it("passes on an error that does not come from what is stored", async () => {
@@ -945,6 +1001,56 @@ describe("delete", () => {
     db.reply("first", PHOTO_OF, { photo_file: null });
     await expect(store.delete(7)).rejects.toMatchObject({ code: "corrupt" });
     expect(events).not.toContainEqual(expect.objectContaining({ sql: DELETE }));
+  });
+});
+
+describe("deleteUnreadable (PBI-1.26)", () => {
+  it("deletes the find by its ID as SQLite writes it, then its photo", async () => {
+    db.reply("first", PHOTO_OF_STORED, { photo_file: "p7.jpg" });
+    photos.files.add("p7.jpg");
+    await expect(store.deleteUnreadable("9007199254740993")).resolves.toEqual({
+      photoRemoved: true,
+    });
+    expect(events).toEqual([
+      { method: "first", sql: PHOTO_OF_STORED, params: ["9007199254740993"] },
+      { method: "run", sql: DELETE_STORED, params: ["9007199254740993"] },
+      { photo: "remove p7.jpg" },
+    ]);
+  });
+
+  it("deletes the find even when its photo name cannot be read, which leaves its photo", async () => {
+    db.reply("first", PHOTO_OF_STORED, { photo_file: 3 });
+    await expect(store.deleteUnreadable("0")).resolves.toEqual({ photoRemoved: false });
+    expect(events).toEqual([
+      { method: "first", sql: PHOTO_OF_STORED, params: ["0"] },
+      { method: "run", sql: DELETE_STORED, params: ["0"] },
+    ]);
+  });
+
+  it("says no find has the ID, and deletes nothing", async () => {
+    await expect(store.deleteUnreadable("-3")).rejects.toMatchObject({ code: "not-found" });
+    expect(events).not.toContainEqual(expect.objectContaining({ sql: DELETE_STORED }));
+  });
+
+  it("says when the photo could not be removed", async () => {
+    db.reply("first", PHOTO_OF_STORED, { photo_file: "p7.jpg" });
+    photos.files.add("p7.jpg");
+    photos.stuck.add("p7.jpg");
+    await expect(store.deleteUnreadable("0")).resolves.toEqual({ photoRemoved: false });
+  });
+
+  it.each<[string, unknown]>([
+    ["a number", 7],
+    ["a fraction", "7.5"],
+    ["digits with a leading zero", "07"],
+    ["more digits than an SQLite integer has", "12345678901234567890"],
+    ["empty", ""],
+    ["a SQL fragment", "1 OR 1=1"],
+  ])("refuses a stored ID that is %s, sending nothing", async (_, storedId) => {
+    await expect(store.deleteUnreadable(wrong(storedId))).rejects.toMatchObject({
+      code: "invalid-input",
+    });
+    expect(events).toEqual([]);
   });
 });
 

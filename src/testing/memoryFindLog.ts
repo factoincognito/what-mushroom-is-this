@@ -19,6 +19,11 @@ export interface MemoryFindLog extends FindStore {
   readonly finds: Map<number, Find>;
   /** The IDs of the finds the store cannot read. */
   readonly unreadable: Set<number>;
+  /**
+   * The finds whose ID the store cannot read, by their ID as SQLite writes it (PBI-1.26): listed
+   * after the others, in this order, and deleted by `deleteUnreadable`.
+   */
+  readonly withoutId: string[];
 }
 
 function summaryOf(find: Find): FindSummary {
@@ -44,6 +49,7 @@ function summaryOf(find: Find): FindSummary {
 export function memoryFindLog(): MemoryFindLog {
   const finds = new Map<number, Find>();
   const unreadable = new Set<number>();
+  const withoutId: string[] = [];
 
   function listed(find: Find): ListedFind {
     return unreadable.has(find.id)
@@ -70,6 +76,7 @@ export function memoryFindLog(): MemoryFindLog {
   return {
     finds,
     unreadable,
+    withoutId,
     async add(find) {
       const id = Math.max(0, ...finds.keys()) + 1;
       finds.set(id, { id, ...find, analysis: { state: "waiting" } });
@@ -82,9 +89,13 @@ export function memoryFindLog(): MemoryFindLog {
       return finds.get(id) ?? null;
     },
     async list() {
-      return [...finds.values()]
+      const readable: ListedFind[] = [...finds.values()]
         .sort((a, b) => b.time.takenAtMs - a.time.takenAtMs || b.id - a.id)
         .map(listed);
+      return [
+        ...readable,
+        ...withoutId.map((storedId): ListedFind => ({ readable: false, id: null, storedId })),
+      ];
     },
     async oldestWaiting() {
       const waiting = [...finds.values()].filter(
@@ -115,6 +126,14 @@ export function memoryFindLog(): MemoryFindLog {
       existing(id);
       finds.delete(id);
       unreadable.delete(id);
+      return { photoRemoved: true };
+    },
+    async deleteUnreadable(storedId) {
+      const index = withoutId.indexOf(storedId);
+      if (index < 0) {
+        throw new StoreError("not-found", `no find has the ID ${storedId}`);
+      }
+      withoutId.splice(index, 1);
       return { photoRemoved: true };
     },
   };
