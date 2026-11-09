@@ -240,7 +240,9 @@ When the queue has stopped (3.3), the Log screen says why and offers
   Anthropic's side. A find can also be analysed at once from its screen.
   Nothing runs while the app is closed. A waiting find the store cannot
   read is passed over and left as it is; the Log shows it as a find that
-  could not be read, and its screen offers only Delete (**[Clead]**, #26).
+  could not be read, and its screen offers only Delete; a find whose ID
+  cannot be read has no screen, so its Log row offers Delete, which asks
+  first (**[Clead]**, #26, #33).
 - Position works without a network, from the phone's GPS. The map link of
   3.1 needs the map app's own maps.
 
@@ -344,3 +346,10 @@ this?" app.
    thinks, which on the current models it always may (PBI-1.14). If not, a
    find times out, stays waiting and is sent again at each run; the time
    limit is then the setting to change (Clead-role reviewer on #15).
+10. Whether the phone's position fixes arrive on Android while the camera
+    app is in front: `expo-location` stops its updates when the app goes
+    to the background (the Clead-role reviewer's reading of its source for
+    #16). If they do not, a camera find takes its position more often
+    from a fix the app had before the camera opened, or from the last
+    known position (3.6); a fix after the camera closes still counts
+    within the 30 seconds. Checked in Adam's test session (PBI-1.11).
