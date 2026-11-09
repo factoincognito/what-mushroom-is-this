@@ -2,11 +2,9 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { config } from "../config/config";
 import { useLanguage } from "../i18n/LanguageContext";
 import { cameraPermission, pickFromGallery, takePhoto } from "../newFind/devicePicker";
 import { INITIAL_VIEW, NewFindFlow, type NewFindView } from "../newFind/newFindFlow";
-import { deviceLocationSource, locationPermission } from "../position/deviceLocation";
 import { useFindLog } from "../store/FindLogContext";
 
 /**
@@ -25,8 +23,6 @@ export default function NewFindScreen() {
           findLog,
           camera: { permission: cameraPermission, take: takePhoto },
           gallery: { pick: pickFromGallery },
-          location: { permission: locationPermission, source: deviceLocationSource },
-          appConfig: config,
           now: () => new Date(),
         },
         setView,
@@ -38,13 +34,11 @@ export default function NewFindScreen() {
     return () => flow.close();
   }, [flow]);
 
-  const locationRefused = view.location === "denied" || view.location === "blocked";
   const canChoose = view.phase === "ready";
 
   return (
     <View style={styles.container}>
       {view.phase === "starting" && <Text style={styles.text}>{t.asking}</Text>}
-      {locationRefused && <Text style={styles.text}>{t.locationDenied}</Text>}
       {(view.phase === "saving" || view.phase === "busy" || view.phase === "starting") && (
         <ActivityIndicator testID="new-find-busy" />
       )}
@@ -92,7 +86,7 @@ export default function NewFindScreen() {
           </Pressable>
         </>
       )}
-      {(locationRefused || view.message === "cameraBlocked") && (
+      {view.message === "cameraBlocked" && (
         <Pressable accessibilityRole="button" onPress={openSettings} style={styles.button}>
           <Text style={styles.buttonText}>{t.openSettings}</Text>
         </Pressable>

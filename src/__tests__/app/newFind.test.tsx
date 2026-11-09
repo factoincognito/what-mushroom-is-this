@@ -1,18 +1,18 @@
 /**
  * Tests of the New find screen (docs/SPEC.md 3.1, 3.6), through the router, with the camera,
- * the gallery, the phone's location and the find log replaced by stand-ins.
+ * the gallery and the find log replaced by stand-ins. The phone's position is not taken here:
+ * it waits for the escalation of expo-location's Google Play services (the parked PR on
+ * feat/pbi-1.6-position).
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { getLocales } from "expo-localization";
-import * as Location from "expo-location";
-import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen } from "expo-router/testing-library";
 import { Linking } from "react-native";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { STRINGS } from "../../i18n/strings";
-import type { NewFind, Position } from "../../store/find";
+import type { NewFind } from "../../store/find";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
   require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
@@ -29,18 +29,10 @@ jest.mock("expo-image-picker", () => ({
   getCameraPermissionsAsync: jest.fn(),
   requestCameraPermissionsAsync: jest.fn(),
 }));
-jest.mock("expo-location", () => ({
-  Accuracy: { Highest: 5 },
-  watchPositionAsync: jest.fn(),
-  getLastKnownPositionAsync: jest.fn(),
-  getForegroundPermissionsAsync: jest.fn(),
-  requestForegroundPermissionsAsync: jest.fn(),
-}));
 
 /** The find log, in memory. (Named `mock…` so that the hoisted factory may use it.) */
 const mockLog = {
   added: [] as NewFind[],
-  positions: [] as [number, Position][],
   addErrors: [] as Error[],
   async add(find: NewFind): Promise<number> {
     const error = mockLog.addErrors.shift();
@@ -49,9 +41,6 @@ const mockLog = {
     }
     mockLog.added.push(find);
     return mockLog.added.length;
-  },
-  async setPosition(id: number, position: Position): Promise<void> {
-    mockLog.positions.push([id, position]);
   },
 };
 jest.mock("../../store/deviceFindStore", () => ({
@@ -82,10 +71,6 @@ const galleryPhoto = {
   },
 };
 
-/** The callback the screen gave watchPositionAsync, to send fixes through. */
-let sendFix: ((fix: unknown) => void) | null;
-let watchRemoved: number;
-
 function phoneIn(languageCode: string): void {
   jest
     .mocked(getLocales)
@@ -100,26 +85,7 @@ beforeEach(async () => {
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
   phoneIn("en");
   mockLog.added = [];
-  mockLog.positions = [];
   mockLog.addErrors = [];
-  sendFix = null;
-  watchRemoved = 0;
-  jest
-    .mocked(Location.getForegroundPermissionsAsync)
-    .mockResolvedValue(wrong(permission("granted")));
-  jest
-    .mocked(Location.requestForegroundPermissionsAsync)
-    .mockResolvedValue(wrong(permission("granted")));
-  jest.mocked(Location.watchPositionAsync).mockImplementation(async (_, callback) => {
-    sendFix = callback as (fix: unknown) => void;
-    return {
-      remove: () => {
-        watchRemoved += 1;
-        sendFix = null;
-      },
-    };
-  });
-  jest.mocked(Location.getLastKnownPositionAsync).mockResolvedValue(null);
   jest
     .mocked(ImagePicker.getCameraPermissionsAsync)
     .mockResolvedValue(wrong(permission("granted")));
@@ -154,47 +120,18 @@ async function openNewFind(): Promise<{ pathname: () => string }> {
   return { pathname: () => app.getPathname() };
 }
 
-function fix(latitude: number, longitude: number, accuracy: number) {
-  return { coords: { latitude, longitude, accuracy }, timestamp: Date.now() };
-}
-
 describe("opening New find from the Log screen", () => {
-  it("asks for the location the first time, starts asking for a position, then opens the camera", async () => {
-    jest
-      .mocked(Location.getForegroundPermissionsAsync)
-      .mockResolvedValue(wrong(permission("undetermined")));
+  it("opens the camera at once", async () => {
     const app = await openNewFind();
     expect(app.pathname()).toBe("/new-find");
-    expect(Location.requestForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
-    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1);
-    expect(ImagePicker.launchCameraAsync).toHaveBeenCalledTimes(1);
-    const order = [
-      jest.mocked(Location.watchPositionAsync).mock.invocationCallOrder[0],
-      jest.mocked(ImagePicker.launchCameraAsync).mock.invocationCallOrder[0],
-    ];
-    expect(order[0]).toBeLessThan(order[1] ?? 0);
-  });
-
-  it("does not ask for the location again once the user has said no, and says finds get no position", async () => {
-    jest
-      .mocked(Location.getForegroundPermissionsAsync)
-      .mockResolvedValue(wrong(permission("denied")));
-    await openNewFind();
-    expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
-    expect(Location.watchPositionAsync).not.toHaveBeenCalled();
-    expect(screen.getByText(STRINGS.en.newFind.locationDenied)).toBeOnTheScreen();
     expect(ImagePicker.launchCameraAsync).toHaveBeenCalledTimes(1);
   });
 
-  it("offers the phone's settings when the location is not allowed", async () => {
-    jest
-      .mocked(Location.getForegroundPermissionsAsync)
-      .mockResolvedValue(wrong(permission("denied", false)));
-    const openSettings = jest.spyOn(Linking, "openSettings").mockResolvedValue(undefined);
+  it("offers no way to the phone's settings while the camera is allowed: it asks for no location", async () => {
     await openNewFind();
-    await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.openSettings }));
-    expect(openSettings).toHaveBeenCalledTimes(1);
-    openSettings.mockRestore();
+    expect(
+      screen.queryByRole("button", { name: STRINGS.en.newFind.openSettings }),
+    ).not.toBeOnTheScreen();
   });
 
   it("shows the screen in the app's language", async () => {
@@ -210,7 +147,7 @@ describe("opening New find from the Log screen", () => {
 });
 
 describe("a photo from the camera", () => {
-  it("is saved at once with the best fix that has come, and the screen says so", async () => {
+  it("is saved at once, at the moment of saving and without a position, and the screen says so", async () => {
     let photoTaken: (value: unknown) => void = () => undefined;
     jest.mocked(ImagePicker.launchCameraAsync).mockImplementation(
       () =>
@@ -219,36 +156,16 @@ describe("a photo from the camera", () => {
         }),
     );
     await openNewFind();
-    await act(async () => {
-      sendFix?.(fix(59.64, 17.08, 25));
-      sendFix?.(fix(59.65, 17.09, 6));
-    });
     await act(async () => photoTaken({ canceled: false, assets: [cameraPhoto] }));
     await settle();
     expect(mockLog.added).toEqual([
       {
         photoUri: cameraPhoto.uri,
         time: expect.objectContaining({ source: "saved" }),
-        position: { latitude: 59.65, longitude: 17.09, accuracyM: 6, source: "fix" },
+        position: null,
       },
     ]);
     expect(screen.getByText(STRINGS.en.newFind.saved)).toBeOnTheScreen();
-    expect(watchRemoved).toBe(1);
-  });
-
-  it("is saved without a position when there is none yet, and gets the first fix that comes", async () => {
-    jest
-      .mocked(ImagePicker.launchCameraAsync)
-      .mockResolvedValue(wrong({ canceled: false, assets: [cameraPhoto] }));
-    await openNewFind();
-    expect(mockLog.added[0]?.position).toBeNull();
-    expect(Location.getLastKnownPositionAsync).toHaveBeenCalledWith({ maxAge: 120_000 });
-    await act(async () => sendFix?.(fix(59.66, 17.1, 9)));
-    await settle();
-    expect(mockLog.positions).toEqual([
-      [1, { latitude: 59.66, longitude: 17.1, accuracyM: 9, source: "fix" }],
-    ]);
-    expect(watchRemoved).toBe(1);
   });
 
   it("goes back to the Log screen from the saved message", async () => {
@@ -292,18 +209,6 @@ describe("a photo from the camera", () => {
     expect(screen.getByText(STRINGS.en.newFind.pickFailed)).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: STRINGS.en.newFind.takePhoto })).toBeOnTheScreen();
   });
-
-  it("is saved without a position, and nothing waits, without the location permission", async () => {
-    jest
-      .mocked(Location.getForegroundPermissionsAsync)
-      .mockResolvedValue(wrong(permission("denied")));
-    jest
-      .mocked(ImagePicker.launchCameraAsync)
-      .mockResolvedValue(wrong({ canceled: false, assets: [cameraPhoto] }));
-    await openNewFind();
-    expect(mockLog.added[0]?.position).toBeNull();
-    expect(Location.getLastKnownPositionAsync).not.toHaveBeenCalled();
-  });
 });
 
 describe("the camera permission", () => {
@@ -346,12 +251,11 @@ describe("the camera permission", () => {
 });
 
 describe("a photo from the gallery", () => {
-  it("is saved with the time and position of its own metadata, and the phone's position is not asked for", async () => {
+  it("is saved with the time and position of its own metadata", async () => {
     jest
       .mocked(ImagePicker.launchImageLibraryAsync)
       .mockResolvedValue(wrong({ canceled: false, assets: [galleryPhoto] }));
     await openNewFind();
-    await act(async () => sendFix?.(fix(1, 2, 3)));
     await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.pickFromGallery }));
     await settle();
     expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledWith(
@@ -368,7 +272,6 @@ describe("a photo from the gallery", () => {
         position: { latitude: 59.7, longitude: 17.2, accuracyM: null, source: "photo" },
       },
     ]);
-    expect(watchRemoved).toBe(1);
     expect(screen.getByText(STRINGS.en.newFind.saved)).toBeOnTheScreen();
   });
 
@@ -379,19 +282,6 @@ describe("a photo from the gallery", () => {
     await settle();
     expect(screen.getByText(STRINGS.en.newFind.pickFailed)).toBeOnTheScreen();
     expect(mockLog.added).toEqual([]);
-  });
-});
-
-describe("leaving the screen", () => {
-  it("stops asking for the position when no photo was saved", async () => {
-    const app = await openNewFind();
-    expect(watchRemoved).toBe(0);
-    await act(async () => {
-      router.back();
-    });
-    await settle();
-    expect(app.pathname()).toBe("/");
-    expect(watchRemoved).toBe(1);
   });
 });
 

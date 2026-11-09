@@ -4,7 +4,7 @@
  * counts as not granted, so nothing is used without a clear yes.
  */
 
-/** A library's permission functions, as `expo-image-picker` and `expo-location` give them. */
+/** A library's permission functions, as the Expo libraries (`expo-image-picker`) give them. */
 export interface PermissionAsker {
   get(): Promise<unknown>;
   request(): Promise<unknown>;

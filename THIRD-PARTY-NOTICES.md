@@ -44,10 +44,25 @@ shipped in the app (internal tooling).
 | `expo-sqlite` | 57.0.4 | MIT | depend | https://github.com/expo/expo, `packages/expo-sqlite` | the find log's database (PBI-1.5). It builds in the SQLite it ships in `vendor/sqlite3/` (3.50.3), whose authors disclaim copyright and dedicate it to the public domain; its SQLCipher build (`vendor/sqlcipher/`) is used only when `useSQLCipher` is set, which this project does not set |
 | `expo-file-system` | 57.0.7 | MIT | depend | https://github.com/expo/expo, `packages/expo-file-system` | the finds' photo files (PBI-1.5) |
 | `expo-secure-store` | 57.0.4 | MIT | depend | https://github.com/expo/expo, `packages/expo-secure-store` | the API key in the secure store (PBI-1.2) |
-| `expo-image-picker` | 57.0.21 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-picker` | the camera and the gallery of a new find (PBI-1.6). Its Android side builds in native libraries from Maven, not from npm, whose licences this entry has not checked: `androidx.activity:activity-ktx` 1.11.0, `androidx.appcompat:appcompat` 1.7.1, `androidx.core:core-ktx` 1.17.0, `androidx.exifinterface:exifinterface` 1.4.1, `com.vanniktech:android-image-cropper` 4.7.0, `org.jetbrains.kotlinx:kotlinx-coroutines-android` and `-core` 1.10.2 (its `android/build.gradle`) |
 | `expo-image-manipulator` | 57.0.22 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-manipulator` | resizing and re-encoding the photo for analysis as JPEG (PBI-1.6) |
-| `expo-location` | 57.0.23 | MIT | depend | https://github.com/expo/expo, `packages/expo-location` | the position of a new find (PBI-1.6). Its Android side builds in `com.google.android.gms:play-services-location` 21.0.1 from Maven (its `android/build.gradle`), under Google's terms, which this entry has not checked |
 | `expo-image-loader` | 57.0.1 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-loader` | a dependency of `expo-image-picker` and `expo-image-manipulator`, installed with them (PBI-1.6) |
+| `expo-image-picker` | 57.0.21 | MIT | depend | https://github.com/expo/expo, `packages/expo-image-picker` | the camera and the gallery of a new find (PBI-1.6). Its Android side builds in the native libraries below, from Maven, not npm (its `android/build.gradle`) |
+
+### The Android libraries `expo-image-picker` builds in
+
+From Maven, not npm; no Gradle cache was at hand, so each licence was read from the pages named,
+on 2026-11-09. Mode "depend" for each. All are Apache-2.0, a permissive licence (Appendix A.3),
+whose NOTICE duty is PBI-1.9's.
+
+| Library | Version | Licence | Mode | Source | Where the licence was read |
+|---|---|---|---|---|---|
+| `com.vanniktech:android-image-cropper` | 4.7.0 | Apache-2.0 ("The Apache Software License, Version 2.0") | depend | https://github.com/CanHub/Android-Image-Cropper | its 4.7.0 POM, as Maven Central shows it: https://central.sonatype.com/artifact/com.vanniktech/android-image-cropper |
+| `org.jetbrains.kotlinx:kotlinx-coroutines-core` | 1.10.2 | Apache-2.0 | depend | https://github.com/Kotlin/kotlinx.coroutines | the POM of its JVM artifact, `kotlinx-coroutines-core-jvm` 1.10.2, on Maven Central: https://central.sonatype.com/artifact/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm/1.10.2 |
+| `org.jetbrains.kotlinx:kotlinx-coroutines-android` | 1.10.2 | Apache-2.0 | depend | https://github.com/Kotlin/kotlinx.coroutines | the POM of version 1.11.0 on Maven Central, the page's current version, not 1.10.2's own: https://central.sonatype.com/artifact/org.jetbrains.kotlinx/kotlinx-coroutines-android |
+| `androidx.activity:activity-ktx` | 1.11.0 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM (on Google's Maven, not reached): the Apache-2.0 header of its source, https://android.googlesource.com/platform/frameworks/support/+/2abd2315fd690a61c868684c93018ed79ad949d1/activity/activity-ktx/build.gradle, and version 1.13.0's licence on https://badges.mvnrepository.com/artifact/androidx.activity/activity-ktx/1.13.0 |
+| `androidx.appcompat:appcompat` | 1.7.1 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
+| `androidx.core:core-ktx` | 1.17.0 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
+| `androidx.exifinterface:exifinterface` | 1.4.1 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
 
 ## Development tools
 

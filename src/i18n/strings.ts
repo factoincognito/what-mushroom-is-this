@@ -63,7 +63,7 @@ export type Strings = {
   /** The New find screen (docs/SPEC.md 3.1, 3.6). */
   readonly newFind: {
     readonly title: string;
-    /** Shown while the app asks for the camera and the location, saying what each is for. */
+    /** Shown while the app asks for the camera, saying what it is for. */
     readonly asking: string;
     readonly takePhoto: string;
     readonly pickFromGallery: string;
@@ -79,8 +79,6 @@ export type Strings = {
     readonly cameraDenied: string;
     /** The camera permission was refused and the phone lets the app ask no more. */
     readonly cameraBlocked: string;
-    /** The location permission is not given: photos from the camera get no position. */
-    readonly locationDenied: string;
     readonly openSettings: string;
   };
 };
@@ -175,8 +173,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     },
     newFind: {
       title: "Nytt fynd",
-      asking:
-        "Appen ber om att få använda kameran, för att ta fotot, och telefonens plats, för att notera var fyndet gjordes.",
+      asking: "Appen ber om att få använda kameran, för att ta fotot.",
       takePhoto: "Ta ett foto",
       pickFromGallery: "Välj ett foto i galleriet",
       saving: "Sparar fyndet …",
@@ -189,8 +186,6 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "Appen får inte använda kameran, så den kan inte ta något foto. Du kan välja ett foto i galleriet i stället.",
       cameraBlocked:
         "Appen får inte använda kameran. Du kan tillåta det i telefonens inställningar eller välja ett foto i galleriet.",
-      locationDenied:
-        "Appen får inte använda telefonens plats, så ett foto från kameran sparas utan position. Du kan tillåta det i telefonens inställningar.",
       openSettings: "Öppna telefonens inställningar",
     },
   },
@@ -246,8 +241,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     },
     newFind: {
       title: "New find",
-      asking:
-        "The app asks to use the camera, to take the photo, and the phone's location, to note where the find was made.",
+      asking: "The app asks to use the camera, to take the photo.",
       takePhoto: "Take a photo",
       pickFromGallery: "Pick a photo from the gallery",
       saving: "Saving the find…",
@@ -260,8 +254,6 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "The app may not use the camera, so it cannot take a photo. You can pick a photo from the gallery instead.",
       cameraBlocked:
         "The app may not use the camera. You can allow it in the phone's settings, or pick a photo from the gallery.",
-      locationDenied:
-        "The app may not use the phone's location, so a photo from the camera is saved without a position. You can allow it in the phone's settings.",
       openSettings: "Open the phone's settings",
     },
   },
@@ -319,8 +311,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     },
     newFind: {
       title: "Nuovo ritrovamento",
-      asking:
-        "L'app chiede di usare la fotocamera, per scattare la foto, e la posizione del telefono, per annotare dove è stato fatto il ritrovamento.",
+      asking: "L'app chiede di usare la fotocamera, per scattare la foto.",
       takePhoto: "Scatta una foto",
       pickFromGallery: "Scegli una foto dalla galleria",
       saving: "Salvataggio del ritrovamento…",
@@ -333,8 +324,6 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "L'app non può usare la fotocamera, quindi non può scattare foto. Puoi invece scegliere una foto dalla galleria.",
       cameraBlocked:
         "L'app non può usare la fotocamera. Puoi consentirlo nelle impostazioni del telefono, oppure scegliere una foto dalla galleria.",
-      locationDenied:
-        "L'app non può usare la posizione del telefono, quindi una foto dalla fotocamera viene salvata senza posizione. Puoi consentirlo nelle impostazioni del telefono.",
       openSettings: "Apri le impostazioni del telefono",
     },
   },

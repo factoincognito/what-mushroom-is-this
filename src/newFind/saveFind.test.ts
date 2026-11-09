@@ -1,16 +1,12 @@
-import type { PositionTracker } from "../position/positionTracker";
-import { type NewFind, type Position, StoreError } from "../store/find";
+import { type NewFind, StoreError } from "../store/find";
 import { phoneTimeNow, type SaveDeps, saveCameraFind, saveGalleryFind } from "./saveFind";
 
 const NOW = new Date(Date.UTC(2026, 10, 9, 10, 15, 0));
-const FIX: Position = { latitude: 59.64, longitude: 17.08, accuracyM: 6, source: "fix" };
 
-/** Stands in for the store: the finds added and the positions set later. */
+/** Stands in for the store: the finds added. */
 class FakeStore {
   added: NewFind[] = [];
-  positions: [number, Position][] = [];
   addError: Error | null = null;
-  setPositionError: Error | null = null;
 
   async add(find: NewFind): Promise<number> {
     if (this.addError !== null) {
@@ -19,43 +15,13 @@ class FakeStore {
     this.added.push(find);
     return 41 + this.added.length;
   }
-
-  async setPosition(id: number, position: Position): Promise<void> {
-    if (this.setPositionError !== null) {
-      throw this.setPositionError;
-    }
-    this.positions.push([id, position]);
-  }
-}
-
-/** Stands in for the position tracker: what it has now, and the first fix it will give. */
-class FakeTracker implements PositionTracker {
-  now: Position | null = null;
-  first: Promise<Position | null> = Promise.resolve(null);
-  stops = 0;
-  firstFixAsked = 0;
-
-  async positionNow(): Promise<Position | null> {
-    return this.now;
-  }
-
-  firstFix(): Promise<Position | null> {
-    this.firstFixAsked += 1;
-    return this.first;
-  }
-
-  stop(): void {
-    this.stops += 1;
-  }
 }
 
 let store: FakeStore;
-let tracker: FakeTracker;
 let deps: SaveDeps;
 
 beforeEach(() => {
   store = new FakeStore();
-  tracker = new FakeTracker();
   deps = { store, now: () => NOW };
 });
 
@@ -70,84 +36,20 @@ describe("phoneTimeNow", () => {
 });
 
 describe("saveCameraFind", () => {
-  it("saves the photo at once, at the moment of saving, with the best fix the tracker has", async () => {
-    tracker.now = FIX;
-    const saved = await saveCameraFind("file:///cache/IMG_1.jpg", tracker, deps);
-    expect(saved).toEqual({ id: 42, positionLater: null });
+  it("saves the photo at once, at the moment of saving, without a position from the phone", async () => {
+    // The phone's position waits for the escalation of expo-location's Google Play services
+    // (the parked PR on feat/pbi-1.6-position).
+    await expect(saveCameraFind("file:///cache/IMG_1.jpg", deps)).resolves.toBe(42);
     expect(store.added).toEqual([
-      { photoUri: "file:///cache/IMG_1.jpg", time: phoneTimeNow(NOW), position: FIX },
+      { photoUri: "file:///cache/IMG_1.jpg", time: phoneTimeNow(NOW), position: null },
     ]);
-    expect(tracker.firstFixAsked).toBe(0);
-    expect(tracker.stops).toBe(1);
   });
 
-  it("saves the last known position the tracker gives, marked as such", async () => {
-    tracker.now = { ...FIX, source: "last-known" };
-    await saveCameraFind("file:///cache/IMG_1.jpg", tracker, deps);
-    expect(store.added[0]?.position).toEqual({ ...FIX, source: "last-known" });
-  });
-
-  it("saves without a position when it has none, then adds the first fix that comes", async () => {
-    let comes: (position: Position | null) => void = () => undefined;
-    tracker.first = new Promise((resolve) => {
-      comes = resolve;
-    });
-    const saved = await saveCameraFind("file:///cache/IMG_1.jpg", tracker, deps);
-    expect(store.added[0]?.position).toBeNull();
-    expect(store.positions).toEqual([]);
-    expect(tracker.stops).toBe(0);
-
-    comes(FIX);
-    await expect(saved.positionLater).resolves.toEqual(FIX);
-    expect(store.positions).toEqual([[42, FIX]]);
-    expect(tracker.stops).toBe(1);
-  });
-
-  it("leaves the find without a position when no fix comes in time", async () => {
-    tracker.first = Promise.resolve(null);
-    const saved = await saveCameraFind("file:///cache/IMG_1.jpg", tracker, deps);
-    await expect(saved.positionLater).resolves.toBeNull();
-    expect(store.positions).toEqual([]);
-    expect(tracker.stops).toBe(1);
-  });
-
-  it("gives up the later fix quietly when the store refuses it, for example after a delete", async () => {
-    tracker.first = Promise.resolve(FIX);
-    store.setPositionError = new StoreError("not-found", "no find has the ID 42");
-    const saved = await saveCameraFind("file:///cache/IMG_1.jpg", tracker, deps);
-    await expect(saved.positionLater).resolves.toBeNull();
-    expect(tracker.stops).toBe(1);
-  });
-
-  it("gives up the later fix quietly when waiting for it fails", async () => {
-    tracker.firstFix = () => Promise.reject(new Error("location service died"));
-    const saved = await saveCameraFind("file:///cache/IMG_1.jpg", tracker, deps);
-    await expect(saved.positionLater).resolves.toBeNull();
-    expect(tracker.stops).toBe(1);
-  });
-
-  it("saves without a position, and waits for none, without the location permission", async () => {
-    const saved = await saveCameraFind("file:///cache/IMG_1.jpg", null, deps);
-    expect(saved).toEqual({ id: 42, positionLater: null });
-    expect(store.added[0]?.position).toBeNull();
-  });
-
-  it("saves without a position when the tracker cannot give one", async () => {
-    tracker.positionNow = async () => {
-      throw new Error("location service died");
-    };
-    tracker.first = Promise.resolve(null);
-    await saveCameraFind("file:///cache/IMG_1.jpg", tracker, deps);
-    expect(store.added[0]?.position).toBeNull();
-  });
-
-  it("passes the store's error on and keeps the tracker running, so the save can be tried again", async () => {
-    tracker.now = FIX;
+  it("passes the store's error on, so the save can be tried again", async () => {
     store.addError = new StoreError("invalid-input", "the photo's file does not exist");
-    await expect(saveCameraFind("file:///cache/IMG_1.jpg", tracker, deps)).rejects.toMatchObject({
+    await expect(saveCameraFind("file:///cache/IMG_1.jpg", deps)).rejects.toMatchObject({
       code: "invalid-input",
     });
-    expect(tracker.stops).toBe(0);
   });
 });
 
