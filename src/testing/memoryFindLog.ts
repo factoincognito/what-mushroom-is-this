@@ -1,14 +1,24 @@
 /**
  * A find log in memory, for the screen tests: the store's interface and its state changes
  * (`src/store/findStore.ts`), without SQLite or photo files. The finds are kept as the store
- * would give them back; the tests set them directly in `finds`.
+ * would give them back; the tests set them directly in `finds`. A find whose ID is in
+ * `unreadable` stands for a row the store cannot read (PBI-1.16): the list marks it in its place,
+ * `get` refuses it as corrupt, the queue's pick passes over it, and `delete` still removes it.
  */
 
-import { type Find, type FindSummary, StoreError, type SummaryAnalysis } from "../store/find";
+import {
+  type Find,
+  type FindSummary,
+  type ListedFind,
+  StoreError,
+  type SummaryAnalysis,
+} from "../store/find";
 import type { FindStore } from "../store/findStore";
 
 export interface MemoryFindLog extends FindStore {
   readonly finds: Map<number, Find>;
+  /** The IDs of the finds the store cannot read. */
+  readonly unreadable: Set<number>;
 }
 
 function summaryOf(find: Find): FindSummary {
@@ -33,6 +43,13 @@ function summaryOf(find: Find): FindSummary {
 
 export function memoryFindLog(): MemoryFindLog {
   const finds = new Map<number, Find>();
+  const unreadable = new Set<number>();
+
+  function listed(find: Find): ListedFind {
+    return unreadable.has(find.id)
+      ? { readable: false, id: find.id }
+      : { readable: true, ...summaryOf(find) };
+  }
 
   function existing(id: number): Find {
     const find = finds.get(id);
@@ -52,21 +69,27 @@ export function memoryFindLog(): MemoryFindLog {
 
   return {
     finds,
+    unreadable,
     async add(find) {
       const id = Math.max(0, ...finds.keys()) + 1;
       finds.set(id, { id, ...find, analysis: { state: "waiting" } });
       return id;
     },
     async get(id) {
+      if (unreadable.has(id) && finds.has(id)) {
+        throw new StoreError("corrupt", `find ${id} cannot be read`);
+      }
       return finds.get(id) ?? null;
     },
     async list() {
       return [...finds.values()]
         .sort((a, b) => b.time.takenAtMs - a.time.takenAtMs || b.id - a.id)
-        .map(summaryOf);
+        .map(listed);
     },
     async oldestWaiting() {
-      const waiting = [...finds.values()].filter((find) => find.analysis.state === "waiting");
+      const waiting = [...finds.values()].filter(
+        (find) => find.analysis.state === "waiting" && !unreadable.has(find.id),
+      );
       return waiting.length === 0 ? null : Math.min(...waiting.map((find) => find.id));
     },
     async setAnswer(id, analysed) {
@@ -91,6 +114,7 @@ export function memoryFindLog(): MemoryFindLog {
     async delete(id) {
       existing(id);
       finds.delete(id);
+      unreadable.delete(id);
       return { photoRemoved: true };
     },
   };

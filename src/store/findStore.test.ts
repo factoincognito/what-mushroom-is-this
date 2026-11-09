@@ -143,7 +143,10 @@ const INSERT =
 /** A time column, given back only within JavaScript's safe-integer range, else as NULL. */
 const safeTime = (column: string) =>
   `CASE WHEN ${column} BETWEEN -9007199254740991 AND 9007199254740991 THEN ${column} END AS ${column}`;
-const FIND_COLUMNS = `id, ${safeTime("taken_at_ms")}, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}`;
+/** The UTC offset, given back only within the schema's 18 hours, else as NULL. */
+const SAFE_OFFSET =
+  "CASE WHEN utc_offset_min BETWEEN -1080 AND 1080 THEN utc_offset_min END AS utc_offset_min";
+const FIND_COLUMNS = `id, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE id = ?`;
 const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND id > ? ORDER BY id ASC LIMIT 1`;
 const LIST = `SELECT ${FIND_COLUMNS}, result, name_sv, name_en, name_it, edibility, confidence FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
@@ -598,6 +601,10 @@ describe("list", () => {
     ],
     ["an unknown state", summaryRow({ state: "lost" })],
     ["a time stored as text", summaryRow({ taken_at_ms: "1762590000000" })],
+    [
+      "a UTC offset the database gave back as NULL, past 18 hours (round 2, item 2)",
+      summaryRow({ utc_offset_min: null }),
+    ],
     [
       "a time the database gave back as NULL, past the safe range (decision 3)",
       summaryRow({ taken_at_ms: null }),

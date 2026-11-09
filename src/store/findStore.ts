@@ -102,8 +102,14 @@ const INSERT = `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, lat
 const safeTime = (column: string) =>
   `CASE WHEN ${column} BETWEEN ${-Number.MAX_SAFE_INTEGER} AND ${Number.MAX_SAFE_INTEGER}
   THEN ${column} END AS ${column}`;
+/**
+ * The UTC offset, given back only within the schema's 18 hours and otherwise as NULL, which the
+ * store reads as a row it cannot read; for a value that passed the CHECK by, as `safeTime` does.
+ */
+const SAFE_OFFSET = `CASE WHEN utc_offset_min BETWEEN -1080 AND 1080 THEN utc_offset_min END
+  AS utc_offset_min`;
 /** Every column of a find, as `get`, the queue's pick and the list all read it. */
-const FIND_COLUMNS = `id, ${safeTime("taken_at_ms")}, utc_offset_min, time_source, latitude,
+const FIND_COLUMNS = `id, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude,
   longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail,
   answer_json, model, ${safeTime("analysed_at_ms")}`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE id = ?`;

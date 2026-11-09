@@ -15,7 +15,7 @@ import { formatFindTime } from "../../find/display";
 import { STRINGS } from "../../i18n/strings";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { answerToJson } from "../../store/answerJson";
-import { type Find, StoreError } from "../../store/find";
+import { type Find, type ListedFind, StoreError } from "../../store/find";
 import { memoryFindLog } from "../../testing/memoryFindLog";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
@@ -117,6 +117,7 @@ beforeEach(async () => {
   mockSecrets.clear();
   mockSecrets.set(API_KEY_STORE_KEY, "sk-ant-api03-abcDEF_123");
   mockLog.finds.clear();
+  mockLog.unreadable.clear();
   phoneIn("en");
   fetchMock.mockReset();
   globalThis.fetch = fetchMock;
@@ -252,6 +253,81 @@ describe("a log the store cannot read (reviewer's note 5 on #11)", () => {
     await startApp();
     expect(await screen.findByText(STRINGS[lang].log.unreadable)).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: STRINGS[lang].log.retry })).toBeOnTheScreen();
+  });
+});
+
+describe("a find the store cannot read, in the list (PBI-1.16)", () => {
+  it("is a row in its place saying the find could not be read, beside the finds it can read", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, { state: "waiting" }));
+    mockLog.finds.set(3, find(3, 2, { state: "waiting" }));
+    mockLog.unreadable.add(2);
+    await startApp();
+    const rows = await screen.findAllByTestId(/^find-row-/);
+    expect(rows.map((row) => row.props.testID)).toEqual(["find-row-3", "find-row-2", "find-row-1"]);
+    const row = within(screen.getByTestId("find-row-2"));
+    expect(row.getByText(en.find.unreadable)).toBeOnTheScreen();
+    expect(row.queryByText(en.log.waiting)).toBeNull();
+    expect(within(screen.getByTestId("find-row-1")).getByText("Chanterelle")).toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)("says so in %s", async (lang) => {
+    phoneIn(lang);
+    mockLog.finds.set(4, find(4, 0, { state: "waiting" }));
+    mockLog.unreadable.add(4);
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-4"));
+    expect(row.getByText(STRINGS[lang].find.unreadable)).toBeOnTheScreen();
+  });
+
+  it("opens the find's own screen, which says it cannot be read and deletes it", async () => {
+    mockLog.finds.set(5, find(5, 0, { state: "waiting" }));
+    mockLog.finds.set(6, find(6, 1, done(CHANTERELLE)));
+    mockLog.unreadable.add(5);
+    const app = await startApp();
+    await fireEvent.press(await screen.findByTestId("find-row-5"));
+    expect(app.pathname()).toBe("/find/5");
+    expect(await screen.findByText(en.find.unreadable)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(screen.getByRole("button", { name: en.find.deleteYes }));
+    expect(app.pathname()).toBe("/");
+    expect(await screen.findByTestId("find-row-6")).toBeOnTheScreen();
+    expect(screen.queryByTestId("find-row-5")).not.toBeOnTheScreen();
+    expect(mockLog.finds.has(5)).toBe(false);
+  });
+
+  it("without an ID: a row saying so, with no link, under a key of its own", async () => {
+    const errors = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const { photoUri, time } = find(1, 0, { state: "waiting" });
+    const entries: ListedFind[] = [
+      { readable: false, id: null },
+      { readable: false, id: null },
+      {
+        readable: true,
+        id: 1,
+        photoUri,
+        time,
+        analysis: { state: "waiting" },
+      },
+    ];
+    jest.spyOn(mockLog, "list").mockResolvedValue(entries);
+    const app = await startApp();
+    const rows = await screen.findAllByTestId("unreadable-row");
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(within(row).getByText(en.find.unreadable)).toBeOnTheScreen();
+      expect(row.props.accessibilityRole).not.toBe("link");
+    }
+    const [first] = rows;
+    if (first === undefined) {
+      throw new Error("no row without an ID");
+    }
+    await fireEvent.press(first);
+    expect(app.pathname()).toBe("/");
+    expect(within(screen.getByTestId("find-row-1")).getByText(en.log.waiting)).toBeOnTheScreen();
+    expect(errors.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+    errors.mockRestore();
+    jest.mocked(mockLog.list).mockRestore();
   });
 });
 

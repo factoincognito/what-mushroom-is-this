@@ -133,6 +133,16 @@ function insertWaitingPastSafeTime(photo: string): number {
   );
 }
 
+/** Inserts a waiting find, taken latest, with the UTC offset given, past the CHECKs. */
+function insertWaitingWithOffset(offset: bigint | number, photo: string): number {
+  return insertPastChecks(
+    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, photo_file, state)
+      VALUES (9000000, ?, 'saved', ?, 'waiting')`,
+    offset,
+    photo,
+  );
+}
+
 /** Inserts a find with the times given, without passing the CHECKs by. */
 function insertTimes(takenAtMs: bigint | number, analysedAtMs: bigint | number | null): void {
   sqlite
@@ -449,6 +459,14 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
       insertWaitingWithUnreadablePosition,
     ],
     ["a time taken past 2^53 (Clead's review of #26, decision 3)", insertWaitingPastSafeTime],
+    [
+      "a UTC offset past 2^53 (Clead's round 2 of #26, item 2)",
+      (photo) => insertWaitingWithOffset(PAST_SAFE, photo),
+    ],
+    [
+      "a UTC offset past 18 hours (round 2, item 2)",
+      (photo) => insertWaitingWithOffset(1081, photo),
+    ],
   ];
 
   it.each(unreadableWaiting)(
