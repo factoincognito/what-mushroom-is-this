@@ -10,10 +10,10 @@ Last update: 2026-11-09
 Build: Phase 2, whose spec ([`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/SPEC.md) 3.9) Adam approved on 2026-11-09 20:49 ([#47](https://github.com/factoincognito/what-mushroom-is-this/pull/47)); the items are in [`docs/BACKLOG.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/BACKLOG.md). Phase 1 passed Adam's test session on 2026-11-09.
 
 ## Current focus
-Nothing in progress. [PBI-2.3](https://github.com/factoincognito/what-mushroom-is-this/blob/bc735f9b64ee1a15ee0949fce32725c8578ba540/docs/BACKLOG.md?plain=1#L106) is next, in a fresh session (Adam, 2026-11-09 22:05).
+[PBI-2.4](https://github.com/factoincognito/what-mushroom-is-this/blob/d58afa1438a5b11ebb59df81dbce97214873141a/docs/BACKLOG.md?plain=1#L107), text lookups, in the night shift Adam started on 2026-11-09 at 22:54 (session https://claude.ai/code/session_01RZ8pEJjkkFM9VDxAs7KA6f). [PBI-2.3](https://github.com/factoincognito/what-mushroom-is-this/blob/d58afa1438a5b11ebb59df81dbce97214873141a/docs/BACKLOG.md?plain=1#L106) is done in [#52](https://github.com/factoincognito/what-mushroom-is-this/pull/52).
 
 ## Next step
-- Clead, in that fresh session: the Phase 2 items in order, from [PBI-2.3](https://github.com/factoincognito/what-mushroom-is-this/blob/bc735f9b64ee1a15ee0949fce32725c8578ba540/docs/BACKLOG.md?plain=1#L106). The next spec PR marks [Known unknowns](https://github.com/factoincognito/what-mushroom-is-this/blob/a90c5f94d6d9439bd76e5f12383666c02f811d52/docs/SPEC.md?plain=1#L622) 2 and 9 settled, from the Phase 1 test session.
+- Clead, in the night shift: the Phase 2 items in order, until all are done or one blocks (Adam, 2026-11-09 22:54); no EAS builds. The next spec PR marks [Known unknowns](https://github.com/factoincognito/what-mushroom-is-this/blob/a90c5f94d6d9439bd76e5f12383666c02f811d52/docs/SPEC.md?plain=1#L622) 2 and 9 settled, from the Phase 1 test session.
 - Adam: a Phase 2 build only when he means to move to it. The database migration is one-way: a Phase 1 build cannot read a version 2 database.
 
 ## Blockers

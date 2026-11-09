@@ -103,8 +103,8 @@ the role that did not write it.
 
 - **[DONE] PBI-2.1** (done 2026-11-09: findings in the product office, `library/designs/what-mushroom-is-this/phase-2-checks.md`; the map and Wikimedia escalations decided by Adam at 21:27; Known unknowns 11 to 13 and 15 updated in #50; what is left of them is checked at the build of PBI-2.6, PBI-2.8 and PBI-2.9) (the checks Known unknowns 11, 12, 13 and 15 name before the build; the uses go to the product office as escalations under the third-party code and IP policy) — The map provider and library, the Claude API's image limits, the file picker, and Wikidata and Commons: their terms, licences, fees, keys, attribution and caching, checked and written up, with a recommendation for the map provider. Spec 3.9, Known unknowns 11, 12, 13, 15.
 - **[DONE] PBI-2.2** (done 2026-11-09 in #49, `bc735f9`, Clead-role review approved round 2; the photos are a JSON array in the find's row, so each write is one statement; answers are stored against the photos their analysis sent; the migration was also run on expo's vendored SQLite 3.50.3 by the reviewer; the Phase 2 methods are in `LookupStore`, beside the unchanged `FindStore`) — The store, schema version 2. The fields of 3.9's "The store", and a migration from version 1 that keeps every Phase 1 find, its photo as its first photo and its answer as it was. Spec 3.9.
-- **[NEXT] PBI-2.3** — The answer's confidence from 1 to 100, a whole number, shown with 3.1's note. The edibility is "unknown" below 70, as configuration. Phase 1 finds keep their level and 3.3's rule. Spec 3.9.
-- **[NEXT] PBI-2.4** (it moves the queue's pick and the Log list to the store's `getStored`, so that a text find is not shown as "could not be read" and is analysed; or it ships with PBI-2.7: the Clead-role review of #49, note 3) — Text lookups and the save setting:
+- **[DONE] PBI-2.3** (done 2026-11-09 in #52, `d58afa1`, Clead-role review approved round 1; a new answer with a Phase 1 level fails the shape check, stored Phase 1 answers keep their level; the number shown as "90 of 100"; the Italian "su 100" awaits Jakob's check; the reviewer's notes are PBI-2.12) — The answer's confidence from 1 to 100, a whole number, shown with 3.1's note. The edibility is "unknown" below 70, as configuration. Phase 1 finds keep their level and 3.3's rule. Spec 3.9.
+- **[NOW] PBI-2.4** (in the night shift of 2026-11-09, Clead's decision: it moves the queue's pick and the Log list itself, without waiting for PBI-2.7) (it moves the queue's pick and the Log list to the store's `getStored`, so that a text find is not shown as "could not be read" and is analysed; or it ships with PBI-2.7: the Clead-role review of #49, note 3) — Text lookups and the save setting:
   - the text screen, up to 2,000 characters;
   - the "Save" switch with its starting values in Settings;
   - when a text find is saved, and its position;
@@ -149,7 +149,13 @@ the role that did not write it.
   - its place in the queue run;
   - its error groups.
   Also, from the Crog-role review of #47, round 6: a 429 from Wikimedia ends the run, as 3.3 does for one from Anthropic; and a check still waiting when a batch completes on its find is skipped. Spec 3.9.
-- **[LATER] PBI-2.11** — Adam's Phase 2 test session on his phone, including Known unknown 14 (memory with five photos), and Known unknowns 7 (a gallery photo's position) and 10 (a position fix while the camera is open), not tested in Phase 1 (PBI-1.11). Spec 3.9.
+- **[LATER] PBI-2.11** — Adam's Phase 2 test session on his phone, including Known unknown 14 (memory with five photos), and Known unknowns 7 (a gallery photo's position) and 10 (a position fix while the camera is open), not tested in Phase 1 (PBI-1.11). Also to watch for: whether the model answers with a whole number for the confidence, as 3.9's prompt asks; an answer with a level fails the shape check, so every analysis would fail (Crog's note on #52; the prompt was not tried against a real model). Spec 3.9.
+- **[LATER] PBI-2.12** (the Clead-role reviewer's non-blocking notes 1 to 3 on #52, Crog's note on #52) — Follow-ups that need no phone:
+  - a narrower type for an answer from the API, so that "a level is never written" is checked by the compiler; the level branch in `answerColumns` cannot run today (note 1);
+  - `isConfidenceLevel` is exported but used only in `answer.ts` (note 2);
+  - the Log reads the confidence from the row's columns, the Find screen from the answer's JSON; nothing finds a damaged file where the two differ, as before #52 for the level (note 3);
+  - SPEC 3.3's list still says "a confidence: low, medium or high"; 3.9 holds for Phase 2, but 3.3 read alone misleads.
+  Spec 3.3, 3.9.
 
 ---
 
