@@ -7,7 +7,11 @@
 Intent approved: Adam, 2026-11-08 17:48, in chat ("Apyr mushroom spec"),
 with Clead's recommendations; the licence and the Italian disclaimer
 18:12; the Italian disclaimer checked by an Italian speaker Adam named,
-19:28. The approved text and its decisions are recorded in the product
+19:28. Phase 2 (3.9): intent approved by Adam, 2026-11-09 20:49, in
+chat ("apyr"), with Clead's two proposals (the disclaimer for a lookup
+without photos, and the edibility until the self-check agrees) and the
+choices marked **[Clead]**. The approved text and its decisions are
+recorded in the product
 office (`library/designs/what-mushroom-is-this/design.md` and
 `DECISIONS.md` in `factoincognito/product-office`, private). This file
 carries that specification for the build, with its private parts left
@@ -70,7 +74,11 @@ its own tests; the screens only wire them together. The modules:
 | position | taking the position for a new find |
 
 Nothing leaves the phone except the photo sent for analysis (section 3.3).
-There is no server.
+There is no server. Phase 2 adds the text and the several photos of a
+lookup, sent for analysis, the area the map shows, sent to the map
+provider for its tiles, the Latin name of a text lookup's species, sent
+to Wikimedia for its picture, and that picture, sent to Anthropic for the
+self-check (3.9, Adam's decisions, 2026-11-09).
 
 ## 3. Component specs
 
@@ -303,7 +311,7 @@ When the queue has stopped (3.3), the Log screen says why and offers
 Sharing finds, importing them, maps inside the app, accounts, a server of
 any kind, backup, export or sync, species data or pictures from outside
 sources, push notifications, a web version, and the general "What is
-this?" app.
+this?" app. Phase 2 (3.9) adds maps inside the app; the rest stays out.
 
 ### 3.8 Distribution and done
 
@@ -311,6 +319,273 @@ this?" app.
 - The first version is called done only after a test session on Adam's
   Android phone: what CI cannot check (camera, location, layout, the real
   API call) is tried there.
+
+### 3.9 Phase 2
+
+Adam's additions of 2026-11-09 (18:48), with his answers to Clead's
+questions the same evening: the map shows online tiles from a map
+provider; the Library replaces the Log; below a confidence of 70 the
+edibility shown is "unknown"; Phase 2 is built now, alongside Phase 1's
+test session. Where this section and 3.1 to 3.7 differ, this section
+holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
+
+**Lookups.**
+
+- A lookup is by photo or by text (Adam). A photo lookup takes one or
+  more photos, each from the camera, the gallery or the phone's files
+  (Adam). A text lookup takes a description the user writes (Adam), up to
+  2,000 characters (**[Clead]**: the limit, configuration). The text is
+  shown on the find's screen and cannot be edited (**[Clead]**).
+- Whether a lookup is saved is a setting of the lookup (Adam): on for a
+  photo lookup and off for a text lookup unless the user changes it
+  (Adam). It is a "Save" switch on the lookup screen, and Settings holds
+  the two starting values (**[Clead]**).
+- A saved lookup is a find, saved before any analysis as in 3.1, and goes
+  through the queue (3.4) once its batch is complete (below). A text find
+  has the time of saving and the position taken as for a camera find
+  (3.6); it has no photo. A photo find has the time and position of the
+  first photo of its first batch, by the rules of 3.1 and 3.6 for that
+  photo's source (**[Clead]**).
+- An unsaved lookup is held on the screen only and is analysed when the
+  user taps "Analyse" (**[Clead]**). Nothing of it is stored; the app's
+  copies of its photos are removed when the screen is left. Its answer
+  is shown on the screen as a find's would be. Each error class of 3.3
+  has the outcome it has for a find analysed from its screen, with the
+  screen in place of the find (**[Clead]**):
+  - those that leave a find waiting (no network, time limit, 500, 504,
+    529) keep the lookup on the screen with "Analyse" and an offer to
+    turn "Save" on, so it waits in the queue;
+  - those that mark a find failed show the failure, and "Analyse" can be
+    tapped again;
+  - those that stop the queue (429, the spend limits, 401, 403, 402, 404,
+    the shape and cut-off answers, any other status) stop it as for a
+    find, and the screen shows the same message;
+  - without a key, the screen says a key is needed, links to Settings and
+    offers to turn "Save" on.
+  "Analyse" sends the lookup even while the queue is stopped, as "analyse
+  again" does for a find (**[Clead]**).
+- A saved text lookup becomes a find when the user taps "Analyse" or
+  leaves the screen with text entered; its position is asked for when the
+  screen opens, as the camera's is (3.6), whether or not "Save" is on
+  (**[Clead]**). The location permission is asked for the first time a
+  lookup screen opens, saved or not (**[Clead]**). Leaving the
+  screen with an unsaved lookup asks first, on the screen, as 3.1 does
+  for a photo (**[Clead]**).
+- The position is asked for when the camera opens whether or not "Save"
+  is on. A lookup saved after its first photo was taken keeps that
+  photo's time and position by the rules of 3.1 and 3.6 (**[Clead]**).
+- Photos from the phone's files are images only; a file the app cannot
+  load as an image is refused with a message (**[Clead]**). A photo from
+  the files has no position or time of its own, as a gallery photo
+  without metadata (3.1).
+- Removing a photo, or a find, removes only the app's own copies, never
+  the original in the gallery or the files (**[Clead]**).
+
+**Batches.**
+
+- A batch is the photos added in one go: on a new photo lookup, or from a
+  find's screen. A find holds up to 5 photos in all (**[Clead]**: the
+  limit, configuration). A text find can also get photos this way
+  (**[Clead]**).
+- On a saved lookup each photo is saved to the find as it is taken or
+  picked, so it is never lost, but the queue does not take the find while
+  its batch is open (**[Clead]**). The batch is complete when the user
+  taps "Analyse" or leaves the screen; a batch still open when the app
+  starts is complete then (**[Clead]**). Completing a batch is a queue
+  trigger, in addition to those of 3.4. Saving a photo is not, and the
+  saving of a photo find with its first photo is not the trigger of 3.4
+  "a new find is saved" (**[Clead]**).
+- Each completed batch brings a new analysis (Adam). On a find that has
+  no answer, the find waits as in 3.4. On a find that has an answer, the
+  find keeps its answer, which is shown and used by the filters, and its
+  new photos wait for analysis in the queue (**[Clead]**). When that
+  analysis meets an error class of 3.3 that leaves a find waiting, the
+  photos stay waiting and the queue takes the find again at its next run.
+  Any other class marks them as not yet analysed, and they are analysed
+  only when the user asks. Either way the find keeps its answer, as 3.3
+  says (**[Clead]**).
+- An analysis sends all of the find's photos, in the order added, each
+  labelled "Image 1:", "Image 2:" and so on, each resized and checked as
+  in 3.3, in one request, and the find's text when it has one
+  (**[Clead]**). The photos are resized one at a time (**[Clead]**). The
+  new answer replaces the earlier one, as in 3.6.
+- If any photo of the find fails the metadata check, or cannot be loaded,
+  decoded or sized, nothing is sent and the find's analysis fails, with a
+  message naming the photo; the user can remove that photo and analyse
+  again (**[Clead]**). For the count of 3.3 (PBI-1.25), a find counts as
+  one whose photos cannot be loaded when any of its photos cannot; a find
+  whose photos all load, or a text find without photos, ends the count
+  (**[Clead]**).
+- A photo can be removed from a find, but not the last photo of a find
+  without text (**[Clead]**). The find is then analysed again only when
+  the user asks. It keeps its time and position, also when its first
+  photo is removed (**[Clead]**). If photos added since its answer are
+  waiting for the queue, the analysis still runs, with the photos left
+  (**[Clead]**).
+
+**Answers.**
+
+- The answer gives a confidence from 1 to 100, low to high (Adam), a whole
+  number; anything else fails the shape check (**[Clead]**). It is shown
+  as a number with the note of 3.1, that it is Claude's own statement,
+  not a measured probability.
+- Below 70 the edibility shown is "unknown", whatever the answer said
+  (Adam: the line; configuration). It replaces the rule for "low" in 3.3.
+- A find analysed in Phase 1 keeps its low, medium or high, and the rule
+  of 3.3 applies to it, until it is analysed again (**[Clead]**).
+- For a text lookup, "no mushroom" means the description is not of a
+  mushroom, and "cannot tell" that it does not say enough (**[Clead]**).
+- The disclaimer of 3.5 speaks of "the mushroom in your photo". A lookup
+  without photos, saved or not, shows instead: "There is no guarantee
+  that the mushroom you described is that species", with its Swedish and
+  Italian counterparts; the Italian is checked as before (Adam, 20:49,
+  approving Clead's proposal).
+
+**A representative picture for text lookups** (Adam, 19:01; the source,
+Wikimedia Commons, is his answer to Clead's question, by 19:03).
+
+- When the answer to a text lookup names a species, the app shows a
+  representative picture of that species from Wikimedia Commons (Adam).
+  It is the picture that Wikidata gives as the image of the species'
+  item, found by its Latin name, fetched as a JPEG or PNG thumbnail at
+  the width the resize of 3.3 needs (**[Clead]**, **[not checked]**:
+  Known unknown 15).
+- The picture, and the check below, belong to an answer from text alone.
+  When a text find gets photos, it keeps its answer, its picture and its
+  check, with the check's outcome for the edibility shown, until an answer
+  from its photos and text replaces that answer (Batches). From then on it
+  has no picture and no check, and the list shows its first photo
+  (**[Clead]**).
+- The picture is shown on the find's screen, and in the Library list in
+  place of the text mark, labelled as a picture of the species, not of
+  the user's mushroom. Its author, its licence and a link to its page on
+  Commons are shown with it, as its licence requires (**[Clead]**).
+- On a saved find it is stored with the find, apart from its photos: it
+  is never one of the find's photos and does not count toward the 5
+  (**[Clead]**). A new answer naming another species replaces it. On an
+  unsaved lookup it is shown, not stored, and the app's copy is removed
+  when the screen is left (**[Clead]**).
+- Only the Latin name is sent to Wikimedia, which also sees the phone's
+  IP address (**[Clead]**).
+- Fetching it (**[Clead]**):
+  - no network, a time limit, 429 or 5xx from Wikimedia: the picture,
+    and so the check, wait; on a saved find the queue tries again at its
+    next run, and an unsaved lookup's screen offers "Check again";
+  - no Wikidata item, no image, a licence the IP policy does not allow
+    for this use, any other answer, or a picture that cannot be loaded or
+    fails the metadata check after its resize: there is no picture, for
+    that answer, and the find says it could not be checked.
+- Pictures from Wikimedia Commons, and the Wikidata data used to find
+  them, are an exception to 3.7's "pictures from outside sources" and
+  "species data from outside sources" (**[Clead]**). The licence of each
+  picture must allow it to be shown with credit, resized, and sent to
+  Anthropic for the check; their use goes through the IP policy before
+  the build (**[not checked]**, Known unknown 15).
+
+**The self-check of a text lookup** (Adam, 19:01; at run time, after
+every text lookup, and a mismatch makes the edibility "unknown": his
+answers to Clead's questions, 19:05).
+
+- After a text lookup's answer names a species and its picture is
+  fetched, the app runs a photo lookup on that picture, without the
+  text, and compares the species it names with the text lookup's (Adam).
+  The picture is resized and checked as a photo is in 3.3; the picture,
+  not the user's text, is sent to Anthropic (**[Clead]**). The two match
+  when the first two words of their Latin names, genus and species, are
+  the same, ignoring case (**[Clead]**). The check's own confidence is
+  not used (**[Clead]**).
+- On a saved find the queue run that brings the text answer fetches the
+  picture and runs the check at once, before it takes the next find
+  (**[Clead]**). An unsaved lookup runs them at once after its answer. A
+  new answer to a text find brings a new picture and a new check
+  (**[Clead]**).
+- When they match, the find says the check agreed. When the check names
+  another species, the find says so, names both, and the edibility shown
+  is "unknown" (Adam). A check answer of "no mushroom" or "cannot tell"
+  counts as not matching, and the find says the check could not name a
+  species (**[Clead]**). The filters use the text answer's species
+  (**[Clead]**).
+- The check is a request of its own, on the user's key. Its error
+  classes are those of 3.3, in the same three groups as for an unsaved
+  lookup (Lookups): one that leaves a find waiting leaves the check
+  waiting; one that stops the queue stops it as for a find, and the check
+  waits; any other marks the check failed, and the find says it could
+  not be checked. A check that waits is tried again at the queue's next
+  run, or by "Check again" on an unsaved lookup's screen (**[Clead]**).
+  A run takes waiting checks together with waiting finds, oldest find
+  first; a check that waits for want of a network or a fault on
+  Anthropic's or Wikimedia's side ends the run, as a waiting find does
+  in 3.4 (**[Clead]**).
+- A check picture that cannot be loaded neither counts toward the count
+  of 3.3 (PBI-1.25) nor ends it (**[Clead]**).
+- Until the check agrees (while it waits, after it failed, or with no
+  picture) the edibility shown is "unknown", and the find says why
+  (Adam, 20:49, approving Clead's proposal).
+
+**The store** (3.6 for Phase 2; **[Clead]**).
+
+- A find holds, besides 3.6:
+  - its text or none;
+  - its photos in the order added, up to 5, each with its file and the
+    batch it came in;
+  - whether a batch is open;
+  - on a find with an answer, the state of the photos added since that
+    answer: analysed, waiting for the queue, or not yet analysed after a
+    failure;
+  - its confidence as a level (Phase 1) or a number from 1 to 100;
+  - its representative picture with its author, licence and page, or
+    none;
+  - its self-check: waiting, agreed, disagreed with the species the check
+    named, could not name a species, failed, or no picture.
+- The database moves to schema version 2 by a migration that keeps every
+  Phase 1 find, its photo as its first photo and its answer as it was.
+  Adam's test-session finds are kept.
+
+**The Library** (replaces the Log as the start screen; Adam).
+
+- It shows the finds either as a list or as pins on a map, with a switch
+  between the two (Adam). It opens on the list (**[Clead]**).
+- Both views are filtered by the same filters (Adam):
+  - species: all (the default), or a choice of one or more species among
+    the finds, grouped by their Latin names and shown by their names in
+    the app's language, and "not identified" for finds without an answer
+    naming a species (**[Clead]**: the grouping and "not identified");
+  - years: all years (the default), or a choice of one or more of the
+    years that have finds;
+  - months: all months (the default), or a choice of one or more months.
+  A find's year and month are those of its time, in its own UTC offset
+  (**[Clead]**). The filters hold until changed while the app runs, and
+  start at their defaults when it starts (**[Clead]**).
+- The list shows every find that passes the filters, as the Log did
+  (3.1), with the queue's messages and "analyse now"; a text find shows a
+  text mark in place of a photo (**[Clead]**). A find that could not be
+  read (3.4) is always in the list, whatever the filters, so it can be
+  deleted, and never on the map (**[Clead]**).
+- The map opens on the phone's position, its shorter side spanning 10 km
+  (a radius of 5 km; Adam; **[Clead]**: the measure, configuration). It
+  shows the finds that pass the filters and lie in the area shown.
+  Zooming or panning changes the area, and the finds shown follow it
+  (Adam).
+- The phone's position for the map: when the map is first opened, the app
+  asks for the location permission if it has not yet asked (**[Clead]**).
+  It uses a fix if one comes within 5 seconds, otherwise the phone's last
+  known position when no older than two minutes (**[Clead]**: the limits,
+  configuration). Without either, the map opens on the newest find with a
+  position, at the same scale; with none, on a default area
+  (**[Clead]**: configuration). Finds without a position appear in the
+  list only.
+- Tapping a pin shows the find's species name, or "not identified", and
+  its date; tapping that opens the find (**[Clead]**).
+- The tiles come from a map provider (Adam's decision). Each tile request
+  tells the provider the area shown, and so where the phone is when the
+  map opens on it and which areas the user looks at, and the phone's IP
+  address; the finds' details are not sent to it (**[Clead]**). Tiles
+  from the provider are an exception to 3.7's "pictures from outside
+  sources" (**[Clead]**). The provider and the map library are chosen
+  under the third-party code and IP policy; their terms count as terms of
+  service under its Appendix A, so their use is escalated to the product
+  office before the build, and the map shows the attribution the terms
+  require (**[not checked]**, Known unknown 11).
 
 ---
 
@@ -358,3 +633,36 @@ this?" app.
     from a fix the app had before the camera opened, or from the last
     known position (3.6); a fix after the camera closes still counts
     within the 30 seconds. Checked in Adam's test session (PBI-1.11).
+11. Phase 2's map provider and map library (3.9):
+    - which ones, and whether their terms allow this use without a fee;
+    - whether a key is needed;
+    - what the library sends besides tile requests;
+    - the attribution the terms require;
+    - whether, and on what terms, tiles may be cached, and so what the map
+      shows without a network.
+    A library that builds in Google's Maps SDK on Android brings Google's
+    terms, like `play-services-location`.
+12. Phase 2's request with several photos and text (3.9). Per the Claude
+    API's "Vision" page, as the Crog-role reviewer of #47 read it on
+    2026-11-09:
+    - 100 images per request on models with a 200k context window, and 600
+      on the others;
+    - above 20 images, at most 3,000 px a side;
+    - 10 MB per image, base64;
+    - 128 MB per request;
+    - each image labelled "Image 1:" and so on.
+    Five photos at 3.3's sizes are within these. Checked again against
+    the page before the build.
+13. Phase 2's library for picking from the phone's files (3.9), most
+    likely `expo-document-picker`, and whether its images load in
+    `expo-image-manipulator` as gallery photos do.
+14. Whether resizing up to five photos for one request (one at a time,
+    3.9) brings back the low-memory load failures PBI-1.25 was written
+    for, on Adam's phone.
+15. Phase 2's representative picture (3.9):
+    - how Wikidata and Commons are queried by Latin name, and how often
+      a species has an image there;
+    - the licences of those images, and which of them the IP policy
+      allows for showing unchanged with credit;
+    - the terms of Wikimedia's APIs for an app, including the User-Agent
+      they ask for, which must not carry a personal email address.
