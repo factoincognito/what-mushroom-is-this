@@ -138,8 +138,10 @@ class FakePhotos implements PhotoFiles {
   }
 }
 
-const INSERT =
-  "INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting')";
+/** One past the highest readable ID, in the table or AUTOINCREMENT's mark (PBI-1.27). */
+const NEXT_ID =
+  "1 + MAX( COALESCE((SELECT MAX(id) FROM finds WHERE id BETWEEN 1 AND 9007199254740991), 0), COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'finds' AND seq BETWEEN 1 AND 9007199254740991), 0))";
+const INSERT = `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state) VALUES (${NEXT_ID}, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting')`;
 /** A time column, given back only within JavaScript's safe-integer range, else as NULL. */
 const safeTime = (column: string) =>
   `CASE WHEN ${column} BETWEEN -9007199254740991 AND 9007199254740991 THEN ${column} END AS ${column}`;
