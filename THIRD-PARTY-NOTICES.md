@@ -14,8 +14,8 @@ every entry: the project uses the library as a package from npm and copies
 none of its code.
 
 All the libraries below are under permissive licences (Appendix A.3), except
-Google's `play-services-location`, a vendor SDK under Google's terms, which
-the Product Office allowed by decision (its section below). The copyright and
+Google's Play services libraries, a vendor SDK under Google's terms, which the
+Product Office allowed by decision (their section below). The copyright and
 licence texts of the npm packages ship inside each package, in `node_modules/`.
 
 Intended use (Appendix A.1, 3): the libraries under "In the app" are built
@@ -81,7 +81,8 @@ are for the release gate and PBI-1.9.
 
 ### The Android libraries `expo-location` builds in
 
-Google's vendor SDK, from Google's Maven repository, not npm; read on 2026-11-09. Mode "depend".
+Google's vendor SDK and the AndroidX libraries it names, from Google's Maven repository, not
+npm; read on 2026-11-09. Mode "depend".
 `play-services-location` and the three Play services libraries its POM and theirs name are not
 under a permissive licence: each POM names Google's "Android Software Development Kit License".
 The policy escalates a vendor SDK in a product (Appendix A.2, A.3); the Product Office decided on
@@ -93,11 +94,20 @@ https://github.com/factoincognito/product-office/blob/b4286388dbf779cc039d6b2b8a
 Google's terms are a page at the address the POMs give; no package ships their text. So the About
 view shows each library's name, version, the licence's name with that address, and its source, and
 says that the licence text is not in the app. Whether the app should carry the terms' text is for
-the release gate (PBI-1.24). Also for PBI-1.24 and the release gate: the AndroidX libraries the
-POMs of `play-services-base` and `play-services-basement` name (`androidx.collection:collection`
-1.0.0, `androidx.core:core` 1.2.0, `androidx.fragment:fragment` 1.0.0), whose licences were not
-read here; and the `third_party_licenses.txt` that `play-services-location`'s AAR carries, the
-notices of 21 open-source components Google builds into it.
+the release gate (PBI-1.24).
+
+The POMs of `play-services-base` and `play-services-basement` name three AndroidX libraries, the
+last three rows below. Each POM names "The Apache Software License, Version 2.0", a permissive
+licence (Appendix A.3); the About view gives them the Apache License 2.0 text it holds for the
+other Apache-2.0 libraries. Their own POMs name further AndroidX libraries (`androidx.annotation`,
+`androidx.lifecycle`, `androidx.versionedparcelable`, `androidx.legacy`, `androidx.loader`),
+whose licences were not read here.
+
+Also for PBI-1.24 and the release gate: those further AndroidX libraries; the versions Gradle
+resolves for these AndroidX libraries at the build, which were not checked and may be later than
+those the POMs name; and the `third_party_licenses.txt` that
+`play-services-location`'s AAR carries, the notices of 21 open-source components Google builds
+into it.
 
 | Library | Version | Licence | Mode | Source | Where the licence was read |
 |---|---|---|---|---|---|
@@ -105,6 +115,9 @@ notices of 21 open-source components Google builds into it.
 | `com.google.android.gms:play-services-base` (Android, a dependency of `play-services-location`) | 18.1.0 | Android Software Development Kit License, https://developer.android.com/studio/terms.html (Google's terms, as the POM names them; the page itself was not read) | depend | https://dl.google.com/dl/android/maven2/, `com/google/android/gms/play-services-base/18.1.0` | its 18.1.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-base/18.1.0/play-services-base-18.1.0.pom |
 | `com.google.android.gms:play-services-basement` (Android, a dependency of `play-services-base` and `play-services-tasks`) | 18.1.0 | Android Software Development Kit License, https://developer.android.com/studio/terms.html (Google's terms, as the POM names them; the page itself was not read) | depend | https://dl.google.com/dl/android/maven2/, `com/google/android/gms/play-services-basement/18.1.0` | its 18.1.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/18.1.0/play-services-basement-18.1.0.pom |
 | `com.google.android.gms:play-services-tasks` (Android, a dependency of `play-services-base`) | 18.0.2 | Android Software Development Kit License, https://developer.android.com/studio/terms.html (Google's terms, as the POM names them; the page itself was not read) | depend | https://dl.google.com/dl/android/maven2/, `com/google/android/gms/play-services-tasks/18.0.2` | its 18.0.2 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/18.0.2/play-services-tasks-18.0.2.pom |
+| `androidx.collection:collection` (Android, named by the POMs of `play-services-base` and `play-services-basement`) | 1.0.0 | Apache-2.0 ("The Apache Software License, Version 2.0", as the POM names it) | depend | https://dl.google.com/dl/android/maven2/, `androidx/collection/collection/1.0.0` | its 1.0.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/androidx/collection/collection/1.0.0/collection-1.0.0.pom |
+| `androidx.core:core` (Android, named by the POMs of `play-services-base` and `play-services-basement`) | 1.2.0 | Apache-2.0 ("The Apache Software License, Version 2.0", as the POM names it) | depend | https://dl.google.com/dl/android/maven2/, `androidx/core/core/1.2.0` | its 1.2.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/androidx/core/core/1.2.0/core-1.2.0.pom |
+| `androidx.fragment:fragment` (Android, named by the POMs of `play-services-base` and `play-services-basement`) | 1.0.0 | Apache-2.0 ("The Apache Software License, Version 2.0", as the POM names it) | depend | https://dl.google.com/dl/android/maven2/, `androidx/fragment/fragment/1.0.0` | its 1.0.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/androidx/fragment/fragment/1.0.0/fragment-1.0.0.pom |
 
 ## Development tools
 

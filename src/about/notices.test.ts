@@ -261,6 +261,39 @@ describe("the licence texts", () => {
     },
   );
 
+  /** The AndroidX libraries the POMs of play-services-base and play-services-basement name. */
+  const ANDROIDX_FOR_PLAY_SERVICES: readonly [string, string, string][] = [
+    ["androidx.collection", "collection", "1.0.0"],
+    ["androidx.core", "core", "1.2.0"],
+    ["androidx.fragment", "fragment", "1.0.0"],
+  ];
+
+  it.each(ANDROIDX_FOR_PLAY_SERVICES)(
+    "give %s:%s %s, which Play services names, the Apache License 2.0 its POM names (PBI-1.19)",
+    (group, artifact, version) => {
+      const name = `${group}:${artifact}`;
+      expect(NOTICES.libraries.find((entry) => entry.name === name)).toEqual({
+        name,
+        version,
+        licence: "Apache-2.0",
+        source: "https://dl.google.com/dl/android/maven2/",
+        textId: "Apache-2.0",
+      });
+    },
+  );
+
+  it.each(ANDROIDX_FOR_PLAY_SERVICES)(
+    "record that the licence of %s:%s %s was read from its own POM on Google's Maven (PBI-1.19)",
+    (group, artifact, version) => {
+      const row = tableRows("## In the app").find(([name = ""]) =>
+        name.startsWith(`\`${group}:${artifact}\``),
+      );
+      const pom = `https://dl.google.com/dl/android/maven2/${group.replace(/\./g, "/")}/${artifact}/${version}/${artifact}-${version}.pom`;
+      expect(row?.[1]).toBe(version);
+      expect(row?.[5]).toContain(pom);
+    },
+  );
+
   it.each(PLAY_SERVICES)(
     "record that the licence of %s %s was read from its own POM on Google's Maven (PBI-1.19)",
     (artifact, version) => {

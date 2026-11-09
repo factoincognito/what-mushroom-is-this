@@ -257,6 +257,27 @@
       "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
       "source": "https://dl.google.com/dl/android/maven2/",
       "textId": null
+    },
+    {
+      "name": "androidx.collection:collection",
+      "version": "1.0.0",
+      "licence": "Apache-2.0",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": "Apache-2.0"
+    },
+    {
+      "name": "androidx.core:core",
+      "version": "1.2.0",
+      "licence": "Apache-2.0",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": "Apache-2.0"
+    },
+    {
+      "name": "androidx.fragment:fragment",
+      "version": "1.0.0",
+      "licence": "Apache-2.0",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": "Apache-2.0"
     }
   ],
   "texts": {
