@@ -196,7 +196,7 @@ When the queue has stopped (3.3), the Log screen says why and offers
   | an answer whose `stop_reason` is `refusal` | Claude declined to answer (**[Clead]**, PBI-1.13) | that find is marked failed; the queue goes on with the next |
   | an answer that does not fit the shape, is cut off (`stop_reason` `max_tokens` or `model_context_window_exceeded`), or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops |
   | any other status | | the queue stops; the message gives the status |
-  | the find's photo cannot be loaded, decoded or sized | the photo itself is the problem (**[Clead]**, #17, PBI-1.21; until PBI-1.21 is merged, any error while the photo is prepared, except a configuration error, fails the find) | that find is marked failed; the queue goes on with the next |
+  | the find's photo cannot be loaded, decoded or sized | the photo itself is the problem (**[Clead]**, #17, #23; on Android a failed load does not say why, so a cause that is not the photo's can look the same: PBI-1.25) | that find is marked failed; the queue goes on with the next |
   | any other error in the app while the queue runs (for example, full storage) | (**[Clead]**, #17, PBI-1.21) | the find stays waiting; the queue stops and the Log screen says so, without the error's text; "analyse now" starts it again |
 
   **[Clead]**, both: a billing error is told apart from other 400 answers
@@ -282,8 +282,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   apps that target API level 31 or later; the secure store's own rules
   are kept. On iOS the key-value store is excluded; the database and the
   photos must be excluded at run time per file, which Expo offers no
-  supported means for, so this is done before any iOS build (PBI-1.23).
-  This version is built for Android only (3.8).
+  supported means for. The builds are Android first (3.8, PBI-1.10); no
+  iOS build is made before PBI-1.23 (**[Clead]**).
 - Uninstalling the app deletes the log. No export or sync in this version.
 
 ### 3.7 Not in this version

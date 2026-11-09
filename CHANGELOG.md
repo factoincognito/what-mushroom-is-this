@@ -28,6 +28,9 @@ All notable changes to What mushroom is this? are documented here.
   refused answer fails only its find, and an answer's text blocks are
   joined (#18).
 - The image module checks the input of its token count (#19).
+- The queue fails a find only when its photo cannot be read, and stops
+  on other errors; a refused photo and a key in no workspace get their
+  own messages (#23).
 
 ## Project created
 
