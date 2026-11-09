@@ -168,6 +168,13 @@
       "textId": "expo"
     },
     {
+      "name": "expo-font",
+      "version": "57.0.4",
+      "licence": "MIT",
+      "source": "https://github.com/expo/expo",
+      "textId": "expo"
+    },
+    {
       "name": "com.vanniktech:android-image-cropper",
       "version": "4.7.0",
       "licence": "Apache-2.0",
