@@ -93,6 +93,66 @@ write it.
 
 ---
 
+## Phase 2 — Text lookup, several photos, the Library
+
+**Goal:** `docs/SPEC.md` 3.9 on Adam's Android phone, called done after
+his Phase 2 test session there. Intent approved by Adam, 2026-11-09
+20:49; built now, alongside Phase 1's test session (his answer of
+18:48), unattended. Each item: one PR, test first, CI green, reviewed by
+the role that did not write it.
+
+- **[NOW] PBI-2.1** (the checks Known unknowns 11, 12, 13 and 15 name before the build; the uses go to the product office as escalations under the third-party code and IP policy) — The map provider and library, the Claude API's image limits, the file picker, and Wikidata and Commons: their terms, licences, fees, keys, attribution and caching, checked and written up, with a recommendation for the map provider. Spec 3.9, Known unknowns 11, 12, 13, 15.
+- **[NEXT] PBI-2.2** — The store, schema version 2. The fields of 3.9's "The store", and a migration from version 1 that keeps every Phase 1 find, its photo as its first photo and its answer as it was. Spec 3.9.
+- **[NEXT] PBI-2.3** — The answer's confidence from 1 to 100, a whole number, shown with 3.1's note. The edibility is "unknown" below 70, as configuration. Phase 1 finds keep their level and 3.3's rule. Spec 3.9.
+- **[NEXT] PBI-2.4** — Text lookups and the save setting:
+  - the text screen, up to 2,000 characters;
+  - the "Save" switch with its starting values in Settings;
+  - when a text find is saved, and its position;
+  - unsaved lookups and their three error groups;
+  - "no mushroom" and "cannot tell" for text;
+  - the disclaimer for a lookup without photos. Its new sentence replaces only 3.5's second sentence, the one about the photo, and keeps the first; Clead's reading of his own proposal, which Adam approved. The Italian is checked by Jakob.
+  Spec 3.9.
+- **[NEXT] PBI-2.5** — Several photos per find:
+  - batches, and when they complete;
+  - completing a batch as a queue trigger;
+  - all of a find's photos in one request, labelled;
+  - the per-photo failure rule and the PBI-1.25 count;
+  - a new batch on an analysed find, with its three states;
+  - removing a photo.
+  Spec 3.9.
+- **[NEXT] PBI-2.6** (after PBI-2.1 for the picker) — Photos from the phone's files, images only, without position or time of their own. Spec 3.9, Known unknown 13.
+- **[NEXT] PBI-2.7** — The Library's list, replacing the Log:
+  - the species, years and months filters;
+  - unreadable finds always listed;
+  - the text mark;
+  - the Library opens on the list.
+  Spec 3.9.
+- **[BLOCKED] PBI-2.8** (needs the product office's answer on the map provider's escalation, from PBI-2.1) — The Library's map:
+  - the 10 km shorter side;
+  - the phone's position, with its limits and the location permission;
+  - the fallbacks;
+  - the finds in the area shown, following zoom and pan;
+  - the pins;
+  - the attribution.
+  Spec 3.9, Known unknown 11.
+- **[BLOCKED] PBI-2.9** (needs the product office's answer on the Wikimedia escalation, from PBI-2.1) — The representative picture for text lookups:
+  - the Wikidata image by Latin name, as a thumbnail;
+  - the credit;
+  - stored apart from the photos;
+  - Wikimedia's failures classed;
+  - the picture belongs to an answer from text alone.
+  Spec 3.9, Known unknown 15.
+- **[BLOCKED] PBI-2.10** (after PBI-2.9) — The self-check of text lookups:
+  - the photo lookup on the picture;
+  - the match on genus and species;
+  - its outcomes and the edibility "unknown" until it agrees;
+  - its place in the queue run;
+  - its error groups.
+  Also, from the Crog-role review of #47, round 6: a 429 from Wikimedia ends the run, as 3.3 does for one from Anthropic; and a check still waiting when a batch completes on its find is skipped. Spec 3.9.
+- **[LATER] PBI-2.11** — Adam's Phase 2 test session on his phone, including Known unknown 14 (memory with five photos). Spec 3.9.
+
+---
+
 ## Explicitly out of scope
 
-- What `docs/SPEC.md` 3.7 lists as not in this version.
+- What `docs/SPEC.md` 3.7 lists as not in this version, apart from what 3.9 adds.
