@@ -48,6 +48,9 @@ All notable changes to What mushroom is this? are documented here.
 - Follow-ups from the reviews: a find whose ID cannot be read can be
   deleted from its Log row, and a damaged ID or photo name no longer fails
   the list or the opening (#33).
+- The last follow-ups: a delete removes the photo only when the find went,
+  a new find gets a readable ID after a damaged one, and the development
+  tools' notices are tested (#36).
 
 ## Project created
 
