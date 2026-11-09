@@ -308,6 +308,7 @@ describe("the store's statements on a real SQLite", () => {
         id,
         photoUri: "file:///photos/p1.jpg",
         time: { takenAtMs: 1_000, utcOffsetMinutes: 60, source: "saved" },
+        selfCheck: null,
         analysis: {
           state: "done",
           result: "match",

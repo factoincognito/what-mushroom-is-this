@@ -216,7 +216,14 @@ describe("a text find (PBI-2.2)", () => {
     const id = await store.addText(textFind);
     await expect(store.get(id)).rejects.toMatchObject({ code: "corrupt" });
     await expect(store.list()).resolves.toEqual([
-      { readable: true, id, photoUri: null, time, analysis: { state: "waiting" } },
+      {
+        readable: true,
+        id,
+        photoUri: null,
+        time,
+        analysis: { state: "waiting" },
+        selfCheck: null,
+      },
     ]);
     await expect(store.oldestWaiting()).resolves.toBe(id);
   });
@@ -236,6 +243,7 @@ describe("a text find (PBI-2.2)", () => {
           edibility: "edible",
           confidence: 90,
         },
+        selfCheck: { state: "waiting" },
       },
     ]);
     await expect(store.oldestWaiting()).resolves.toBeNull();

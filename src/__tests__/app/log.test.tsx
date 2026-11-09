@@ -257,8 +257,19 @@ describe("the Log screen's list (SPEC 3.1)", () => {
   });
 });
 
-/** A text find without photos (SPEC 3.9), as the store holds it. */
-function textFind(id: number, daysLater: number, analysis: StoredFind["analysis"]): StoredFind {
+/**
+ * A text find without photos (SPEC 3.9), as the store holds it. An answer naming a species is from
+ * the text alone, so the store starts its self-check, waiting, unless another state is given.
+ */
+function textFind(
+  id: number,
+  daysLater: number,
+  analysis: StoredFind["analysis"],
+  selfCheck: StoredFind["selfCheck"] = analysis.state === "done" &&
+  analysis.answer.result === "match"
+    ? { state: "waiting" }
+    : null,
+): StoredFind {
   return {
     id,
     text: "A yellow funnel with false gills.",
@@ -269,7 +280,7 @@ function textFind(id: number, daysLater: number, analysis: StoredFind["analysis"
     analysis,
     addedPhotos: analysis.state === "done" ? "analysed" : null,
     picture: null,
-    selfCheck: null,
+    selfCheck,
   };
 }
 
@@ -293,6 +304,27 @@ describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
     expect(row.getByText("Chanterelle")).toBeOnTheScreen();
     expect(row.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
     expect(row.queryByText(en.disclaimer)).not.toBeOnTheScreen();
+  });
+
+  it("shows unknown, and why, while the self-check of its answer from the text waits (SPEC 3.9)", async () => {
+    mockLog.finds.set(1, textFind(1, 0, done(CHANTERELLE)));
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(
+      row.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(row.queryByText(en.find.edibilities.edible, { exact: false })).toBeNull();
+    expect(row.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
+  });
+
+  it("shows the answer's edibility once the self-check agreed (SPEC 3.9)", async () => {
+    mockLog.finds.set(1, textFind(1, 0, done(CHANTERELLE), { state: "agreed" }));
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(
+      row.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.edible)),
+    ).toBeOnTheScreen();
+    expect(row.queryByText(en.find.selfCheck.waiting)).toBeNull();
   });
 
   it.each([

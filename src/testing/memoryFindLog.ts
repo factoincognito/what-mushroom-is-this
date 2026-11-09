@@ -76,6 +76,7 @@ function summaryOf(stored: StoredFind): FindSummary {
     photoUri: stored.photos[0]?.uri ?? null,
     time: stored.time,
     analysis: summary,
+    selfCheck: stored.selfCheck,
   };
 }
 

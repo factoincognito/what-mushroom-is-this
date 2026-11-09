@@ -1390,6 +1390,7 @@ describe("list", () => {
         id: 10,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        selfCheck: null,
         analysis: {
           state: "done",
           result: "match",
@@ -1403,6 +1404,7 @@ describe("list", () => {
         id: 9,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        selfCheck: null,
         analysis: {
           state: "done",
           result: "match",
@@ -1416,6 +1418,7 @@ describe("list", () => {
         id: 8,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        selfCheck: null,
         analysis: { state: "done", result: "no_mushroom" },
       },
       {
@@ -1423,6 +1426,7 @@ describe("list", () => {
         id: 7,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        selfCheck: null,
         analysis: { state: "failed", failure: { cause: "answer", detail: "shape" } },
       },
       {
@@ -1430,6 +1434,7 @@ describe("list", () => {
         id: 6,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        selfCheck: null,
         analysis: { state: "waiting" },
       },
     ]);
@@ -1456,12 +1461,15 @@ describe("list", () => {
         photoUri: null,
         time: { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" },
         analysis: { state: "waiting" },
+        selfCheck: null,
       },
       expect.objectContaining({
         readable: true,
         id: 7,
         photoUri: null,
         analysis: expect.objectContaining({ state: "done", result: "match", confidence: 90 }),
+        // The answer is from the text alone, so the Log shows "unknown" until it agrees (3.9).
+        selfCheck: { state: "waiting" },
       }),
     ]);
   });

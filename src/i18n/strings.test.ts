@@ -280,6 +280,11 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       "find.positionSources.fix",
       "find.positionSources.lastKnown",
       "find.positionSources.photo",
+      "find.selfCheck.disagreed",
+      "find.selfCheck.failed",
+      "find.selfCheck.noPicture",
+      "find.selfCheck.noSpecies",
+      "find.selfCheck.waiting",
       "find.time",
       "find.timeSources.photo",
       "find.timeSources.photoPhoneOffset",
@@ -360,6 +365,19 @@ describe("the strings of the text lookup (PBI-2.4)", () => {
       expect(paths).toContain(path);
     }
   });
+
+  it.each(LANGUAGES)(
+    "say in %s why the edibility is unknown until the self-check agrees, the disagreement naming both species (SPEC 3.9)",
+    (language) => {
+      const t = STRINGS[language].find.selfCheck;
+      expect(t.disagreed).toContain("{matched}");
+      expect(t.disagreed).toContain("{named}");
+      const unknown = STRINGS[language].find.edibilities.unknown.toLowerCase();
+      for (const reason of [t.waiting, t.disagreed, t.noSpecies, t.failed, t.noPicture]) {
+        expect(reason.toLowerCase()).toContain(unknown);
+      }
+    },
+  );
 
   it.each(LANGUAGES)("give the count in %s with places for it", (language) => {
     expect(STRINGS[language].lookup.count).toContain("{count}");

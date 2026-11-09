@@ -279,6 +279,14 @@ describe("an unsaved lookup (Save off)", () => {
     const edibility = within(screen.getByTestId("match-edibility"));
     expect(edibility.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
     expect(edibility.queryByText(en.disclaimer)).not.toBeOnTheScreen();
+    // An answer from the text alone: unknown until a self-check agrees, which has not run (SPEC 3.9).
+    expect(
+      edibility.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(edibility.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
+    expect(
+      edibility.queryByText(en.find.edibility.replace("{edibility}", en.find.edibilities.edible)),
+    ).not.toBeOnTheScreen();
     expect(screen.getByText("Claude's confidence in the match: 90 of 100")).toBeOnTheScreen();
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body.messages[0].content[0]).toEqual({ type: "text", text: DESCRIPTION });
@@ -499,6 +507,7 @@ describe("in the app's language", () => {
     await settle();
     const edibility = within(await screen.findByTestId("match-edibility"));
     expect(edibility.getByText(t.disclaimerDescribed)).toBeOnTheScreen();
+    expect(edibility.getByText(t.find.selfCheck.waiting)).toBeOnTheScreen();
     expect(screen.getByRole("switch", { name: t.lookup.save })).toBeOnTheScreen();
   });
 });
