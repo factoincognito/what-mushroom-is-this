@@ -50,9 +50,8 @@ async function afterSecureStorePlugin(): Promise<{
   }
   const withSecureStore: { default: (config: ExpoConfig, props: unknown) => ExpoConfig } =
     jest.requireActual("expo-secure-store/app.plugin");
-  const { compileModsAsync } = jest.requireActual(
-    "@expo/config-plugins/build/plugins/mod-compiler.js",
-  );
+  // Through `expo`, a direct dependency, not an internal path of @expo/config-plugins (PBI-1.26).
+  const { compileModsAsync } = jest.requireActual("expo/config-plugins");
   const config = withSecureStore.default(structuredClone(appJson.expo), entry[1]);
   await compileModsAsync(config, {
     projectRoot: PROJECT_ROOT,

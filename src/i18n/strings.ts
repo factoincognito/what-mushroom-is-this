@@ -458,7 +458,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           unknown: "Fotot innehåller data som inte skickas, så det analyserades inte.",
         },
         photo: {
-          loadFailed: "Fotot gick inte att läsa in för analys. Filen kan saknas eller vara skadad.",
+          loadFailed:
+            "Fotot gick inte att läsa in för analys. Filen kan saknas eller vara skadad, eller så kan telefonen ha ont om minne.",
           invalidSize:
             "Fotots storlek gick inte att läsa, så det kunde inte förberedas för analys.",
           unknown: "Fotot gick inte att läsa för analys.",
@@ -681,7 +682,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         },
         photo: {
           loadFailed:
-            "The photo could not be loaded for analysis. Its file may be missing or damaged.",
+            "The photo could not be loaded for analysis. Its file may be missing or damaged, or the phone may be short of memory.",
           invalidSize:
             "The photo's size could not be read, so it could not be prepared for analysis.",
           unknown: "The photo could not be read for analysis.",
@@ -910,7 +911,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         },
         photo: {
           loadFailed:
-            "Non è stato possibile caricare la foto per l'analisi. Il file potrebbe mancare o essere danneggiato.",
+            "Non è stato possibile caricare la foto per l'analisi. Il file potrebbe mancare o essere danneggiato, oppure il telefono potrebbe avere poca memoria.",
           invalidSize:
             "Non è stato possibile leggere le dimensioni della foto, quindi non è stato possibile prepararla per l'analisi.",
           unknown: "Non è stato possibile leggere la foto per l'analisi.",

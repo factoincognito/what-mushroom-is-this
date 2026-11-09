@@ -18,7 +18,7 @@ import type { Strings } from "../i18n/strings";
 import { formatTimeIn, noticeMessage, stopNeedsSettings } from "../queue/messages";
 import { useQueue } from "../queue/QueueContext";
 import { useFindLog } from "../store/FindLogContext";
-import type { FindSummary, ListedFind } from "../store/find";
+import { type FindSummary, type ListedFind, StoreError } from "../store/find";
 
 /**
  * One entry of the store's list: a find it could read, or the mark of one it could not, in its
@@ -39,7 +39,8 @@ type ListState =
  * edibility of the matched species ("unknown" when the confidence is low, SPEC 3.3) with the
  * disclaimer next to it (SPEC 3.5); a find still waiting or failed says so, and each opens its own
  * screen. A find the store cannot read is a row of its own, in its place, saying so; with its ID it
- * opens the find's screen, where it can be deleted (PBI-1.16). A list the store cannot give at all
+ * opens the find's screen, where it can be deleted (PBI-1.16), and without one the row itself
+ * offers Delete (PBI-1.26). A list the store cannot give at all
  * is shown as unreadable, with a way to read it again. The list is read again when the screen
  * comes into view and when a queue run ends. When the queue has stopped, it says why and offers
  * "analyse now", and a link to Settings when the stop names a setting; when the last run left the
@@ -100,7 +101,14 @@ export default function LogScreen() {
           <FlatList
             data={list.entries}
             keyExtractor={entryKey}
-            renderItem={({ item }) => <LogRow entry={item} language={language} strings={strings} />}
+            renderItem={({ item }) => (
+              <LogRow
+                entry={item}
+                language={language}
+                strings={strings}
+                onRemoved={() => void load()}
+              />
+            )}
             ListEmptyComponent={
               <View style={styles.centred}>
                 <Text style={styles.empty}>{strings.log.empty}</Text>
@@ -152,37 +160,129 @@ type LogRowProps = {
   readonly entry: LogEntry;
   readonly language: Language;
   readonly strings: Strings;
+  /** A find was deleted from its row: the list is read again. */
+  readonly onRemoved: () => void;
 };
 
 /**
- * The key of an entry's row: its find's ID. An entry without an ID is keyed by its place in the
- * list, which is the store's order and so the same at every reading of an unchanged log.
+ * The key of an entry's row: its find's ID; for an entry without an ID, its ID as SQLite writes it,
+ * so that a row keeps its own state, and no other row takes it over, when a row before it goes
+ * (Clead's review of #33, fix 1). Only an entry with neither is keyed by its place in the list,
+ * which is the store's order and so the same at every reading of an unchanged log; such a row has
+ * no state of its own.
  */
 function entryKey(entry: LogEntry, index: number): string {
-  return entry.id === null ? `no-id-${index}` : String(entry.id);
+  if (entry.id !== null) {
+    return String(entry.id);
+  }
+  if (entry.storedId !== null) {
+    return `stored-${entry.storedId}`;
+  }
+  return `no-id-${index}`;
 }
 
 /** One entry of the list, by its kind. */
-function LogRow({ entry, language, strings }: LogRowProps) {
+function LogRow({ entry, language, strings, onRemoved }: LogRowProps) {
   if (!entry.readable) {
-    return <UnreadableRow id={entry.id} strings={strings} />;
+    return entry.id === null ? (
+      <WithoutIdRow storedId={entry.storedId} strings={strings} onRemoved={onRemoved} />
+    ) : (
+      <UnreadableRow id={entry.id} strings={strings} />
+    );
   }
   return <FindRow find={entry} language={language} strings={strings} />;
 }
 
+type WithoutIdRowProps = {
+  readonly storedId: string | null;
+  readonly strings: Strings;
+  readonly onRemoved: () => void;
+};
+
 /**
- * A find the store cannot read. With its ID, it opens the find's own screen, which says the same
- * and offers Delete; without one there is nothing to open, so it is text alone.
+ * A find whose ID the store cannot read: there is no screen to open, so the row says the find
+ * cannot be read and itself offers Delete, which asks first, as the Find screen's does
+ * (PBI-1.26). Without even the ID as SQLite writes it, it is text alone.
  */
-function UnreadableRow({ id, strings }: { readonly id: number | null; readonly strings: Strings }) {
-  const text = <Text style={styles.text}>{strings.find.unreadable}</Text>;
-  if (id === null) {
-    return (
-      <View testID="unreadable-row" style={styles.findRow}>
-        {text}
-      </View>
-    );
+function WithoutIdRow({ storedId, strings, onRemoved }: WithoutIdRowProps) {
+  const findLog = useFindLog();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const t = strings.find;
+
+  async function remove(id: string): Promise<void> {
+    setBusy(true);
+    setFailed(false);
+    try {
+      await (await findLog()).deleteUnreadable(id);
+      // Its question is answered: it does not stay open (Clead's review of #33, fix 1).
+      setConfirming(false);
+      onRemoved();
+    } catch (error) {
+      if (error instanceof StoreError && error.code === "not-found") {
+        onRemoved();
+        return;
+      }
+      setConfirming(false);
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
   }
+
+  return (
+    <View testID="unreadable-row" style={styles.unreadableRow}>
+      <Text style={styles.text}>{t.unreadable}</Text>
+      {storedId !== null &&
+        (confirming ? (
+          <>
+            <Text accessibilityLiveRegion="polite" style={styles.text}>
+              {t.deleteConfirm}
+            </Text>
+            <View style={styles.row}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => void remove(storedId)}
+                style={styles.rowButton}
+              >
+                <Text style={styles.buttonText}>{t.deleteYes}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => setConfirming(false)}
+                style={styles.rowButton}
+              >
+                <Text style={styles.buttonText}>{t.deleteCancel}</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setConfirming(true)}
+            style={styles.rowButton}
+          >
+            <Text style={styles.buttonText}>{t.delete}</Text>
+          </Pressable>
+        ))}
+      {failed && (
+        <Text accessibilityLiveRegion="polite" style={styles.text}>
+          {t.deleteFailed}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/**
+ * A find the store cannot read, with its ID: it opens the find's own screen, which says the same
+ * and offers Delete.
+ */
+function UnreadableRow({ id, strings }: { readonly id: number; readonly strings: Strings }) {
+  const text = <Text style={styles.text}>{strings.find.unreadable}</Text>;
   return (
     <Link href={`/find/${id}`} asChild>
       <Pressable accessibilityRole="link" testID={`find-row-${id}`} style={styles.findRow}>
@@ -270,6 +370,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     alignItems: "flex-start",
+  },
+  unreadableRow: {
+    gap: 8,
+  },
+  rowButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   thumbnail: {
     width: 72,

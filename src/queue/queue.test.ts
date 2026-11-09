@@ -821,18 +821,27 @@ describe("two failed photo loads in a row in one run (PBI-1.25)", () => {
     expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
   });
 
-  it("a trigger during the run starts no new count: a find saved then, whose photo does not load either, stops the run", async () => {
+  it("a trigger during the run starts no new count, even when it comes as the run finds none left: a find saved then, whose photo does not load either, stops the run", async () => {
     const t = setup();
     t.log.addFind(1);
-    t.setPreparation(async (uri) => {
-      if (uri.endsWith("/1.jpg")) {
+    t.setPreparation(async () => loadFailed("load-failed"));
+    // Once find 1 has failed, the run's next step finds none waiting; the trigger comes just
+    // then, so the run takes the path that goes on after "none" (Clead-role note 1 on #27).
+    const oldestWaiting = t.log.oldestWaiting.bind(t.log);
+    let triggered = false;
+    jest.spyOn(t.log, "oldestWaiting").mockImplementation(async () => {
+      const id = await oldestWaiting();
+      if (id === null && !triggered) {
+        triggered = true;
         t.log.addFind(2);
         void t.queue.trigger();
       }
-      return loadFailed("load-failed");
+      return id;
     });
     await t.queue.trigger();
+    expect(triggered).toBe(true);
     expect(t.log.changes).toEqual(["markFailed 1 photo: load-failed"]);
+    expect(t.prepared.map((p) => p.uri)).toEqual(["file:///photos/1.jpg", "file:///photos/2.jpg"]);
     expect(t.log.state(2)).toEqual({ state: "waiting" });
     expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
   });

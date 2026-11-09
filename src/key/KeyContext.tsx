@@ -74,9 +74,21 @@ export function KeyProvider({ secrets, store, children }: KeyProviderProps) {
   const [started] = useState(deferred);
   /** Whether the marker is known to be set: a clearing has given "cleared" or "kept". */
   const settled = useRef(false);
+  /**
+   * Whether the startup has begun. It runs once per provider, even when React runs the effect
+   * again (StrictMode, or new props): a second clearing, which `cleared` and `started` would not
+   * track, could otherwise delete a key saved after the first (PBI-1.26).
+   */
+  const startupBegun = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
+    if (startupBegun.current) {
+      return () => {
+        mounted.current = false;
+      };
+    }
+    startupBegun.current = true;
     // The read is part of the startup, so a save or remove that waits for it reports last.
     clearKeyOnFirstStartAfterInstall(secrets, store)
       .then(async (outcome) => {

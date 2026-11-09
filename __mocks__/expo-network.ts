@@ -10,9 +10,15 @@
  */
 import type * as Network from "expo-network";
 
+/**
+ * The network type, written as one of the enum's string values, so that a misspelt one fails the
+ * type check; the cast after it is then only from that value to the enum (PBI-1.26).
+ */
+const WIFI: `${Network.NetworkStateType}` = "WIFI";
+
 export const getNetworkStateAsync: jest.MockedFunction<typeof Network.getNetworkStateAsync> =
   jest.fn(async () => ({
-    type: "WIFI" as Network.NetworkStateType,
+    type: WIFI as Network.NetworkStateType,
     isConnected: true,
     isInternetReachable: true,
   }));
