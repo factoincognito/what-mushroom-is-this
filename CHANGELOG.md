@@ -32,7 +32,7 @@ All notable changes to What mushroom is this? are documented here.
   joined (#18).
 - The image module checks the input of its token count (#19).
 - The queue fails a find only when its photo cannot be read, and stops
-  on other errors; a refused photo and a key in no workspace get their
+  on other errors; a refused answer and a key in no workspace get their
   own messages (#23).
 - Two failed photo loads in a row stop the queue (#27).
 - Test gaps closed (#28).
@@ -40,6 +40,11 @@ All notable changes to What mushroom is this? are documented here.
   when the store cannot be read (#29).
 - The store: a stricter schema, one store, and unreadable finds shown in
   their place rather than hiding the Log (#26).
+- `expo` and `jest-expo` at the versions SDK 57 expects (#31).
+- New find: the photo is not dropped without a question, and the iOS
+  permission texts are in the three languages (#32).
+- Follow-ups from the reviews: an unreadable find can be deleted from its
+  Log row, and damaged rows no longer fail the list (#33).
 
 ## Project created
 
