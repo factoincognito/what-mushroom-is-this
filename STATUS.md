@@ -4,7 +4,7 @@ How to keep this file: product-office Process P-9 § 6.
 
 # Status
 
-Last update: 2026-11-08
+Last update: 2026-11-09
 
 ## Phase
 Build: Phase 1, the first version ([`docs/BACKLOG.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/BACKLOG.md)); the specification's intent is approved ([`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/SPEC.md)).

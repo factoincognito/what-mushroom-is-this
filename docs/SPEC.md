@@ -57,7 +57,7 @@ its own tests; the screens only wire them together. The modules:
 
 | Module | Holds |
 |---|---|
-| config | the API address, the default model, each model's image limits, the request time limit, the position limits (section 3.6) |
+| config | the API address, the default model, each model's image limits, the request time limit, the API version, `max_tokens`, the bound on `retry-after`, the position limits (section 3.6) |
 | i18n | the strings of the three app languages, and the language choice |
 | key | the API key in the secure store; the first-start-after-install clearing |
 | image | the resize rule and the check of a JPEG's application segments |
@@ -153,8 +153,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   - input that is not a JPEG, or is cut short or malformed, fails.
   Not checked yet: what the phone's image encoder writes (Known unknown
   2); if it writes something this check refuses, every analysis fails,
-  so it is checked as early as it can be: in PBI-1.6 if the encoder can
-  be run off a phone, otherwise in Adam's test session on his phone.
+  so it is checked in Adam's test session on his phone, since the encoder
+  cannot be run off a phone (#14).
   A JPEG that fails the check is not sent; the find is marked failed.
 - The prompt asks for one answer in a fixed JSON shape:
   - the best match: its names in Swedish, English, Latin and Italian;
@@ -207,7 +207,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   order (PBI-1.13).
   **[Clead]**: a row that names a 400 by its error type and message takes
   precedence over the "400, 413" row; it matches only when both the type
-  and the start of the message match.
+  and the start of the message match. The refusal row takes precedence
+  over the shape row (PBI-1.13).
   A failed find is tried again only when the user asks. When a new
   analysis of a find that already has an answer fails, whatever the
   error class, the find keeps its answer and stays analysed, the failure
@@ -317,8 +318,9 @@ this?" app.
    source for #14, 2026-11-09; to be checked on a phone, PBI-1.18).
 8. Whether a user's API key can be one that needs the
    `anthropic-workspace-id` header, which the API documentation says a key
-   not scoped to a workspace needs (Crog's reading for PBI-1.4, not
-   checked by Clead); the app does not send it.
+   not scoped to a workspace needs (Crog's reading for PBI-1.4, checked
+   against the "Authentication" page on 2026-11-09 for PBI-1.13); the app
+   does not send it, and handles that answer as 401, 403 (3.3).
 9. Whether a request keeps to the 60-second time limit while the model
    thinks, which on the current models it always may (PBI-1.14). If not, a
    find times out, stays waiting and is sent again at each run; the time
