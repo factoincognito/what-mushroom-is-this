@@ -447,10 +447,12 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   item, found by its Latin name, fetched as a JPEG or PNG thumbnail at
   the width the resize of 3.3 needs (**[Clead]**, **[not checked]**:
   Known unknown 15).
-- The picture, and the check below, belong to a text find without
-  photos. Once a text find has photos, its answer comes from its photos
-  and its text (Batches), and it has no picture and no check; the list
-  shows its first photo (**[Clead]**).
+- The picture, and the check below, belong to an answer from text alone.
+  When a text find gets photos, it keeps its answer, its picture and its
+  check, with the check's outcome for the edibility shown, until an answer
+  from its photos and text replaces that answer (Batches). From then on it
+  has no picture and no check, and the list shows its first photo
+  (**[Clead]**).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
@@ -507,6 +509,10 @@ answers to Clead's questions, 19:05).
   waits; any other marks the check failed, and the find says it could
   not be checked. A check that waits is tried again at the queue's next
   run, or by "Check again" on an unsaved lookup's screen (**[Clead]**).
+  A run takes waiting checks together with waiting finds, oldest find
+  first; a check that waits for want of a network or a fault on
+  Anthropic's or Wikimedia's side ends the run, as a waiting find does
+  in 3.4 (**[Clead]**).
 - A check picture that cannot be loaded neither counts toward the count
   of 3.3 (PBI-1.25) nor ends it (**[Clead]**).
 - The edibility shown while the check has not agreed (waiting, failed,
@@ -528,7 +534,7 @@ answers to Clead's questions, 19:05).
   - its representative picture with its author, licence and page, or
     none;
   - its self-check: waiting, agreed, disagreed with the species the check
-    named, or not checked.
+    named, could not name a species, failed, or no picture.
 - The database moves to schema version 2 by a migration that keeps every
   Phase 1 find, its photo as its first photo and its answer as it was.
   Adam's test-session finds are kept.
