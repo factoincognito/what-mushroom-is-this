@@ -217,6 +217,9 @@ export type Strings = {
       readonly unknown: string;
     };
     readonly confidence: string;
+    /** A confidence from 1 to 100 (SPEC 3.9), put in `confidence`; `{score}` is the number. */
+    readonly confidenceScore: string;
+    /** A Phase 1 find's level, put in `confidence`. */
     readonly confidences: {
       readonly low: string;
       readonly medium: string;
@@ -507,6 +510,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         unknown: "Okänd",
       },
       confidence: "Claudes säkerhet om matchningen: {confidence}",
+      confidenceScore: "{score} av 100",
       confidences: {
         low: "låg",
         medium: "medel",
@@ -733,6 +737,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         unknown: "Unknown",
       },
       confidence: "Claude's confidence in the match: {confidence}",
+      confidenceScore: "{score} of 100",
       confidences: {
         low: "low",
         medium: "medium",
@@ -966,6 +971,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         unknown: "Sconosciuta",
       },
       confidence: "Sicurezza di Claude sulla corrispondenza: {confidence}",
+      confidenceScore: "{score} su 100",
       confidences: {
         low: "bassa",
         medium: "media",

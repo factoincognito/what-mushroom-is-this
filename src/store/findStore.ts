@@ -13,7 +13,15 @@
  * connection fail as locked).
  */
 
-import { CONFIDENCES, EDIBILITIES, isRecord, parseAnswerText } from "../analysis/answer";
+import {
+  CONFIDENCE_LEVELS,
+  type Confidence,
+  EDIBILITIES,
+  isConfidenceScore,
+  isRecord,
+  parseAnswerText,
+  parseStoredAnswerText,
+} from "../analysis/answer";
 import { config } from "../config/config";
 import { answerToJson } from "./answerJson";
 import type { FindDatabase } from "./database";
@@ -246,7 +254,7 @@ const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
  * each also with its ID as SQLite writes it, exactly, whatever the ID.
  */
 const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv,
-  name_en, name_it, edibility, confidence FROM finds
+  name_en, name_it, edibility, confidence, confidence_score FROM finds
   ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /**
  * The waiting find saved first after a given ID whose batch is complete, among the IDs the store
@@ -271,11 +279,13 @@ const STORED_ID = /^(0|-?[1-9][0-9]{0,18})$/;
  * stored (review of #49, fix 1): the photos added since are waiting when the find now holds a
  * photo whose name is not among the names sent (a JSON array), and analysed otherwise; the
  * self-check waits only when the number of photos sent is 0, the answer is a match and the find
- * has text, so the answer is from the text alone (docs/SPEC.md 3.9).
+ * has text, so the answer is from the text alone (docs/SPEC.md 3.9). The confidence is written
+ * to both of its columns, the level's left empty, so that a new answer to a Phase 1 find drops
+ * its level (PBI-2.3).
  */
 const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL,
   answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?,
-  name_it = ?, edibility = ?, confidence = ?,
+  name_it = ?, edibility = ?, confidence = ?, confidence_score = ?,
   added_photos = CASE WHEN EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(finds.photos)
     THEN finds.photos ELSE '[]' END) WHERE json_extract(value, '$.file') NOT IN
     (SELECT value FROM json_each(?))) THEN 'waiting' ELSE 'analysed' END,
@@ -741,7 +751,11 @@ function removeQuietly(photos: PhotoFiles, name: string): boolean {
   }
 }
 
-/** The values of `ANSWER_COLUMNS`, from an answer checked against the shape. */
+/**
+ * The values of `ANSWER_COLUMNS`, from an answer checked against the shape. A new answer is
+ * checked as one from the API, so its confidence is a whole number from 1 to 100: a Phase 1 level
+ * is only ever read, never written again (docs/SPEC.md 3.9, PBI-2.3).
+ */
 function answerColumns(analysed: AnalysedAnswer): Params {
   const { answer, model, analysedAtMs } = analysed;
   if (typeof model !== "string" || model.trim().length === 0) {
@@ -762,10 +776,12 @@ function answerColumns(analysed: AnalysedAnswer): Params {
   }
   const valid = checked.answer;
   if (valid.result !== "match") {
-    return [json, model, analysedAtMs, valid.result, null, null, null, null, null];
+    return [json, model, analysedAtMs, valid.result, null, null, null, null, null, null];
   }
   const { sv, en, it } = valid.names;
-  return [json, model, analysedAtMs, "match", sv, en, it, valid.edibility, valid.confidence];
+  const { confidence } = valid;
+  const [level, score] = typeof confidence === "number" ? [null, confidence] : [confidence, null];
+  return [json, model, analysedAtMs, "match", sv, en, it, valid.edibility, level, score];
 }
 
 type Row = Record<string, unknown>;
@@ -1000,7 +1016,7 @@ function readAnalysis(row: Row): Analysis {
     case "failed":
       return { state, failure: readFailure(row) };
     case "done": {
-      const parsed = parseAnswerText(textOf(row, "answer_json"));
+      const parsed = parseStoredAnswerText(textOf(row, "answer_json"));
       if (!parsed.ok) {
         throw corrupt(`the stored answer is not of the shape: ${parsed.detail}`);
       }
@@ -1031,8 +1047,24 @@ function readSummaryAnalysis(row: Row): SummaryAnalysis {
     result,
     names: { sv: textOf(row, "name_sv"), en: textOf(row, "name_en"), it: textOf(row, "name_it") },
     edibility: enumOf(row, "edibility", EDIBILITIES),
-    confidence: enumOf(row, "confidence", CONFIDENCES),
+    confidence: readConfidence(row),
   };
+}
+
+/**
+ * A match's confidence from its two columns, of which exactly one is set: the number from 1 to 100
+ * (docs/SPEC.md 3.9), or the level of an answer given in Phase 1.
+ */
+function readConfidence(row: Row): Confidence {
+  if (row.confidence_score === null) {
+    return enumOf(row, "confidence", CONFIDENCE_LEVELS);
+  }
+  none(row, "confidence");
+  const score = row.confidence_score;
+  if (!isConfidenceScore(score)) {
+    throw corrupt("the stored confidence_score is not a whole number from 1 to 100");
+  }
+  return score;
 }
 
 function readFailure(row: Row): FindFailure {

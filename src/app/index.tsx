@@ -36,7 +36,8 @@ type ListState =
 /**
  * The Log screen, the start screen (docs/SPEC.md 3.1): the finds, newest first as the store lists
  * them, each with its photo, date and time, the species name in the app's language and the
- * edibility of the matched species ("unknown" when the confidence is low, SPEC 3.3) with the
+ * edibility of the matched species ("unknown" below the confidence line, SPEC 3.9, or when a Phase 1
+ * level is low, SPEC 3.3) with the
  * disclaimer next to it (SPEC 3.5); a find still waiting or failed says so, and each opens its own
  * screen. A find the store cannot read is a row of its own, in its place, saying so; with its ID it
  * opens the find's screen, where it can be deleted (PBI-1.16), and without one the row itself

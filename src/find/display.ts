@@ -1,10 +1,10 @@
 /**
  * What the Log and Find screens show of a find (docs/SPEC.md 3.1, 3.6), as text: the route's find
- * ID, the time at the find's own UTC offset, the position, the map link, and the names of the
- * edibilities and the sources. It renders nothing.
+ * ID, the time at the find's own UTC offset, the position, the map link, the confidence, and the
+ * names of the edibilities and the sources. It renders nothing.
  */
 
-import type { Edibility } from "../analysis/answer";
+import type { Confidence, Edibility } from "../analysis/answer";
 import type { Language } from "../i18n/languages";
 import type { Strings } from "../i18n/strings";
 import type { FindTime, Position, PositionSource, TimeSource } from "../store/find";
@@ -128,6 +128,19 @@ function hasUnifiedMapsUrls(version: string | number): boolean {
 
 function inRange(value: number, limit: number): boolean {
   return Number.isFinite(value) && Math.abs(value) <= limit;
+}
+
+/**
+ * Claude's confidence in the match, in the app's language: a number from 1 to 100 as a number
+ * of 100 (docs/SPEC.md 3.9), or a Phase 1 find's level in words.
+ */
+export function confidenceText(confidence: Confidence, strings: Strings): string {
+  const t = strings.find;
+  const value =
+    typeof confidence === "number"
+      ? fillIn(t.confidenceScore, { score: String(confidence) })
+      : t.confidences[confidence];
+  return fillIn(t.confidence, { confidence: value });
 }
 
 /** The name of an edibility in the app's language. */

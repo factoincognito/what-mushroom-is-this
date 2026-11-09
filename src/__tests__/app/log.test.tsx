@@ -178,7 +178,10 @@ describe("the Log screen's list (SPEC 3.1)", () => {
       1,
       find(1, 0, done({ ...CHANTERELLE, edibility: "deadly_poisonous", confidence: 69 })),
     );
-    mockLog.finds.set(2, find(2, 1, done({ ...CHANTERELLE, edibility: "poisonous", confidence: 70 })));
+    mockLog.finds.set(
+      2,
+      find(2, 1, done({ ...CHANTERELLE, edibility: "poisonous", confidence: 70 })),
+    );
     await startApp();
     const below = within(await screen.findByTestId("find-row-1"));
     expect(

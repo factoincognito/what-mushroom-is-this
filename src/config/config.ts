@@ -42,6 +42,11 @@ export type AppConfig = {
    * one Unicode code point.
    */
   readonly lookupTextMaxLength: number;
+  /**
+   * The confidence, from 1 to 100, below which the edibility shown is "unknown", whatever the
+   * answer said (docs/SPEC.md 3.9, Answers). A Phase 1 find's level keeps the rule of 3.3.
+   */
+  readonly edibilityConfidenceLine: number;
 };
 
 /**
@@ -89,4 +94,6 @@ export const config: AppConfig = Object.freeze({
   // Both docs/SPEC.md 3.9, Clead's limits, kept as configuration as the spec says.
   maxPhotosPerFind: 5,
   lookupTextMaxLength: 2000,
+  // docs/SPEC.md 3.9: Adam's line, kept as configuration as the spec says.
+  edibilityConfidenceLine: 70,
 });

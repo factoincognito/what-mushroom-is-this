@@ -148,7 +148,10 @@ describe("parseAnswerText, accepted answers", () => {
   ])(
     "accepts the confidence written as %s, which JSON reads as the whole number %s",
     (written, value) => {
-      const text = JSON.stringify(matchJson()).replace('"confidence":90', `"confidence":${written}`);
+      const text = JSON.stringify(matchJson()).replace(
+        '"confidence":90',
+        `"confidence":${written}`,
+      );
       const result = parseAnswerText(text);
       expect(result.ok && result.answer.result === "match" && result.answer.confidence).toBe(value);
     },
@@ -745,6 +748,10 @@ describe("shownEdibility, a confidence from 1 to 100 (SPEC 3.9)", () => {
     expect(shownEdibility({ edibility: "edible", confidence: 79 }, 80)).toBe("unknown");
     expect(shownEdibility({ edibility: "edible", confidence: 80 }, 80)).toBe("edible");
     expect(shownEdibility({ edibility: "edible", confidence: 60 }, 60)).toBe("edible");
+  });
+
+  it("shows unknown for a confidence that is not a number at all, which no answer can hold", () => {
+    expect(shownEdibility({ edibility: "edible", confidence: Number.NaN })).toBe("unknown");
   });
 
   it("leaves the stored answer as Claude gave it", () => {

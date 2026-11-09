@@ -1365,7 +1365,11 @@ describe("get", () => {
 describe("list", () => {
   it("asks for the finds newest first and reads what the Log shows of each", async () => {
     db.reply("all", LIST, [
-      doneMatchRow({ id: 10, answer_json: answerToJson({ ...match, confidence: 42 }), confidence_score: 42 }),
+      doneMatchRow({
+        id: 10,
+        answer_json: answerToJson({ ...match, confidence: 42 }),
+        confidence_score: 42,
+      }),
       phaseOneMatchRow({ id: 9 }),
       summaryRow({
         id: 8,
