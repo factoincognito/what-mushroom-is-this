@@ -50,14 +50,34 @@ class VersionedDatabase implements FindDatabase {
 }
 
 describe("migrate", () => {
-  it("creates schema version 1 on an empty database, in one exclusive transaction", async () => {
+  it("knows two schema versions (PBI-2.2)", () => {
+    expect(MIGRATIONS).toHaveLength(2);
+  });
+
+  it("creates the current schema on an empty database, each version in one exclusive transaction", async () => {
     const db = new VersionedDatabase(0);
-    await expect(migrate(db)).resolves.toBe(1);
+    await expect(migrate(db)).resolves.toBe(2);
     expect(db.events).toEqual([
       { first: "PRAGMA user_version" },
       { tx: "begin" },
       { exec: MIGRATIONS[0] },
       { exec: "PRAGMA user_version = 1" },
+      { tx: "commit" },
+      { tx: "begin" },
+      { exec: MIGRATIONS[1] },
+      { exec: "PRAGMA user_version = 2" },
+      { tx: "commit" },
+    ]);
+  });
+
+  it("takes a version 1 database to version 2 by the second migration alone (PBI-2.2)", async () => {
+    const db = new VersionedDatabase(1);
+    await expect(migrate(db)).resolves.toBe(2);
+    expect(db.events).toEqual([
+      { first: "PRAGMA user_version" },
+      { tx: "begin" },
+      { exec: MIGRATIONS[1] },
+      { exec: "PRAGMA user_version = 2" },
       { tx: "commit" },
     ]);
   });
@@ -103,6 +123,12 @@ describe("migrate", () => {
     await expect(migrate(db, ["ONE;", "TWO;", "THREE;"])).rejects.toThrow("disk I/O error");
     expect(db.events.slice(-3)).toEqual([{ tx: "begin" }, { exec: "TWO;" }, { tx: "rollback" }]);
     expect(db.events).not.toContainEqual({ exec: "THREE;" });
+  });
+
+  it("refuses a database at a version past 2, and sends nothing to it (PBI-2.2)", async () => {
+    const db = new VersionedDatabase(3);
+    await expect(migrate(db)).rejects.toMatchObject({ code: "newer-schema" });
+    expect(db.events).toEqual([{ first: "PRAGMA user_version" }]);
   });
 
   it("refuses a database newer than the app knows, and sends nothing to it", async () => {
@@ -160,5 +186,47 @@ describe("schema version 1", () => {
 
   it("indexes the finds in the Log's order", () => {
     expect(v1).toContain("CREATE INDEX finds_newest_first ON finds (taken_at_ms DESC, id DESC)");
+  });
+});
+
+describe("schema version 2 (PBI-2.2)", () => {
+  const v2 = (MIGRATIONS[1] ?? "").replace(/\s+/g, " ");
+
+  it("rebuilds the finds table, still STRICT and with IDs that are never used again", () => {
+    expect(v2).toContain("CREATE TABLE finds_v2 ( id INTEGER PRIMARY KEY AUTOINCREMENT");
+    expect(v2).toMatch(/\) STRICT;/);
+    expect(v2).toContain("DROP TABLE finds;");
+    expect(v2).toContain("ALTER TABLE finds_v2 RENAME TO finds;");
+  });
+
+  it("copies the finds past the CHECKs, so a damaged row is kept as it is, and turns the CHECKs on again", () => {
+    expect(v2.indexOf("PRAGMA ignore_check_constraints = ON;")).toBeLessThan(
+      v2.indexOf("INSERT INTO finds_v2"),
+    );
+    expect(v2.trim().endsWith("PRAGMA ignore_check_constraints = OFF;")).toBe(true);
+  });
+
+  it("keeps each find's photo as its first photo, in batch 1, and its answer's state as analysed", () => {
+    expect(v2).toContain("json_array(json_object('file', photo_file, 'batch', 1)), 1, 0");
+    expect(v2).toContain("CASE WHEN answer_json IS NULL THEN NULL ELSE 'analysed' END");
+  });
+
+  it("lets the database refuse a self-check state and a state of the added photos it does not know", () => {
+    expect(v2).toContain(
+      "self_check TEXT CHECK (self_check IN ('waiting', 'agreed', 'disagreed', 'no-species', 'failed', 'no-picture'))",
+    );
+    expect(v2).toContain(
+      "added_photos TEXT CHECK (added_photos IN ('analysed', 'waiting', 'not-analysed'))",
+    );
+  });
+
+  it("holds the confidence as a level or as a whole number from 1 to 100, never both", () => {
+    expect(v2).toContain("confidence TEXT CHECK (confidence IN ('low', 'medium', 'high'))");
+    expect(v2).toContain("confidence_score INTEGER CHECK (confidence_score BETWEEN 1 AND 100)");
+    expect(v2).toContain("CHECK (confidence IS NULL OR confidence_score IS NULL)");
+  });
+
+  it("indexes the finds in the Log's order again", () => {
+    expect(v2).toContain("CREATE INDEX finds_newest_first ON finds (taken_at_ms DESC, id DESC)");
   });
 });

@@ -69,8 +69,8 @@ function insertPastChecks(columns: string, values: string, ...params: unknown[])
   try {
     const { lastInsertRowid } = sqlite
       .prepare(
-        `INSERT INTO finds (photo_file, state, ${columns})
-          VALUES ('unreadable.jpg', 'waiting', ${values})`,
+        `INSERT INTO finds (photos, batches, batch_open, state, ${columns})
+          VALUES ('[{"file":"unreadable.jpg","batch":1}]', 1, 0, 'waiting', ${values})`,
       )
       .run(...params);
     return Number(lastInsertRowid);
