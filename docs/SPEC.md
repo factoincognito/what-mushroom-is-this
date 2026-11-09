@@ -70,7 +70,9 @@ its own tests; the screens only wire them together. The modules:
 | position | taking the position for a new find |
 
 Nothing leaves the phone except the photo sent for analysis (section 3.3).
-There is no server.
+There is no server. Phase 2 adds the text and the several photos of a
+lookup, sent for analysis, and the area the map shows, sent to the map
+provider for its tiles (3.9, Adam's decision, 2026-11-09).
 
 ## 3. Component specs
 
@@ -303,7 +305,7 @@ When the queue has stopped (3.3), the Log screen says why and offers
 Sharing finds, importing them, maps inside the app, accounts, a server of
 any kind, backup, export or sync, species data or pictures from outside
 sources, push notifications, a web version, and the general "What is
-this?" app.
+this?" app. Phase 2 (3.9) adds maps inside the app; the rest stays out.
 
 ### 3.8 Distribution and done
 
@@ -311,6 +313,95 @@ this?" app.
 - The first version is called done only after a test session on Adam's
   Android phone: what CI cannot check (camera, location, layout, the real
   API call) is tried there.
+
+### 3.9 Phase 2
+
+Adam's additions of 2026-11-09 (18:48), with his answers to Clead's
+questions the same evening: the map shows online tiles from a map
+provider; the Library replaces the Log; below a confidence of 70 the
+edibility shown is "unknown"; Phase 2 is built now, alongside Phase 1's
+test session. Where this section and 3.1 to 3.7 differ, this section
+holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
+
+**Lookups.**
+
+- A lookup is by photo or by text. A photo lookup takes one or more
+  photos, each from the camera, the gallery or the phone's files (Adam).
+  A text lookup takes a description the user writes (Adam), up to 2,000
+  characters (**[Clead]**: the limit, configuration).
+- Each lookup screen has a "Save" switch (Adam). It starts on for a photo
+  lookup and off for a text lookup (Adam). Settings holds the two starting
+  values (**[Clead]**).
+- A saved lookup is a find, saved before any analysis as in 3.1, and goes
+  through the queue (3.4). A text find has the time of saving and the
+  position taken as for a camera find (3.6); it has no photo.
+- An unsaved lookup is analysed at once and its answer is shown on the
+  screen; nothing of it is stored, and its photos are removed when the
+  screen is left (**[Clead]**). Without a network, or when the queue is
+  stopped (3.3), it is not sent: the screen says so and offers to turn
+  "Save" on, so the lookup waits in the queue (**[Clead]**).
+- Photos from the phone's files are images only; a file the app cannot
+  load as an image is refused with a message (**[Clead]**). A photo from
+  the files has no position or time of its own, as a gallery photo
+  without metadata (3.1) (**[Clead]**).
+
+**Several photos per find.**
+
+- More photos can be added to a find from its screen, from the camera,
+  the gallery or the files (Adam), up to 5 photos per find in all
+  (**[Clead]**: the limit, configuration). A text find can also get photos
+  this way (**[Clead]**).
+- Each time a batch of photos is added, the find goes back to waiting and
+  a new analysis runs through the queue (Adam). The find's time and
+  position stay those of its first save (**[Clead]**).
+- An analysis sends all of the find's photos, each resized and checked as
+  in 3.3, in one request, and the find's text when it has one
+  (**[Clead]**). The new answer replaces the earlier one, as in 3.6.
+- A photo can be removed from a find; the find is then analysed again only
+  when the user asks (**[Clead]**).
+
+**Confidence.**
+
+- The answer gives a confidence from 1 to 100, low to high (Adam). It is
+  shown as a number with the note of 3.1, that it is Claude's own
+  statement, not a measured probability.
+- Below 70 the edibility shown is "unknown", whatever the answer said
+  (Adam: the line; configuration). It replaces the rule for "low" in 3.3.
+- A find analysed in Phase 1 keeps its low, medium or high, and the rule
+  of 3.3 applies to it, until it is analysed again (**[Clead]**).
+
+**The Library** (replaces the Log as the start screen; Adam).
+
+- It shows the finds either as a list or as pins on a map, with a switch
+  between the two (Adam).
+- Both views are filtered by the same filters (Adam):
+  - species: all (the default), or a choice of the species among the
+    finds, by their names in the app's language, and "not identified"
+    for finds without an answer naming a species (**[Clead]**);
+  - years: all years (the default), or a choice of the years that have
+    finds;
+  - months: all months (the default), or a choice of months.
+  A find's year and month are those of its time, in its own UTC offset
+  (**[Clead]**). The filters hold until changed while the app runs, and
+  start at their defaults when it starts (**[Clead]**).
+- The list shows every find that passes the filters, as the Log did
+  (3.1), with the queue's messages and "analyse now" (**[Clead]**).
+- The map opens centred on the phone's position, showing a radius of
+  5 km (Adam; **[Clead]**: configuration). It shows the finds that pass
+  the filters and lie in the area shown. Zooming or panning changes the
+  area, and the finds shown follow it (Adam).
+- Without a position for the phone, the map opens on the newest find with
+  a position, at the same scale; with none, it opens on a default area
+  (**[Clead]**: configuration). Finds without a position appear in the
+  list only (**[Clead]**).
+- Tapping a pin shows the find's species name and date; tapping that
+  opens the find (**[Clead]**).
+- The tiles come from a map provider, which sees the area shown (Adam's
+  decision); the finds and the phone's position are not sent to it. The
+  provider and the map library are chosen under the third-party code and
+  IP policy, and their terms are checked before the build (**[not
+  checked]**, Known unknown 11). Without a network the map shows the pins
+  on whatever tiles it has (**[Clead]**).
 
 ---
 
@@ -358,3 +449,14 @@ this?" app.
     from a fix the app had before the camera opened, or from the last
     known position (3.6); a fix after the camera closes still counts
     within the 30 seconds. Checked in Adam's test session (PBI-1.11).
+11. Phase 2's map provider and map library (3.9): which ones, whether
+    their terms allow this use without a fee, whether a key is needed,
+    and what the library sends besides tile requests. A library that
+    builds in Google's Maps SDK on Android brings Google's terms, like
+    `play-services-location`.
+12. Phase 2's request with several photos and text (3.9): the API's limits
+    on images and on request size, checked against the API documentation
+    before the build.
+13. Phase 2's library for picking from the phone's files (3.9), most
+    likely `expo-document-picker`, and whether its images load in
+    `expo-image-manipulator` as gallery photos do.
