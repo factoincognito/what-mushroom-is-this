@@ -7,7 +7,7 @@ import * as ImagePicker from "expo-image-picker";
 import { getLocales } from "expo-localization";
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import { act, fireEvent, renderRouter, screen } from "expo-router/testing-library";
+import { act, cleanup, fireEvent, renderRouter, screen } from "expo-router/testing-library";
 import { Alert, Linking } from "react-native";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
@@ -103,7 +103,8 @@ function phoneIn(languageCode: string): void {
     ]);
 }
 
-beforeEach(async () => {
+/** Sets the stand-ins each test starts from. */
+async function resetStandIns(): Promise<void> {
   jest.clearAllMocks();
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
@@ -142,7 +143,9 @@ beforeEach(async () => {
   jest
     .mocked(ImagePicker.launchImageLibraryAsync)
     .mockResolvedValue(wrong({ canceled: true, assets: null }));
-});
+}
+
+beforeEach(resetStandIns);
 
 /**
  * Lets the screen's chain of promises run. (The router's test renderer runs Jest's fake timers,
@@ -193,6 +196,23 @@ async function openNewFind(): Promise<{ pathname: () => string }> {
   await settle();
   return { pathname: () => app.getPathname() };
 }
+
+/**
+ * The time the first opening of New find in this file may take (PBI-1.28). The first render of
+ * the router loads the app: its test renderer requires every route under `src/app/`, and with
+ * them the screens' modules and the navigation libraries, and Jest first transforms each one its
+ * cache does not hold (a fresh clone, a changed file). On a 2-CPU machine with a cold cache that
+ * took 5 to 9 s, more than Jest's 5 s for a test, against well under 1 s for every later opening.
+ * So it is paid once, here, under a limit of its own, and each test keeps Jest's 5 s.
+ */
+const FIRST_LOAD_TIMEOUT_MS = 120_000;
+
+beforeAll(async () => {
+  await resetStandIns();
+  await openNewFind();
+  // Nothing of this opening is left for the first test: its tree goes, as after each test.
+  await cleanup();
+}, FIRST_LOAD_TIMEOUT_MS);
 
 function fix(latitude: number, longitude: number, accuracy: number) {
   return { coords: { latitude, longitude, accuracy }, timestamp: Date.now() };
