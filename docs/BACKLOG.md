@@ -88,7 +88,7 @@ write it.
   - a test could pin `owner` and `extra.eas.projectId` in `app.json` (note 3 on #42);
   - check that the APK's merged release manifest lacks `ACCESS_WIFI_STATE` and `SYSTEM_ALERT_WINDOW`. #40's review checked only the generated main manifest and listed this as not verified, and the first build's log was not read for it.
   Spec 3.6, 3.8.
-- **[NOW] PBI-1.30** (the first EAS build's `expo doctor` step, from Adam's screenshot of its log, 2026-11-09 18:04) — One copy of `expo-font`. `expo doctor` found two: 57.0.4 under `expo`, and 58.0.11 at the top level, pulled in by `expo-router` → `expo-symbols`, whose peer dependency on `expo-font` is `*`. A native module installed twice may cause build or runtime errors, so the app keeps the SDK 57 version only. Spec 3.8.
+- **[NEXT] PBI-1.30** (the first EAS build's `expo doctor` step, from Adam's screenshot of its log, 2026-11-09 18:04; taken up the same day as unattended work, product-office `RULES.md` § 24 (2)) — One copy of `expo-font`. `expo doctor` found two: 57.0.4 under `expo`, and 58.0.11 at the top level, pulled in by `expo-router` → `expo-symbols`, whose peer dependency on `expo-font` is `*`. A native module installed twice may cause build or runtime errors, so the app keeps the SDK 57 version only. Spec 3.8.
 
 ---
 
