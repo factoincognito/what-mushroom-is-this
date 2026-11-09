@@ -43,9 +43,12 @@ jest.mock("expo-localization", () => ({ getLocales: jest.fn() }));
 /*
  * The layout gives the screens the find log, which opens through expo-sqlite. expo-sqlite imports
  * expo-asset, which npm keeps under expo/node_modules: Metro finds it there (checked with
- * `npx expo export --platform android`), Jest does not. These tests open no find log.
+ * `npx expo export --platform android`), Jest does not. The Log screen lists the finds, so the
+ * stand-in gives an empty log.
  */
-jest.mock("../../store/deviceFindStore", () => ({ openFindLog: jest.fn() }));
+jest.mock("../../store/deviceFindStore", () => ({
+  openFindLog: jest.fn(async () => ({ list: async () => [] })),
+}));
 
 beforeEach(async () => {
   await AsyncStorage.clear();

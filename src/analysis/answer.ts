@@ -56,8 +56,11 @@ export type Answer = Match | { result: "no_mushroom" } | { result: "cannot_tell"
 export type AnswerFailure = { ok: false; reason: "not-api" | "shape" | "refused"; detail: string };
 export type AnswerResult = { ok: true; answer: Answer } | AnswerFailure;
 
-/** The edibility to show: "unknown" whenever the confidence is low. */
-export function shownEdibility(match: Match): Edibility {
+/**
+ * The edibility to show: "unknown" whenever the confidence is low. It takes the edibility and the
+ * confidence alone, so that a match and the Log's summary of one follow the same rule.
+ */
+export function shownEdibility(match: Pick<Match, "edibility" | "confidence">): Edibility {
   return match.confidence === "low" ? "unknown" : match.edibility;
 }
 

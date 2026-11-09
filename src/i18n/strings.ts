@@ -15,6 +15,13 @@ export type Strings = {
     readonly empty: string;
     readonly newFind: string;
     readonly settings: string;
+    /** A find in the list that waits for analysis. */
+    readonly waiting: string;
+    /** A find in the list whose analysis failed; its screen names the cause. */
+    readonly failed: string;
+    /** The list could not be read; the error itself is not shown. */
+    readonly unreadable: string;
+    readonly retry: string;
   };
   readonly settings: {
     readonly title: string;
@@ -127,6 +134,81 @@ export type Strings = {
     /** A failed new analysis of a find that has an answer. */
     readonly answerKept: string;
   };
+  /**
+   * The Find screen (docs/SPEC.md 3.1, 3.5), and what the Log shows of a find. `{edibility}`,
+   * `{confidence}`, `{time}`, `{coordinates}` and `{metres}` are filled in by the screens.
+   */
+  readonly find: {
+    readonly title: string;
+    /** No find has the address's ID, or the address names no ID. */
+    readonly notFound: string;
+    /** The store cannot read the find; the error itself is not shown. */
+    readonly unreadable: string;
+    readonly back: string;
+    /** The photo's accessibility label. */
+    readonly photo: string;
+    /** The label of the Latin name. */
+    readonly latin: string;
+    /** The edibility, labelled as that of the matched species (SPEC 3.5). */
+    readonly edibility: string;
+    /** A look-alike's edibility, labelled as that of its own species. */
+    readonly lookAlikeEdibility: string;
+    readonly edibilities: {
+      readonly edible: string;
+      readonly edibleAfterPreparation: string;
+      readonly notEdible: string;
+      readonly poisonous: string;
+      readonly deadlyPoisonous: string;
+      readonly unknown: string;
+    };
+    readonly confidence: string;
+    readonly confidences: {
+      readonly low: string;
+      readonly medium: string;
+      readonly high: string;
+    };
+    /** The confidence is Claude's own statement, not a measured probability (SPEC 3.1). */
+    readonly confidenceNote: string;
+    /** The heading of the general information. */
+    readonly generalInformation: string;
+    /** The heading of the poisonous look-alikes. */
+    readonly lookAlikes: string;
+    readonly noLookAlikes: string;
+    readonly noMushroom: string;
+    readonly cannotTell: string;
+    readonly waiting: string;
+    /** A failed find; the cause follows in the queue's words. */
+    readonly failed: string;
+    readonly time: string;
+    readonly timeSources: {
+      readonly saved: string;
+      readonly photo: string;
+      readonly photoPhoneOffset: string;
+    };
+    readonly position: string;
+    readonly accuracy: string;
+    readonly positionSources: {
+      readonly fix: string;
+      readonly lastKnown: string;
+      readonly photo: string;
+    };
+    readonly noPosition: string;
+    /** The link that opens the phone's own map app. */
+    readonly openMap: string;
+    readonly mapFailed: string;
+    /** Analyses a waiting find at once. */
+    readonly analyse: string;
+    /** Analyses an analysed or failed find again. */
+    readonly analyseAgain: string;
+    readonly analysing: string;
+    /** The analysis could not run for an error in the app; the error itself is not shown. */
+    readonly analysisError: string;
+    readonly delete: string;
+    readonly deleteConfirm: string;
+    readonly deleteYes: string;
+    readonly deleteCancel: string;
+    readonly deleteFailed: string;
+  };
 };
 
 /**
@@ -151,6 +233,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "notFound",
     "newFind",
     "queue",
+    "find",
   ],
   it: [
     "languageName",
@@ -163,6 +246,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "notFound",
     "newFind",
     "queue",
+    "find",
   ],
 };
 
@@ -181,6 +265,10 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       empty: "Inga fynd ännu.",
       newFind: "Nytt fynd",
       settings: "Inställningar",
+      waiting: "Väntar på analys",
+      failed: "Analysen misslyckades",
+      unreadable: "Fyndloggen gick inte att läsa.",
+      retry: "Försök igen",
     },
     settings: {
       title: "Inställningar",
@@ -279,6 +367,65 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       },
       answerKept: "Den nya analysen misslyckades. Det tidigare svaret finns kvar.",
     },
+    find: {
+      title: "Fynd",
+      notFound: "Fyndet finns inte. Det kan ha tagits bort.",
+      unreadable: "Fyndet gick inte att läsa.",
+      back: "Tillbaka till Fynd",
+      photo: "Fotot av fyndet",
+      latin: "Latin",
+      edibility: "Ätlighet för den matchade arten: {edibility}",
+      lookAlikeEdibility: "Ätlighet för den här arten: {edibility}",
+      edibilities: {
+        edible: "Ätlig",
+        edibleAfterPreparation: "Ätlig först efter tillagning",
+        notEdible: "Inte ätlig",
+        poisonous: "Giftig",
+        deadlyPoisonous: "Dödligt giftig",
+        unknown: "Okänd",
+      },
+      confidence: "Claudes säkerhet om matchningen: {confidence}",
+      confidences: {
+        low: "låg",
+        medium: "medel",
+        high: "hög",
+      },
+      confidenceNote: "Det här är Claudes egen uppgift, inte en uppmätt sannolikhet.",
+      generalInformation: "Om arten",
+      lookAlikes: "Giftiga förväxlingsarter",
+      noLookAlikes: "Claude angav inga giftiga förväxlingsarter.",
+      noMushroom: "Claude ser ingen svamp på fotot.",
+      cannotTell: "Claude ser en svamp men kan inte avgöra vilken art det är.",
+      waiting: "Fyndet väntar på analys.",
+      failed: "Analysen misslyckades.",
+      time: "Taget: {time}",
+      timeSources: {
+        saved: "Tiden är när fyndet sparades.",
+        photo: "Tiden kommer från fotots metadata.",
+        photoPhoneOffset:
+          "Tiden kommer från fotots metadata, som saknar UTC-förskjutning. Den är läst med telefonens förskjutning det datumet.",
+      },
+      position: "Position: {coordinates}",
+      accuracy: "Noggrannhet cirka {metres} m",
+      positionSources: {
+        fix: "Positionen är en mätning från telefonen.",
+        lastKnown: "Positionen är telefonens senast kända position.",
+        photo: "Positionen kommer från fotots metadata.",
+      },
+      noPosition: "Fyndet har ingen position.",
+      openMap: "Öppna i kartappen",
+      mapFailed: "Ingen kartapp kunde öppna positionen.",
+      analyse: "Analysera fyndet nu",
+      analyseAgain: "Analysera igen",
+      analysing: "Analyserar …",
+      analysisError:
+        "Analysen kunde inte köras på grund av ett fel i appen. Fyndet är som det var.",
+      delete: "Ta bort fyndet",
+      deleteConfirm: "Ta bort fyndet och dess foto? Det går inte att ångra.",
+      deleteYes: "Ta bort",
+      deleteCancel: "Avbryt",
+      deleteFailed: "Fyndet gick inte att ta bort. Försök igen.",
+    },
   },
   en: {
     languageName: "English",
@@ -293,6 +440,10 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       empty: "No finds yet.",
       newFind: "New find",
       settings: "Settings",
+      waiting: "Waiting for analysis",
+      failed: "The analysis failed",
+      unreadable: "The find log could not be read.",
+      retry: "Try again",
     },
     settings: {
       title: "Settings",
@@ -387,6 +538,65 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       },
       answerKept: "The new analysis failed. The earlier answer is kept.",
     },
+    find: {
+      title: "Find",
+      notFound: "This find does not exist. It may have been deleted.",
+      unreadable: "This find could not be read.",
+      back: "Back to Finds",
+      photo: "Photo of the find",
+      latin: "Latin",
+      edibility: "Edibility of the matched species: {edibility}",
+      lookAlikeEdibility: "Edibility of this species: {edibility}",
+      edibilities: {
+        edible: "Edible",
+        edibleAfterPreparation: "Edible only after preparation",
+        notEdible: "Not edible",
+        poisonous: "Poisonous",
+        deadlyPoisonous: "Deadly poisonous",
+        unknown: "Unknown",
+      },
+      confidence: "Claude's confidence in the match: {confidence}",
+      confidences: {
+        low: "low",
+        medium: "medium",
+        high: "high",
+      },
+      confidenceNote: "This is Claude's own statement, not a measured probability.",
+      generalInformation: "About the species",
+      lookAlikes: "Poisonous look-alikes",
+      noLookAlikes: "Claude named no poisonous look-alikes.",
+      noMushroom: "Claude sees no mushroom in the photo.",
+      cannotTell: "Claude sees a mushroom but cannot tell which species it is.",
+      waiting: "This find waits for analysis.",
+      failed: "The analysis failed.",
+      time: "Taken: {time}",
+      timeSources: {
+        saved: "The time is when the find was saved.",
+        photo: "The time comes from the photo's metadata.",
+        photoPhoneOffset:
+          "The time comes from the photo's metadata, which gives no UTC offset. It is read with the phone's offset on that date.",
+      },
+      position: "Position: {coordinates}",
+      accuracy: "Accurate to about {metres} m",
+      positionSources: {
+        fix: "The position is a fix from the phone.",
+        lastKnown: "The position is the phone's last known position.",
+        photo: "The position comes from the photo's metadata.",
+      },
+      noPosition: "This find has no position.",
+      openMap: "Open in the map app",
+      mapFailed: "No map app could open the position.",
+      analyse: "Analyse this find now",
+      analyseAgain: "Analyse again",
+      analysing: "Analysing…",
+      analysisError:
+        "The analysis could not run because of an error in the app. The find is as it was.",
+      delete: "Delete the find",
+      deleteConfirm: "Delete this find and its photo? This cannot be undone.",
+      deleteYes: "Delete",
+      deleteCancel: "Cancel",
+      deleteFailed: "The find could not be deleted. Try again.",
+    },
   },
   // Not checked by an Italian speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
   it: {
@@ -402,6 +612,10 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       empty: "Ancora nessun ritrovamento.",
       newFind: "Nuovo ritrovamento",
       settings: "Impostazioni",
+      waiting: "In attesa di analisi",
+      failed: "Analisi non riuscita",
+      unreadable: "Non è stato possibile leggere il registro dei ritrovamenti.",
+      retry: "Riprova",
     },
     settings: {
       title: "Impostazioni",
@@ -500,6 +714,65 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         photo: "Non è stato possibile leggere la foto per l'analisi ({detail}).",
       },
       answerKept: "La nuova analisi non è riuscita. La risposta precedente è mantenuta.",
+    },
+    find: {
+      title: "Ritrovamento",
+      notFound: "Questo ritrovamento non esiste. Potrebbe essere stato eliminato.",
+      unreadable: "Non è stato possibile leggere questo ritrovamento.",
+      back: "Torna a Ritrovamenti",
+      photo: "Foto del ritrovamento",
+      latin: "Latino",
+      edibility: "Commestibilità della specie individuata: {edibility}",
+      lookAlikeEdibility: "Commestibilità di questa specie: {edibility}",
+      edibilities: {
+        edible: "Commestibile",
+        edibleAfterPreparation: "Commestibile solo dopo la preparazione",
+        notEdible: "Non commestibile",
+        poisonous: "Velenosa",
+        deadlyPoisonous: "Mortalmente velenosa",
+        unknown: "Sconosciuta",
+      },
+      confidence: "Sicurezza di Claude sulla corrispondenza: {confidence}",
+      confidences: {
+        low: "bassa",
+        medium: "media",
+        high: "alta",
+      },
+      confidenceNote: "È una dichiarazione di Claude stesso, non una probabilità misurata.",
+      generalInformation: "Sulla specie",
+      lookAlikes: "Specie velenose simili",
+      noLookAlikes: "Claude non ha indicato specie velenose simili.",
+      noMushroom: "Claude non vede alcun fungo nella foto.",
+      cannotTell: "Claude vede un fungo ma non sa dire di quale specie si tratti.",
+      waiting: "Questo ritrovamento è in attesa di analisi.",
+      failed: "L'analisi non è riuscita.",
+      time: "Data e ora: {time}",
+      timeSources: {
+        saved: "L'ora è quella in cui il ritrovamento è stato salvato.",
+        photo: "L'ora proviene dai metadati della foto.",
+        photoPhoneOffset:
+          "L'ora proviene dai metadati della foto, che non indicano lo scarto da UTC. È letta con lo scarto del telefono in quella data.",
+      },
+      position: "Posizione: {coordinates}",
+      accuracy: "Precisione di circa {metres} m",
+      positionSources: {
+        fix: "La posizione è un rilevamento del telefono.",
+        lastKnown: "La posizione è l'ultima posizione nota del telefono.",
+        photo: "La posizione proviene dai metadati della foto.",
+      },
+      noPosition: "Questo ritrovamento non ha una posizione.",
+      openMap: "Apri nell'app delle mappe",
+      mapFailed: "Nessuna app delle mappe ha potuto aprire la posizione.",
+      analyse: "Analizza ora questo ritrovamento",
+      analyseAgain: "Analizza di nuovo",
+      analysing: "Analisi in corso…",
+      analysisError:
+        "Non è stato possibile eseguire l'analisi per un errore nell'app. Il ritrovamento è com'era.",
+      delete: "Elimina il ritrovamento",
+      deleteConfirm: "Eliminare il ritrovamento e la sua foto? L'operazione non si può annullare.",
+      deleteYes: "Elimina",
+      deleteCancel: "Annulla",
+      deleteFailed: "Non è stato possibile eliminare il ritrovamento. Riprova.",
     },
   },
 };
