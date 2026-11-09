@@ -114,9 +114,15 @@ export type SummaryAnalysis =
 
 export interface FindSummary {
   id: number;
-  photoUri: string;
+  /** The find's first photo; null for a text find without photos (docs/SPEC.md 3.9, PBI-2.4). */
+  photoUri: string | null;
   time: FindTime;
   analysis: SummaryAnalysis;
+  /**
+   * The self-check of an answer from the text alone, or null for any other find: the edibility
+   * shown is "unknown" until it agrees (docs/SPEC.md 3.9).
+   */
+  selfCheck: SelfCheck | null;
 }
 
 /**

@@ -4,7 +4,14 @@ import type { Answer } from "../analysis/answer";
 import type { AnalysisError } from "../analysis/errors";
 import { PhotoPreparationError, type PreparedPhoto } from "../image/prepareForAnalysis";
 import type { ReadKeyResult } from "../key/apiKey";
-import type { AnalysedAnswer, Analysis, AnalysisSent, Find, FindFailure } from "../store/find";
+import type {
+  AnalysedAnswer,
+  Analysis,
+  AnalysisSent,
+  FindFailure,
+  FindPhoto,
+  StoredFind,
+} from "../store/find";
 import { StoreError } from "../store/find";
 import { AnalysisQueue, type QueueDeps, type QueueLog, type QueueState } from "./queue";
 
@@ -21,21 +28,44 @@ const OTHER_ANSWER: Answer = { result: "cannot_tell" };
 const NOW = Date.UTC(2026, 10, 9, 12, 0, 0);
 const SETTINGS = { apiAddress: "https://api.anthropic.com", timeLimitMs: 60_000 };
 
-/** The find log in memory: the finds by ID, and every change the queue makes, in order. */
+/**
+ * The find log in memory: the finds by ID, as the store reads them in full (`getStored`, which the
+ * queue reads since PBI-2.4), and every change the queue makes, in order.
+ */
 class FakeLog implements QueueLog {
-  readonly finds = new Map<number, Find>();
+  readonly finds = new Map<number, StoredFind>();
   readonly changes: string[] = [];
   /** What each stored answer's analysis sent, as the queue told the store (PBI-2.2). */
   readonly sent: { id: number; photoUris: string[] }[] = [];
   failOn: string | null = null;
 
+  /** A photo find, its one photo named by its ID. */
   addFind(id: number, analysis: Analysis = { state: "waiting" }): void {
+    this.put(id, analysis, null, [{ uri: `file:///photos/${id}.jpg`, batch: 1 }]);
+  }
+
+  /** A text find without photos (SPEC 3.9), or with the photos given. */
+  addTextFind(
+    id: number,
+    text: string,
+    analysis: Analysis = { state: "waiting" },
+    photos: FindPhoto[] = [],
+  ): void {
+    this.put(id, analysis, text, photos);
+  }
+
+  private put(id: number, analysis: Analysis, text: string | null, photos: FindPhoto[]): void {
     this.finds.set(id, {
       id,
-      photoUri: `file:///photos/${id}.jpg`,
+      text,
+      photos,
+      batchOpen: false,
       time: { takenAtMs: NOW - id, utcOffsetMinutes: 60, source: "saved" },
       position: null,
       analysis,
+      addedPhotos: analysis.state === "done" ? "analysed" : null,
+      picture: null,
+      selfCheck: null,
     });
   }
 
@@ -52,8 +82,8 @@ class FakeLog implements QueueLog {
     return ids[0] ?? null;
   }
 
-  async get(id: number): Promise<Find | null> {
-    this.check("get");
+  async getStored(id: number): Promise<StoredFind | null> {
+    this.check("getStored");
     return this.finds.get(id) ?? null;
   }
 
@@ -61,29 +91,29 @@ class FakeLog implements QueueLog {
     this.check("setAnswer");
     this.changes.push(`setAnswer ${id}`);
     this.sent.push({ id, photoUris: [...sent.photoUris] });
-    this.put(id, { state: "done", ...analysed });
+    this.change(id, { state: "done", ...analysed });
   }
 
   async replaceAnswer(id: number, analysed: AnalysedAnswer, sent: AnalysisSent): Promise<void> {
     this.check("replaceAnswer");
     this.changes.push(`replaceAnswer ${id}`);
     this.sent.push({ id, photoUris: [...sent.photoUris] });
-    this.put(id, { state: "done", ...analysed });
+    this.change(id, { state: "done", ...analysed });
   }
 
   async markFailed(id: number, failure: FindFailure): Promise<void> {
     this.check("markFailed");
     this.changes.push(`markFailed ${id} ${failure.cause}: ${failure.detail}`);
-    this.put(id, { state: "failed", failure });
+    this.change(id, { state: "failed", failure });
   }
 
   async markWaiting(id: number): Promise<void> {
     this.check("markWaiting");
     this.changes.push(`markWaiting ${id}`);
-    this.put(id, { state: "waiting" });
+    this.change(id, { state: "waiting" });
   }
 
-  private put(id: number, analysis: Analysis): void {
+  private change(id: number, analysis: Analysis): void {
     const find = this.finds.get(id);
     if (find === undefined) {
       throw new StoreError("not-found", `no find has the ID ${id}`);
@@ -272,8 +302,8 @@ describe("the run (SPEC 3.4)", () => {
     const t = setup();
     t.log.addFind(1);
     t.log.addFind(2);
-    const original = t.log.get.bind(t.log);
-    t.log.get = async (id) => {
+    const original = t.log.getStored.bind(t.log);
+    t.log.getStored = async (id) => {
       if (id === 1) {
         t.log.finds.delete(1);
         return null;
@@ -1302,6 +1332,297 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
       });
       expect(t.log.changes).toEqual([]);
     });
+  });
+});
+
+const DESCRIPTION = "A yellow funnel with false gills, in moss under spruce.";
+
+describe("a text find in the queue (SPEC 3.9, PBI-2.4)", () => {
+  it("takes a waiting text find and sends its text, preparing no photo, and tells the store it sent none", async () => {
+    const t = setup();
+    t.log.addTextFind(1, DESCRIPTION);
+    await t.queue.trigger();
+    expect(t.prepared).toEqual([]);
+    expect(t.calls).toEqual([
+      {
+        apiAddress: SETTINGS.apiAddress,
+        model: "claude-opus-5-5",
+        apiKey: "sk-ant-test",
+        text: DESCRIPTION,
+        timeLimitMs: SETTINGS.timeLimitMs,
+      },
+    ]);
+    expect(t.log.sent).toEqual([{ id: 1, photoUris: [] }]);
+    expect(t.log.state(1)).toEqual({
+      state: "done",
+      answer: MATCH,
+      model: "claude-opus-5-5",
+      analysedAtMs: NOW,
+    });
+  });
+
+  it("takes text and photo finds in one run, oldest first by the find's ID", async () => {
+    const t = setup();
+    t.log.addFind(2);
+    t.log.addTextFind(1, DESCRIPTION);
+    t.log.addTextFind(3, "A white cap.");
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["setAnswer 1", "setAnswer 2", "setAnswer 3"]);
+    expect(t.calls.map((call) => call.text ?? call.imageBase64)).toEqual([
+      DESCRIPTION,
+      "AAAA",
+      "A white cap.",
+    ]);
+  });
+
+  it("a text find without photos ends the count of failed photo loads (SPEC 3.9, Batches)", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.log.addTextFind(2, DESCRIPTION);
+    t.log.addFind(3);
+    t.setPreparation(async () => loadFailed("load-failed"));
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual([
+      "markFailed 1 photo: load-failed",
+      "setAnswer 2",
+      "markFailed 3 photo: load-failed",
+    ]);
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it("each error class has its outcome for a text find, as for a photo find: a 400 fails it and the queue goes on", async () => {
+    const t = setup();
+    t.log.addTextFind(1, DESCRIPTION);
+    t.log.addTextFind(2, "A white cap.");
+    t.replies.push(
+      fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+    );
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual([
+      "markFailed 1 request: request-wrong (status 400)",
+      "setAnswer 2",
+    ]);
+  });
+
+  it("no network leaves a text find waiting and ends the run", async () => {
+    const t = setup();
+    t.log.addTextFind(1, DESCRIPTION);
+    t.replies.push(fail({ kind: "stays-waiting", cause: "network", status: null }));
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual([]);
+    expect(t.queue.getState().pause).toBe("network");
+  });
+
+  it("analyses a text find from its screen by its text, also while the queue is stopped", async () => {
+    const t = setup();
+    t.log.addTextFind(1, DESCRIPTION, {
+      state: "done",
+      answer: OTHER_ANSWER,
+      model: "m",
+      analysedAtMs: 1,
+    });
+    t.queue.stopForInternalError();
+    await expect(t.queue.analyseFind(1)).resolves.toEqual({ ok: true });
+    expect(t.calls.map((call) => call.text)).toEqual([DESCRIPTION]);
+    expect(t.log.changes).toEqual(["replaceAnswer 1"]);
+    expect(t.log.sent).toEqual([{ id: 1, photoUris: [] }]);
+  });
+
+  it("sends a text find that has photos by its first photo, as for a photo find, until all its photos are sent (PBI-2.5)", async () => {
+    const t = setup();
+    t.log.addTextFind(1, DESCRIPTION, { state: "waiting" }, [
+      { uri: "file:///photos/a.jpg", batch: 1 },
+      { uri: "file:///photos/b.jpg", batch: 1 },
+    ]);
+    await t.queue.trigger();
+    expect(t.prepared.map((call) => call.uri)).toEqual(["file:///photos/a.jpg"]);
+    expect(t.log.sent).toEqual([{ id: 1, photoUris: ["file:///photos/a.jpg"] }]);
+  });
+
+  it("refuses, as a store error that stops the queue, a waiting find with neither text nor a photo, which the store never gives", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    const find = t.log.finds.get(1);
+    if (find === undefined) {
+      throw new Error("no find 1");
+    }
+    t.log.finds.set(1, { ...find, photos: [] });
+    await expect(t.queue.trigger()).rejects.toMatchObject({ code: "corrupt" });
+    expect(t.calls).toEqual([]);
+    expect(t.log.changes).toEqual([]);
+  });
+});
+
+describe("an unsaved lookup, analysed from its screen (SPEC 3.9, Lookups)", () => {
+  it("sends the text at once, also while the queue is stopped, and stores nothing", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.queue.stopForInternalError();
+    await expect(t.queue.analyseLookup(DESCRIPTION)).resolves.toEqual({
+      ok: true,
+      answer: MATCH,
+      model: "claude-opus-5-5",
+    });
+    expect(t.calls.map((call) => call.text)).toEqual([DESCRIPTION]);
+    expect(t.prepared).toEqual([]);
+    expect(t.log.changes).toEqual([]);
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+  });
+
+  it.each([
+    ["no network", "network"],
+    ["the time limit", "time-out"],
+    ["a fault on Anthropic's side", "server"],
+  ] as const)(
+    "%s: gives the pause, as for a find that stays waiting, and neither pauses nor stops the queue",
+    async (_name, cause) => {
+      const t = setup();
+      t.replies.push(fail({ kind: "stays-waiting", cause, status: null }));
+      await expect(t.queue.analyseLookup(DESCRIPTION)).resolves.toEqual({
+        ok: false,
+        notice: { kind: "paused", cause },
+      });
+      expect(t.queue.getState()).toEqual({ running: false, stop: null, pause: null });
+    },
+  );
+
+  it.each([
+    [
+      "400",
+      fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+      { cause: "request", detail: "request-wrong (status 400)" },
+    ],
+    [
+      "a refusal",
+      fail({ kind: "find-failed", reason: "refused", detail: "x", status: 200, queue: "goes-on" }),
+      { cause: "refused", detail: "x" },
+    ],
+  ] as const)(
+    "%s: gives the failure, as for a find marked failed, and does not stop the queue",
+    async (_name, reply, failure) => {
+      const t = setup();
+      t.replies.push(reply);
+      await expect(t.queue.analyseLookup(DESCRIPTION)).resolves.toEqual({
+        ok: false,
+        notice: { kind: "find-failed", failure },
+      });
+      expect(t.queue.getState().stop).toBeNull();
+      expect(t.log.changes).toEqual([]);
+    },
+  );
+
+  it.each([
+    [
+      "an answer not of the shape",
+      fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
+      { kind: "find-failed", failure: { cause: "answer", detail: "bad" } },
+      { reason: "answer" },
+    ],
+    [
+      "401",
+      fail({ kind: "key-refused", status: 401, cause: "refused" }),
+      { kind: "stopped", stop: { reason: "key-refused" } },
+      { reason: "key-refused" },
+    ],
+    [
+      "the workspace 400",
+      fail({ kind: "key-refused", status: 400, cause: "not-scoped" }),
+      { kind: "stopped", stop: { reason: "key-not-scoped" } },
+      { reason: "key-not-scoped" },
+    ],
+    [
+      "402",
+      fail({ kind: "no-credit", status: 402 }),
+      { kind: "stopped", stop: { reason: "no-credit" } },
+      { reason: "no-credit" },
+    ],
+    [
+      "404",
+      fail({ kind: "model-unknown" }),
+      { kind: "stopped", stop: { reason: "model-unknown" } },
+      { reason: "model-unknown" },
+    ],
+    [
+      "429 without retry-after",
+      fail({ kind: "rate-limited", retryAt: null }),
+      {
+        kind: "stopped",
+        stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
+      },
+      { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
+    ],
+    [
+      "any other status",
+      fail({ kind: "other", status: 418 }),
+      { kind: "stopped", stop: { reason: "other", status: 418 } },
+      { reason: "other", status: 418 },
+    ],
+  ] as const)(
+    "%s: stops the queue as for a find, and gives the same message",
+    async (_name, reply, notice, stop) => {
+      const t = setup();
+      t.replies.push(reply);
+      await expect(t.queue.analyseLookup(DESCRIPTION)).resolves.toEqual({ ok: false, notice });
+      expect(t.queue.getState().stop).toEqual(stop);
+      expect(t.log.changes).toEqual([]);
+    },
+  );
+
+  it("429 with retry-after: stops the queue until then, and it starts again by itself", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.replies.push(fail({ kind: "rate-limited", retryAt: NOW + 30_000 }));
+    await t.queue.analyseLookup(DESCRIPTION);
+    expect(t.queue.getState().stop).toEqual({
+      reason: "rate-limited",
+      retryAtMs: NOW + 30_000,
+      accessResumesAtMs: null,
+    });
+    expect(t.timers.map((timer) => timer.delayMs)).toEqual([30_000]);
+    t.setNow(NOW + 30_000);
+    t.timers[0]?.task();
+    await flush();
+    expect(t.log.changes).toEqual(["setAnswer 1"]);
+  });
+
+  it("without a key: stops the queue for a key and says so, sending nothing", async () => {
+    const t = setup();
+    t.setKey({ ok: true, key: null });
+    await expect(t.queue.analyseLookup(DESCRIPTION)).resolves.toEqual({
+      ok: false,
+      notice: { kind: "stopped", stop: { reason: "no-key" } },
+    });
+    expect(t.calls).toEqual([]);
+    expect(t.queue.getState().stop).toEqual({ reason: "no-key" });
+  });
+
+  it("passes on an error the queue does not handle, storing nothing", async () => {
+    const t = setup();
+    t.replies.push(async () => {
+      throw new RangeError("timeLimitMs must be an integer");
+    });
+    await expect(t.queue.analyseLookup(DESCRIPTION)).rejects.toThrow(RangeError);
+    expect(t.log.changes).toEqual([]);
+  });
+
+  it("does not send while a run's request is under way, but after it", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    let release: () => void = () => undefined;
+    t.replies.push(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ ok: true, answer: MATCH });
+        }),
+    );
+    const run = t.queue.trigger();
+    await flush();
+    const lookup = t.queue.analyseLookup(DESCRIPTION);
+    await flush();
+    expect(t.calls).toHaveLength(1);
+    release();
+    await Promise.all([run, lookup]);
+    expect(t.calls.map((call) => call.text ?? call.imageBase64)).toEqual(["AAAA", DESCRIPTION]);
   });
 });
 

@@ -6,6 +6,11 @@ export type Strings = {
   readonly languageName: string;
   /** The disclaimer of docs/SPEC.md 3.5, exactly as written there. */
   readonly disclaimer: string;
+  /**
+   * The disclaimer for a lookup without photos (docs/SPEC.md 3.9, Answers): the first sentence of
+   * `disclaimer`, and in place of its second, the one about a description.
+   */
+  readonly disclaimerDescribed: string;
   readonly firstStart: {
     readonly title: string;
     readonly accept: string;
@@ -14,6 +19,8 @@ export type Strings = {
     readonly title: string;
     readonly empty: string;
     readonly newFind: string;
+    /** The link to the text lookup (docs/SPEC.md 3.9). */
+    readonly textLookup: string;
     readonly settings: string;
     /** A find in the list that waits for analysis. */
     readonly waiting: string;
@@ -61,6 +68,13 @@ export type Strings = {
       readonly invalid: string;
       readonly saveFailed: string;
     };
+    /** The starting value of a text lookup's "Save" switch (docs/SPEC.md 3.9). */
+    readonly lookups: {
+      readonly heading: string;
+      /** The label of the switch. */
+      readonly textSave: string;
+      readonly saveFailed: string;
+    };
   };
   readonly notFound: {
     readonly title: string;
@@ -97,6 +111,37 @@ export type Strings = {
     /** The camera permission was refused and the phone lets the app ask no more. */
     readonly cameraBlocked: string;
     /** The location permission is not given: photos from the camera get no position. */
+    readonly locationDenied: string;
+    readonly openSettings: string;
+  };
+  /** The text lookup screen (docs/SPEC.md 3.9, Lookups). `{count}` and `{max}` are filled in. */
+  readonly lookup: {
+    readonly title: string;
+    /** Shown while the app asks for the location, saying what it is for. */
+    readonly asking: string;
+    /** The label of the field the description is written in. */
+    readonly input: string;
+    /** The characters written against the limit. */
+    readonly count: string;
+    /** The label of the "Save" switch. */
+    readonly save: string;
+    /** What the switch does. */
+    readonly saveHint: string;
+    readonly analyse: string;
+    readonly analysing: string;
+    readonly saving: string;
+    /** Nothing is written, so there is nothing to analyse or save. */
+    readonly empty: string;
+    readonly saveFailed: string;
+    /** The offer after a pause or without a key, so the lookup waits in the queue. */
+    readonly turnSaveOn: string;
+    /** The analysis could not run for an error in the app; the error itself is not shown. */
+    readonly analysisError: string;
+    /** The question asked when the screen is left with an unsaved lookup, and its answers. */
+    readonly leaveConfirm: string;
+    readonly leaveYes: string;
+    readonly leaveCancel: string;
+    /** The location permission is not given: a saved lookup gets no position. */
     readonly locationDenied: string;
     readonly openSettings: string;
   };
@@ -185,6 +230,8 @@ export type Strings = {
       };
       /** Claude declined to analyse the photo (`stop_reason` `refusal`). */
       readonly refused: string;
+      /** Claude declined to analyse a description, for a lookup without photos. */
+      readonly refusedDescribed: string;
     };
     /** A failed new analysis of a find that has an answer. */
     readonly answerKept: string;
@@ -234,6 +281,22 @@ export type Strings = {
     readonly noLookAlikes: string;
     readonly noMushroom: string;
     readonly cannotTell: string;
+    /** "No mushroom" and "cannot tell" for a lookup without photos (docs/SPEC.md 3.9, Answers). */
+    readonly noMushroomDescribed: string;
+    readonly cannotTellDescribed: string;
+    /** The heading of a text find's description. */
+    readonly description: string;
+    /**
+     * Why the edibility of an answer from the text alone is shown as unknown, for each state of its
+     * self-check but "agreed" (docs/SPEC.md 3.9). `{matched}` and `{named}` are the two species.
+     */
+    readonly selfCheck: {
+      readonly waiting: string;
+      readonly disagreed: string;
+      readonly noSpecies: string;
+      readonly failed: string;
+      readonly noPicture: string;
+    };
     readonly waiting: string;
     /** A failed find; the cause follows in the queue's words. */
     readonly failed: string;
@@ -263,6 +326,8 @@ export type Strings = {
     readonly analysisError: string;
     readonly delete: string;
     readonly deleteConfirm: string;
+    /** The delete question for a find without photos. */
+    readonly deleteConfirmDescribed: string;
     readonly deleteYes: string;
     readonly deleteCancel: string;
     readonly deleteFailed: string;
@@ -303,28 +368,36 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
 } = {
   sv: [
     "languageName",
+    "disclaimerDescribed",
     "firstStart",
     "log",
     "settings.title",
     "settings.languageHeading",
     "settings.key",
     "settings.model",
+    "settings.lookups",
     "notFound",
     "newFind",
+    "lookup",
     "queue",
     "find",
     "about",
   ],
+  // The disclaimer for a lookup without photos is to be checked by the Italian speaker who
+  // checked the disclaimer of SPEC 3.5 (docs/SPEC.md 3.9, Answers; docs/BACKLOG.md PBI-2.4).
   it: [
     "languageName",
+    "disclaimerDescribed",
     "firstStart",
     "log",
     "settings.title",
     "settings.languageHeading",
     "settings.key",
     "settings.model",
+    "settings.lookups",
     "notFound",
     "newFind",
+    "lookup",
     "queue",
     "find",
     "about",
@@ -337,6 +410,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     languageName: "Svenska",
     disclaimer:
       "Ätligheten som visas gäller den art som appen har matchat. Det finns ingen garanti för att svampen på ditt foto är den arten.",
+    disclaimerDescribed:
+      "Ätligheten som visas gäller den art som appen har matchat. Det finns ingen garanti för att svampen du har beskrivit är den arten.",
     firstStart: {
       title: "Innan du börjar",
       accept: "Godkänn",
@@ -345,6 +420,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Fynd",
       empty: "Inga fynd ännu.",
       newFind: "Nytt fynd",
+      textLookup: "Beskriv en svamp",
       settings: "Inställningar",
       waiting: "Väntar på analys",
       failed: "Analysen misslyckades",
@@ -382,6 +458,11 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "Ett modell-ID har inga mellanslag och bara vanliga ASCII-tecken. Det sparades inte.",
         saveFailed: "Modellen gick inte att spara. Försök igen.",
       },
+      lookups: {
+        heading: "Sökningar",
+        textSave: "Spara är på när en textsökning börjar",
+        saveFailed: "Inställningen gick inte att spara. Försök igen.",
+      },
     },
     notFound: {
       title: "Hittades inte",
@@ -414,6 +495,29 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "Appen får inte använda kameran. Du kan tillåta det i telefonens inställningar eller välja ett foto i galleriet.",
       locationDenied:
         "Appen får inte använda telefonens plats, så ett foto från kameran sparas utan position. Du kan tillåta det i telefonens inställningar.",
+      openSettings: "Öppna telefonens inställningar",
+    },
+    lookup: {
+      title: "Beskriv en svamp",
+      asking:
+        "Appen ber om att få använda telefonens plats, för att notera var en sparad sökning gjordes.",
+      input: "Din beskrivning av svampen",
+      count: "{count} av {max} tecken",
+      save: "Spara",
+      saveHint: "När Spara är på blir sökningen ett fynd i loggen och väntar där på analys.",
+      analyse: "Analysera",
+      analysing: "Analyserar …",
+      saving: "Sparar fyndet …",
+      empty: "Skriv en beskrivning först.",
+      saveFailed: "Fyndet gick inte att spara. Försök igen.",
+      turnSaveOn: "Slå på Spara, så att sökningen väntar i kön",
+      analysisError: "Analysen kunde inte köras på grund av ett fel i appen.",
+      leaveConfirm:
+        "Lämna sidan och slänga sökningen? Den är inte sparad och går inte att få tillbaka.",
+      leaveYes: "Släng och lämna",
+      leaveCancel: "Stanna kvar",
+      locationDenied:
+        "Appen får inte använda telefonens plats, så en sparad sökning får ingen position. Du kan tillåta det i telefonens inställningar.",
       openSettings: "Öppna telefonens inställningar",
     },
     queue: {
@@ -489,6 +593,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           shape: "Claudes svar hade inte den form som appen väntar sig.",
         },
         refused: "Claude avböjde att analysera det här fotot.",
+        refusedDescribed: "Claude avböjde att analysera den här beskrivningen.",
       },
       answerKept: "Den nya analysen misslyckades. Det tidigare svaret finns kvar.",
     },
@@ -522,6 +627,20 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       noLookAlikes: "Claude angav inga giftiga förväxlingsarter.",
       noMushroom: "Claude ser ingen svamp på fotot.",
       cannotTell: "Claude ser en svamp men kan inte avgöra vilken art det är.",
+      noMushroomDescribed: "Beskrivningen gäller ingen svamp.",
+      cannotTellDescribed:
+        "Beskrivningen säger inte tillräckligt för att avgöra vilken art det är.",
+      description: "Din beskrivning",
+      selfCheck: {
+        waiting:
+          "Ätligheten visas som okänd tills en kontroll mot en bild av arten bekräftar matchningen. Kontrollen har inte gjorts ännu.",
+        disagreed:
+          "Ätligheten visas som okänd: en kontroll mot en bild av {matched} angav en annan art, {named}.",
+        noSpecies:
+          "Ätligheten visas som okänd: en kontroll mot en bild av arten kunde inte ange någon art.",
+        failed: "Ätligheten visas som okänd: kontrollen mot en bild av arten misslyckades.",
+        noPicture: "Ätligheten visas som okänd: ingen bild av arten hittades för kontrollen.",
+      },
       waiting: "Fyndet väntar på analys.",
       failed: "Analysen misslyckades.",
       time: "Taget: {time}",
@@ -548,6 +667,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "Analysen kunde inte köras på grund av ett fel i appen. Fyndet är som det var.",
       delete: "Ta bort fyndet",
       deleteConfirm: "Ta bort fyndet och dess foto? Det går inte att ångra.",
+      deleteConfirmDescribed: "Ta bort fyndet? Det går inte att ångra.",
       deleteYes: "Ta bort",
       deleteCancel: "Avbryt",
       deleteFailed: "Fyndet gick inte att ta bort. Försök igen.",
@@ -568,6 +688,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     languageName: "English",
     disclaimer:
       "The edibility shown is that of the species the app matched. There is no guarantee that the mushroom in your photo is that species.",
+    disclaimerDescribed:
+      "The edibility shown is that of the species the app matched. There is no guarantee that the mushroom you described is that species.",
     firstStart: {
       title: "Before you start",
       accept: "Accept",
@@ -576,6 +698,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Finds",
       empty: "No finds yet.",
       newFind: "New find",
+      textLookup: "Describe a mushroom",
       settings: "Settings",
       waiting: "Waiting for analysis",
       failed: "The analysis failed",
@@ -612,6 +735,11 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         invalid: "A model ID has no spaces and only plain ASCII characters. It was not saved.",
         saveFailed: "The model could not be saved. Try again.",
       },
+      lookups: {
+        heading: "Lookups",
+        textSave: "Save is on when a text lookup starts",
+        saveFailed: "The setting could not be saved. Try again.",
+      },
     },
     notFound: {
       title: "Not found",
@@ -643,6 +771,27 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "The app may not use the camera. You can allow it in the phone's settings, or pick a photo from the gallery.",
       locationDenied:
         "The app may not use the phone's location, so a photo from the camera is saved without a position. You can allow it in the phone's settings.",
+      openSettings: "Open the phone's settings",
+    },
+    lookup: {
+      title: "Describe a mushroom",
+      asking: "The app asks to use the phone's location, to note where a saved lookup was made.",
+      input: "Your description of the mushroom",
+      count: "{count} of {max} characters",
+      save: "Save",
+      saveHint: "With Save on, the lookup becomes a find in the log and waits there for analysis.",
+      analyse: "Analyse",
+      analysing: "Analysing…",
+      saving: "Saving the find…",
+      empty: "Write a description first.",
+      saveFailed: "The find could not be saved. Try again.",
+      turnSaveOn: "Turn Save on, so the lookup waits in the queue",
+      analysisError: "The analysis could not run because of an error in the app.",
+      leaveConfirm: "Leave and discard the lookup? It is not saved, and it cannot be got back.",
+      leaveYes: "Discard and leave",
+      leaveCancel: "Stay",
+      locationDenied:
+        "The app may not use the phone's location, so a saved lookup gets no position. You can allow it in the phone's settings.",
       openSettings: "Open the phone's settings",
     },
     queue: {
@@ -716,6 +865,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           shape: "Claude's answer did not have the form the app expects.",
         },
         refused: "Claude declined to analyse this photo.",
+        refusedDescribed: "Claude declined to analyse this description.",
       },
       answerKept: "The new analysis failed. The earlier answer is kept.",
     },
@@ -749,6 +899,20 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       noLookAlikes: "Claude named no poisonous look-alikes.",
       noMushroom: "Claude sees no mushroom in the photo.",
       cannotTell: "Claude sees a mushroom but cannot tell which species it is.",
+      noMushroomDescribed: "The description is not of a mushroom.",
+      cannotTellDescribed: "The description does not say enough to tell which species it is.",
+      description: "Your description",
+      selfCheck: {
+        waiting:
+          "The edibility is shown as unknown until a check on a picture of the species agrees with this match. The check has not been made yet.",
+        disagreed:
+          "The edibility is shown as unknown: a check on a picture of {matched} named another species, {named}.",
+        noSpecies:
+          "The edibility is shown as unknown: a check on a picture of the species could not name a species.",
+        failed: "The edibility is shown as unknown: the check on a picture of the species failed.",
+        noPicture:
+          "The edibility is shown as unknown: no picture of the species was found for the check.",
+      },
       waiting: "This find waits for analysis.",
       failed: "The analysis failed.",
       time: "Taken: {time}",
@@ -775,6 +939,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "The analysis could not run because of an error in the app. The find is as it was.",
       delete: "Delete the find",
       deleteConfirm: "Delete this find and its photo? This cannot be undone.",
+      deleteConfirmDescribed: "Delete this find? This cannot be undone.",
       deleteYes: "Delete",
       deleteCancel: "Cancel",
       deleteFailed: "The find could not be deleted. Try again.",
@@ -796,6 +961,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     languageName: "Italiano",
     disclaimer:
       "La commestibilità indicata è quella della specie individuata dall'app. Non c'è alcuna garanzia che il fungo nella tua foto sia di quella specie.",
+    disclaimerDescribed:
+      "La commestibilità indicata è quella della specie individuata dall'app. Non c'è alcuna garanzia che il fungo che hai descritto sia di quella specie.",
     firstStart: {
       title: "Prima di iniziare",
       accept: "Accetta",
@@ -804,6 +971,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Ritrovamenti",
       empty: "Ancora nessun ritrovamento.",
       newFind: "Nuovo ritrovamento",
+      textLookup: "Descrivi un fungo",
       settings: "Impostazioni",
       waiting: "In attesa di analisi",
       failed: "Analisi non riuscita",
@@ -841,6 +1009,11 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "Un ID modello non ha spazi e contiene solo caratteri ASCII semplici. Non è stato salvato.",
         saveFailed: "Non è stato possibile salvare il modello. Riprova.",
       },
+      lookups: {
+        heading: "Ricerche",
+        textSave: "Salva è attivo all'inizio di una ricerca testuale",
+        saveFailed: "Non è stato possibile salvare l'impostazione. Riprova.",
+      },
     },
     notFound: {
       title: "Non trovata",
@@ -872,6 +1045,29 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "L'app non può usare la fotocamera. Puoi consentirlo nelle impostazioni del telefono, oppure scegliere una foto dalla galleria.",
       locationDenied:
         "L'app non può usare la posizione del telefono, quindi una foto dalla fotocamera viene salvata senza posizione. Puoi consentirlo nelle impostazioni del telefono.",
+      openSettings: "Apri le impostazioni del telefono",
+    },
+    lookup: {
+      title: "Descrivi un fungo",
+      asking:
+        "L'app chiede di usare la posizione del telefono, per annotare dove è stata fatta una ricerca salvata.",
+      input: "La tua descrizione del fungo",
+      count: "{count} di {max} caratteri",
+      save: "Salva",
+      saveHint:
+        "Con Salva attivo, la ricerca diventa un ritrovamento nel registro e lì resta in attesa di analisi.",
+      analyse: "Analizza",
+      analysing: "Analisi in corso…",
+      saving: "Salvataggio del ritrovamento…",
+      empty: "Scrivi prima una descrizione.",
+      saveFailed: "Non è stato possibile salvare il ritrovamento. Riprova.",
+      turnSaveOn: "Attiva Salva, così la ricerca resta in coda",
+      analysisError: "Non è stato possibile eseguire l'analisi per un errore nell'app.",
+      leaveConfirm: "Uscire e scartare la ricerca? Non è stata salvata e non si potrà recuperare.",
+      leaveYes: "Scarta ed esci",
+      leaveCancel: "Resta",
+      locationDenied:
+        "L'app non può usare la posizione del telefono, quindi una ricerca salvata non avrà una posizione. Puoi consentirlo nelle impostazioni del telefono.",
       openSettings: "Apri le impostazioni del telefono",
     },
     queue: {
@@ -950,6 +1146,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           shape: "La risposta di Claude non aveva la forma che l'app si aspetta.",
         },
         refused: "Claude ha rifiutato di analizzare questa foto.",
+        refusedDescribed: "Claude ha rifiutato di analizzare questa descrizione.",
       },
       answerKept: "La nuova analisi non è riuscita. La risposta precedente è mantenuta.",
     },
@@ -983,6 +1180,22 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       noLookAlikes: "Claude non ha indicato specie velenose simili.",
       noMushroom: "Claude non vede alcun fungo nella foto.",
       cannotTell: "Claude vede un fungo ma non sa dire di quale specie si tratti.",
+      noMushroomDescribed: "La descrizione non è di un fungo.",
+      cannotTellDescribed:
+        "La descrizione non dice abbastanza per stabilire di quale specie si tratti.",
+      description: "La tua descrizione",
+      selfCheck: {
+        waiting:
+          "La commestibilità è indicata come sconosciuta finché un controllo su un'immagine della specie non conferma questa corrispondenza. Il controllo non è ancora stato fatto.",
+        disagreed:
+          "La commestibilità è indicata come sconosciuta: un controllo su un'immagine di {matched} ha indicato un'altra specie, {named}.",
+        noSpecies:
+          "La commestibilità è indicata come sconosciuta: un controllo su un'immagine della specie non ha potuto indicare una specie.",
+        failed:
+          "La commestibilità è indicata come sconosciuta: il controllo su un'immagine della specie non è riuscito.",
+        noPicture:
+          "La commestibilità è indicata come sconosciuta: non è stata trovata nessuna immagine della specie per il controllo.",
+      },
       waiting: "Questo ritrovamento è in attesa di analisi.",
       failed: "L'analisi non è riuscita.",
       time: "Data e ora: {time}",
@@ -1009,6 +1222,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "Non è stato possibile eseguire l'analisi per un errore nell'app. Il ritrovamento è com'era.",
       delete: "Elimina il ritrovamento",
       deleteConfirm: "Eliminare il ritrovamento e la sua foto? L'operazione non si può annullare.",
+      deleteConfirmDescribed: "Eliminare il ritrovamento? L'operazione non si può annullare.",
       deleteYes: "Elimina",
       deleteCancel: "Annulla",
       deleteFailed: "Non è stato possibile eliminare il ritrovamento. Riprova.",

@@ -409,6 +409,26 @@ describe("the message for a refused answer (PBI-1.21)", () => {
       expect(message).toContain("Claude");
     },
   );
+
+  it.each(LANGUAGES)(
+    "in %s speaks of the description, not a photo, for a lookup without photos (PBI-2.4)",
+    (language) => {
+      const failure: FindFailure = { cause: "refused", detail: "x" };
+      const t = STRINGS[language];
+      expect(failureMessage(failure, t, "described")).toBe(t.queue.failed.refusedDescribed);
+      expect(failureMessage(failure, t, "photo")).toBe(t.queue.failed.refused);
+      expect(
+        noticeMessage({ kind: "find-failed", failure }, t, formatTimeIn(language), "described"),
+      ).toBe(t.queue.failed.refusedDescribed);
+    },
+  );
+
+  it("leaves every other failure's message as it is for a lookup without photos", () => {
+    const failure: FindFailure = { cause: "request", detail: "request-wrong (status 400)" };
+    expect(failureMessage(failure, STRINGS.en, "described")).toBe(
+      failureMessage(failure, STRINGS.en),
+    );
+  });
 });
 
 describe("the message for a key not scoped to a workspace (Clead's decision on #18, note 4)", () => {

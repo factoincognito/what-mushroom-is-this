@@ -5,7 +5,7 @@
 
 import type { AnalysisInput } from "../analysis/analyse";
 import type { Answer } from "../analysis/answer";
-import { createFindStore, type FindStore } from "../store/findStore";
+import { createFindStore, type FindStore, type LookupStore } from "../store/findStore";
 import {
   type DatabaseSync,
   memoryPhotos,
@@ -24,7 +24,7 @@ const MATCH: Answer = {
 };
 
 let sqlite: DatabaseSync;
-let store: FindStore;
+let store: FindStore & LookupStore;
 let calls: AnalysisInput[];
 let queue: AnalysisQueue;
 

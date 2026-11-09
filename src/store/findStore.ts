@@ -81,9 +81,9 @@ import { migrate } from "./schema";
  *
  * `setPosition` changes no analysis state: it applies in any state, to a find without a position.
  *
- * A find without a photo (a text find, `LookupStore.addText`) has no Phase 1 view: `get` refuses
- * it as `corrupt`, the list marks it unreadable and `oldestWaiting` passes over it, until the
- * screens and the queue read it through `getStored` (PBI-2.4, PBI-2.7).
+ * A find without a photo (a text find, `LookupStore.addText`) has no Phase 1 view, so `get`
+ * refuses it as `corrupt`; the list and `oldestWaiting` judge a row as `getStored` reads it, so
+ * they list it and take it (PBI-2.4), and the screens and the queue read it through `getStored`.
  */
 export interface FindStore {
   /** Saves a new find, waiting for analysis, with a copy of its photo; gives its ID. */
@@ -91,16 +91,17 @@ export interface FindStore {
   /** The find with the ID, or null when there is none. */
   get(id: number): Promise<Find | null>;
   /**
-   * What the Log list shows of every find, the latest taken first. A find whose row cannot be read
-   * as `get` reads it is marked unreadable in its place, and the others are listed all the same.
+   * What the Log list shows of every find, the latest taken first, a text find without photos
+   * with no photo. A find whose row cannot be read as `getStored` reads it is marked unreadable in
+   * its place, and the others are listed all the same.
    */
   list(): Promise<ListedFind[]>;
   /**
    * The ID of the waiting find saved first whose batch is complete, or null when none waits: the
    * queue's "oldest first" is the order of saving, the find's ID, not the time taken (docs/SPEC.md
    * 3.4), and the queue does not take a find while its batch is open (3.9). A waiting find whose
-   * row cannot be read is passed over and left as it is, so it does not stop the queue; the list
-   * shows it as unreadable.
+   * row cannot be read as `getStored` reads it is passed over and left as it is, so it does not
+   * stop the queue; the list shows it as unreadable.
    */
   oldestWaiting(): Promise<number | null>;
   /**
@@ -185,6 +186,12 @@ export interface LookupStore {
   /** Everything the store holds of the find with the ID, or null when there is none. */
   getStored(id: number): Promise<StoredFind | null>;
 }
+
+/**
+ * The find log as the screens and the queue use it: Phase 1's `FindStore`, and of `LookupStore`
+ * the text find and the reading of everything a find holds (PBI-2.4). Later items add the rest.
+ */
+export type FindLog = FindStore & Pick<LookupStore, "addText" | "getStored">;
 
 export interface StoreOptions {
   /** A name for a new photo that no other photo in the directory has. */
@@ -510,7 +517,7 @@ export async function createFindStore(
         const row = record(found);
         // Without its ID there is no passing over it: the next ask would give the same row.
         const id = integerOf(row, "id");
-        if (readsAsFind(row, photos)) {
+        if (readsAsStored(row, photos)) {
           return id;
         }
         after = id;
@@ -925,10 +932,13 @@ function readPicture(row: Row, selfCheck: SelfCheck | null, photos: PhotoFiles):
   };
 }
 
-/** Whether the row reads as a find; an error that is not about what is stored passes through. */
-function readsAsFind(row: Row, photos: PhotoFiles): boolean {
+/**
+ * Whether the row reads as `getStored` reads a find, a text find without photos included (PBI-2.4);
+ * an error that is not about what is stored passes through.
+ */
+function readsAsStored(row: Row, photos: PhotoFiles): boolean {
   try {
-    readFind(row, photos);
+    readStored(row, photos);
     return true;
   } catch (error) {
     if (isCorrupt(error)) {
@@ -939,14 +949,14 @@ function readsAsFind(row: Row, photos: PhotoFiles): boolean {
 }
 
 /**
- * A row of the list, or its mark when it cannot be read. A row is judged as `get` and the queue's
- * pick judge it, by reading the whole find, its position and its answer included, so the Log
- * never shows as readable a find whose screen cannot open or which the queue passes over.
+ * A row of the list, or its mark when it cannot be read. A row is judged as `getStored` and the
+ * queue's pick judge it, by reading the whole find, its position and its answer included, so the
+ * Log never shows as readable a find whose screen cannot open or which the queue passes over.
  */
 function listed(stored: unknown, photos: PhotoFiles): ListedFind {
   try {
     const row = record(stored);
-    const find = readFind(row, photos);
+    const find = readStored(row, photos);
     return { readable: true, ...readSummary(row, find) };
   } catch (error) {
     if (!isCorrupt(error)) {
@@ -978,12 +988,13 @@ function isCorrupt(error: unknown): boolean {
   return error instanceof StoreError && error.code === "corrupt";
 }
 
-function readSummary(row: Row, find: Find): FindSummary {
+function readSummary(row: Row, find: StoredFind): FindSummary {
   return {
     id: find.id,
-    photoUri: find.photoUri,
+    photoUri: find.photos[0]?.uri ?? null,
     time: find.time,
     analysis: readSummaryAnalysis(row),
+    selfCheck: find.selfCheck,
   };
 }
 

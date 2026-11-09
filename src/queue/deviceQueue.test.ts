@@ -1,6 +1,6 @@
 import { config } from "../config/config";
 import { preparePhotoForAnalysis } from "../image/prepareForAnalysis";
-import type { Find } from "../store/find";
+import type { StoredFind } from "../store/find";
 import { createDeviceQueue } from "./deviceQueue";
 import type { QueueLog } from "./queue";
 
@@ -18,19 +18,24 @@ jest.mock("../image/prepareForAnalysis", () => ({
   })),
 }));
 
-const FIND: Find = {
+const FIND: StoredFind = {
   id: 1,
-  photoUri: "file:///photos/1.jpg",
+  text: null,
+  photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+  batchOpen: false,
   time: { takenAtMs: 1, utcOffsetMinutes: 0, source: "saved" },
   position: null,
   analysis: { state: "waiting" },
+  addedPhotos: null,
+  picture: null,
+  selfCheck: null,
 };
 
 function log(): QueueLog & { waiting: boolean } {
   const store = {
     waiting: true,
     oldestWaiting: async () => (store.waiting ? 1 : null),
-    get: async () => FIND,
+    getStored: async () => FIND,
     setAnswer: jest.fn(async () => {
       store.waiting = false;
     }),
@@ -82,7 +87,7 @@ describe("createDeviceQueue", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`${config.apiBaseUrl}/v1/messages`);
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1].body).model).toBe(config.defaultModelId);
     expect(preparePhotoForAnalysis).toHaveBeenCalledWith(
-      FIND.photoUri,
+      "file:///photos/1.jpg",
       config.defaultModelId,
       expect.anything(),
     );

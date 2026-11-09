@@ -2,6 +2,7 @@ import { EDIBILITIES } from "../analysis/answer";
 import { STRINGS } from "../i18n/strings";
 import { POSITION_SOURCES, TIME_SOURCES } from "../store/find";
 import {
+  checkedEdibility,
   confidenceText,
   edibilityText,
   fillIn,
@@ -12,6 +13,7 @@ import {
   mapLink,
   parseFindId,
   positionSourceText,
+  selfCheckReason,
   timeSourceText,
 } from "./display";
 
@@ -229,5 +231,72 @@ describe("fillIn", () => {
 
   it("puts a value in as text, so a $ pattern in it is not read as one", () => {
     expect(fillIn("[{a}]", { a: "$& $1" })).toBe("[$& $1]");
+  });
+});
+
+describe("the edibility of an answer from text alone, until its self-check agrees (SPEC 3.9)", () => {
+  const sure = { edibility: "edible", confidence: 90 } as const;
+  const matched = { sv: "Kantarell", en: "Chanterelle", it: "Gallinaccio" };
+  const named = {
+    sv: "Narrkantarell",
+    en: "False chanterelle",
+    la: "Hygrophoropsis aurantiaca",
+    it: "Falso gallinaccio",
+  };
+
+  it.each([
+    ["waiting", { state: "waiting" }],
+    ["disagreed", { state: "disagreed", names: named }],
+    ["no-species", { state: "no-species" }],
+    ["failed", { state: "failed" }],
+    ["no-picture", { state: "no-picture" }],
+  ] as const)("is unknown while the check is %s, whatever the answer said", (_, check) => {
+    expect(checkedEdibility(sure, check)).toBe("unknown");
+  });
+
+  it("is the answer's, by the confidence line, once the check agreed", () => {
+    expect(checkedEdibility(sure, { state: "agreed" })).toBe("edible");
+    expect(checkedEdibility({ edibility: "edible", confidence: 69 }, { state: "agreed" })).toBe(
+      "unknown",
+    );
+  });
+
+  it("is the answer's, by the confidence line, for an answer from photos, which has no check", () => {
+    expect(checkedEdibility(sure, null)).toBe("edible");
+    expect(checkedEdibility({ edibility: "poisonous", confidence: "low" }, null)).toBe("unknown");
+  });
+
+  it.each([
+    ["waiting", { state: "waiting" }, STRINGS.en.find.selfCheck.waiting],
+    ["no-species", { state: "no-species" }, STRINGS.en.find.selfCheck.noSpecies],
+    ["failed", { state: "failed" }, STRINGS.en.find.selfCheck.failed],
+    ["no-picture", { state: "no-picture" }, STRINGS.en.find.selfCheck.noPicture],
+  ] as const)("says why while the check is %s", (_, check, reason) => {
+    expect(selfCheckReason(check, matched, "en", STRINGS.en)).toBe(reason);
+  });
+
+  it.each(["sv", "en", "it"] as const)(
+    "names both species in %s when the check named another",
+    (language) => {
+      const reason = selfCheckReason(
+        { state: "disagreed", names: named },
+        matched,
+        language,
+        STRINGS[language],
+      );
+      expect(reason).toBe(
+        fillIn(STRINGS[language].find.selfCheck.disagreed, {
+          matched: matched[language],
+          named: named[language],
+        }),
+      );
+      expect(reason).toContain(matched[language]);
+      expect(reason).toContain(named[language]);
+    },
+  );
+
+  it("gives no reason once the check agreed, or for an answer from photos", () => {
+    expect(selfCheckReason({ state: "agreed" }, matched, "en", STRINGS.en)).toBeNull();
+    expect(selfCheckReason(null, matched, "en", STRINGS.en)).toBeNull();
   });
 });

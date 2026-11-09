@@ -10,8 +10,13 @@ import {
   View,
 } from "react-native";
 
-import { shownEdibility } from "../analysis/answer";
-import { edibilityText, fillIn, formatFindTime } from "../find/display";
+import {
+  checkedEdibility,
+  edibilityText,
+  fillIn,
+  formatFindTime,
+  selfCheckReason,
+} from "../find/display";
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Language } from "../i18n/languages";
 import type { Strings } from "../i18n/strings";
@@ -45,7 +50,10 @@ type ListState =
  * is shown as unreadable, with a way to read it again. The list is read again when the screen
  * comes into view and when a queue run ends. When the queue has stopped, it says why and offers
  * "analyse now", and a link to Settings when the stop names a setting; when the last run left the
- * finds waiting, it says why. "New find" opens the New find screen.
+ * finds waiting, it says why. "New find" opens the New find screen, and "Describe a mushroom" the
+ * text lookup (SPEC 3.9). A text find without photos is listed with no photo, its answer with the
+ * disclaimer for a lookup without photos, and "no mushroom" and "cannot tell" in the words of a
+ * description (PBI-2.4).
  */
 export default function LogScreen() {
   const { language, strings } = useLanguage();
@@ -149,6 +157,9 @@ export default function LogScreen() {
       )}
       <Link href="/new-find" accessibilityRole="link" style={styles.button}>
         {strings.log.newFind}
+      </Link>
+      <Link href="/text-lookup" accessibilityRole="link" style={styles.button}>
+        {strings.log.textLookup}
       </Link>
       <Link href="/settings" accessibilityRole="link" style={styles.link}>
         {strings.log.settings}
@@ -304,11 +315,13 @@ function FindRow({ find, language, strings }: FindRowProps) {
   return (
     <Link href={`/find/${find.id}`} asChild>
       <Pressable accessibilityRole="link" testID={`find-row-${find.id}`} style={styles.findRow}>
-        <Image
-          source={{ uri: find.photoUri }}
-          accessibilityLabel={strings.find.photo}
-          style={styles.thumbnail}
-        />
+        {find.photoUri !== null && (
+          <Image
+            source={{ uri: find.photoUri }}
+            accessibilityLabel={strings.find.photo}
+            style={styles.thumbnail}
+          />
+        )}
         <View style={styles.findText}>
           <Text style={styles.note}>{formatFindTime(find.time, language)}</Text>
           <SummaryView find={find} language={language} strings={strings} />
@@ -320,30 +333,42 @@ function FindRow({ find, language, strings }: FindRowProps) {
 
 function SummaryView({ find, language, strings }: FindRowProps) {
   const { analysis } = find;
+  const described = find.photoUri === null;
   switch (analysis.state) {
     case "waiting":
       return <Text style={styles.text}>{strings.log.waiting}</Text>;
     case "failed":
       return <Text style={styles.text}>{strings.log.failed}</Text>;
-    case "done":
+    case "done": {
       if (analysis.result !== "match") {
-        return (
-          <Text style={styles.text}>
-            {analysis.result === "no_mushroom" ? strings.find.noMushroom : strings.find.cannotTell}
-          </Text>
-        );
+        const t = strings.find;
+        const said =
+          analysis.result === "no_mushroom"
+            ? described
+              ? t.noMushroomDescribed
+              : t.noMushroom
+            : described
+              ? t.cannotTellDescribed
+              : t.cannotTell;
+        return <Text style={styles.text}>{said}</Text>;
       }
+      // An answer from the text alone shows "unknown" until its self-check agrees (SPEC 3.9).
+      const reason = selfCheckReason(find.selfCheck, analysis.names, language, strings);
       return (
         <>
           <Text style={styles.name}>{analysis.names[language]}</Text>
           <Text style={styles.text}>
             {fillIn(strings.find.edibility, {
-              edibility: edibilityText(shownEdibility(analysis), strings),
+              edibility: edibilityText(checkedEdibility(analysis, find.selfCheck), strings),
             })}
           </Text>
-          <Text style={styles.note}>{strings.disclaimer}</Text>
+          {reason !== null && <Text style={styles.note}>{reason}</Text>}
+          <Text style={styles.note}>
+            {described ? strings.disclaimerDescribed : strings.disclaimer}
+          </Text>
         </>
       );
+    }
   }
 }
 

@@ -14,13 +14,13 @@ import { AppState, Linking, Platform } from "react-native";
 
 import type { Answer, Match } from "../../analysis/answer";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
-import { formatFindTime, mapLink } from "../../find/display";
+import { fillIn, formatFindTime, mapLink } from "../../find/display";
 import { STRINGS } from "../../i18n/strings";
 import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { answerToJson } from "../../store/answerJson";
 import { openFindLog } from "../../store/deviceFindStore";
-import { type Find, StoreError } from "../../store/find";
+import { type Find, type StoredFind, StoreError } from "../../store/find";
 import { createFindStore } from "../../store/findStore";
 import {
   analysisFailure,
@@ -784,7 +784,7 @@ describe("a find that is not there or cannot be read", () => {
   });
 
   it.each(["abc", "0", "01", "1.5"])("reads no find for the address /find/%s", async (id) => {
-    const get = jest.spyOn(mockLog, "get");
+    const get = jest.spyOn(mockLog, "getStored");
     mockLog.finds.set(1, aFind(done(PORCINI)));
     await startApp(`/find/${id}`);
     expect(await screen.findByText(en.find.notFound)).toBeOnTheScreen();
@@ -795,7 +795,7 @@ describe("a find that is not there or cannot be read", () => {
   it("says a find cannot be read, without the error's text, and still lets it be deleted", async () => {
     mockLog.finds.set(1, aFind(done(PORCINI)));
     jest
-      .spyOn(mockLog, "get")
+      .spyOn(mockLog, "getStored")
       .mockRejectedValueOnce(new StoreError("corrupt", "the stored answer is not of the shape"));
     const app = await startApp();
     expect(await screen.findByText(en.find.unreadable)).toBeOnTheScreen();
@@ -811,5 +811,229 @@ describe("a find that is not there or cannot be read", () => {
     await startApp("/find/9");
     expect(await screen.findByText(STRINGS[lang].find.notFound)).toBeOnTheScreen();
     expect(screen.getByRole("link", { name: STRINGS[lang].find.back })).toBeOnTheScreen();
+  });
+});
+
+const DESCRIPTION = "A yellow funnel with false gills, in moss under spruce.";
+
+/** A text find without photos (SPEC 3.9), as the store holds it. */
+function aTextFind(analysis: StoredFind["analysis"], change: Partial<StoredFind> = {}): StoredFind {
+  return {
+    id: 1,
+    text: DESCRIPTION,
+    photos: [],
+    batchOpen: false,
+    time: { ...TAKEN, source: "saved" },
+    position: { latitude: 59.6995, longitude: 17.1234, accuracyM: 12.4, source: "fix" },
+    analysis,
+    addedPhotos: analysis.state === "done" ? "analysed" : null,
+    picture: null,
+    selfCheck: null,
+    ...change,
+  };
+}
+
+describe("a text find (SPEC 3.9, PBI-2.4)", () => {
+  it("shows its description, which cannot be edited, and no photo", async () => {
+    mockLog.finds.set(1, aTextFind({ state: "waiting" }));
+    await startApp();
+    expect(await screen.findByRole("header", { name: en.find.description })).toBeOnTheScreen();
+    expect(screen.getByText(DESCRIPTION)).toBeOnTheScreen();
+    expect(screen.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+    expect(screen.queryByDisplayValue(DESCRIPTION)).not.toBeOnTheScreen();
+    expect(screen.getByText(en.find.waiting)).toBeOnTheScreen();
+    expect(screen.queryByText(en.find.unreadable)).not.toBeOnTheScreen();
+  });
+
+  it("shows its answer with the disclaimer for a lookup without photos, not the one about a photo", async () => {
+    mockLog.finds.set(1, aTextFind(done(CHANTERELLE), { selfCheck: { state: "waiting" } }));
+    await startApp();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+    expect(edibility.queryByText(en.disclaimer)).not.toBeOnTheScreen();
+    expect(screen.getByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+    expect(screen.getByText("Claude's confidence in the match: 90 of 100")).toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)(
+    "shows the disclaimer for a lookup without photos in %s",
+    async (lang) => {
+      phoneIn(lang);
+      mockLog.finds.set(1, aTextFind(done(CHANTERELLE)));
+      await startApp();
+      const edibility = within(await screen.findByTestId("match-edibility"));
+      expect(edibility.getByText(STRINGS[lang].disclaimerDescribed)).toBeOnTheScreen();
+    },
+  );
+
+  it.each([
+    ["no_mushroom", en.find.noMushroomDescribed, en.find.noMushroom],
+    ["cannot_tell", en.find.cannotTellDescribed, en.find.cannotTell],
+  ] as const)(
+    "says %s in the words of a description, not of a photo",
+    async (result, text, photoText) => {
+      mockLog.finds.set(1, aTextFind(done({ result })));
+      await startApp();
+      expect(await screen.findByText(text)).toBeOnTheScreen();
+      expect(screen.queryByText(photoText)).not.toBeOnTheScreen();
+      expect(screen.queryByTestId("match-edibility")).not.toBeOnTheScreen();
+    },
+  );
+
+  it("analyses its text through the queue when asked, sending the description and no image, and shows the edibility unknown until the self-check agrees (SPEC 3.9)", async () => {
+    mockLog.finds.set(1, aTextFind({ state: "waiting" }));
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
+    expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+    expect(preparePhotoForAnalysis).not.toHaveBeenCalled();
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.messages[0].content[0]).toEqual({ type: "text", text: DESCRIPTION });
+    expect(JSON.stringify(body)).not.toContain('"image"');
+    expect(mockLog.finds.get(1)?.analysis.state).toBe("done");
+    const edibility = within(screen.getByTestId("match-edibility"));
+    expect(
+      edibility.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(
+      edibility.queryByText(en.find.edibility.replace("{edibility}", en.find.edibilities.edible)),
+    ).not.toBeOnTheScreen();
+    expect(edibility.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
+  });
+
+  it("says a refusal in the words of a description", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind({ state: "failed", failure: { cause: "refused", detail: "x" } }),
+    );
+    await startApp();
+    expect(await screen.findByText(en.queue.failed.refusedDescribed)).toBeOnTheScreen();
+    expect(screen.queryByText(en.queue.failed.refused)).not.toBeOnTheScreen();
+  });
+
+  it("asks before it is deleted without speaking of a photo, and deletes it once confirmed", async () => {
+    mockLog.finds.set(1, aTextFind(done(PORCINI)));
+    const app = await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.delete }));
+    expect(screen.getByText(en.find.deleteConfirmDescribed)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: en.find.deleteYes }));
+    expect(mockLog.finds.has(1)).toBe(false);
+    expect(app.pathname()).toBe("/");
+  });
+
+  it("shows unknown, and why, for an answer from its text, which the real store saves with its self-check waiting (SPEC 3.9)", async () => {
+    const sqlite = memorySqlite();
+    const real = await createFindStore(sqliteDatabase(sqlite), memoryPhotos(), {
+      newPhotoName: () => "p1",
+    });
+    const id = await real.addText({
+      text: DESCRIPTION,
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
+    await real.setAnswer(
+      id,
+      { answer: CHANTERELLE, model: "m", analysedAtMs: 1 },
+      { photoUris: [] },
+    );
+    jest.mocked(openFindLog).mockResolvedValueOnce(real);
+    await startApp(`/find/${id}`);
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(
+      edibility.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(edibility.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
+    sqlite.close();
+  });
+
+  it("shows a text find saved by the real store on a real SQLite, which Phase 1's get could not show", async () => {
+    const sqlite = memorySqlite();
+    const real = await createFindStore(sqliteDatabase(sqlite), memoryPhotos(), {
+      newPhotoName: () => "p1",
+    });
+    const id = await real.addText({
+      text: DESCRIPTION,
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
+    jest.mocked(openFindLog).mockResolvedValueOnce(real);
+    await startApp(`/find/${id}`);
+    expect(await screen.findByText(DESCRIPTION)).toBeOnTheScreen();
+    expect(screen.getByText(en.find.waiting)).toBeOnTheScreen();
+    expect(screen.getByText(en.find.noPosition)).toBeOnTheScreen();
+    sqlite.close();
+  });
+});
+
+const FALSE_CHANTERELLE = {
+  sv: "Narrkantarell",
+  en: "False chanterelle",
+  la: "Hygrophoropsis aurantiaca",
+  it: "Falso gallinaccio",
+};
+
+describe("the edibility of an answer from text alone, until its self-check agrees (SPEC 3.9)", () => {
+  const unknownText = en.find.edibility.replace("{edibility}", en.find.edibilities.unknown);
+  const edibleText = en.find.edibility.replace("{edibility}", en.find.edibilities.edible);
+
+  it.each([
+    ["waiting", { state: "waiting" }, en.find.selfCheck.waiting],
+    ["could not name a species", { state: "no-species" }, en.find.selfCheck.noSpecies],
+    ["failed", { state: "failed" }, en.find.selfCheck.failed],
+    ["without a picture", { state: "no-picture" }, en.find.selfCheck.noPicture],
+    [
+      "disagreed",
+      { state: "disagreed", names: FALSE_CHANTERELLE },
+      fillIn(en.find.selfCheck.disagreed, {
+        matched: CHANTERELLE.names.en,
+        named: FALSE_CHANTERELLE.en,
+      }),
+    ],
+  ] as const)(
+    "shows unknown while the check is %s, whatever the answer said, and says why next to it",
+    async (_, selfCheck, reason) => {
+      mockLog.finds.set(1, aTextFind(done(CHANTERELLE), { selfCheck }));
+      await startApp();
+      const edibility = within(await screen.findByTestId("match-edibility"));
+      expect(edibility.getByText(unknownText)).toBeOnTheScreen();
+      expect(edibility.queryByText(edibleText)).not.toBeOnTheScreen();
+      expect(edibility.getByText(reason)).toBeOnTheScreen();
+      expect(edibility.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+    },
+  );
+
+  it("shows the answer's edibility, and no reason, once the check agreed", async () => {
+    mockLog.finds.set(1, aTextFind(done(CHANTERELLE), { selfCheck: { state: "agreed" } }));
+    await startApp();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(edibleText)).toBeOnTheScreen();
+    expect(edibility.queryByText(en.find.selfCheck.waiting)).not.toBeOnTheScreen();
+  });
+
+  it("leaves an answer from photos and text as it is: a find with text whose answer has no check", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind(done(CHANTERELLE), {
+        photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+        selfCheck: null,
+      }),
+    );
+    await startApp();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(edibleText)).toBeOnTheScreen();
+    expect(edibility.getByText(en.disclaimer)).toBeOnTheScreen();
+    expect(edibility.queryByText(en.find.selfCheck.waiting)).not.toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)("says why in %s", async (lang) => {
+    phoneIn(lang);
+    const t = STRINGS[lang];
+    mockLog.finds.set(1, aTextFind(done(CHANTERELLE), { selfCheck: { state: "waiting" } }));
+    await startApp();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(
+      edibility.getByText(t.find.edibility.replace("{edibility}", t.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(edibility.getByText(t.find.selfCheck.waiting)).toBeOnTheScreen();
   });
 });

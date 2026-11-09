@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 
-import { type Match, type SpeciesNames, shownEdibility } from "../analysis/answer";
+import type { Answer, Match, SpeciesNames } from "../analysis/answer";
 import { useLanguage } from "../i18n/LanguageContext";
 import { LANGUAGES, type Language } from "../i18n/languages";
 import { STRINGS, type Strings } from "../i18n/strings";
@@ -20,14 +20,16 @@ import {
   type FormatTime,
   failureMessage,
   formatTimeIn,
+  type LookupSubject,
   noticeMessage,
   stopNeedsSettings,
 } from "../queue/messages";
 import { useQueue } from "../queue/QueueContext";
 import type { QueueNotice, QueueState } from "../queue/queue";
 import { useFindLog } from "../store/FindLogContext";
-import { type Find, type Position, StoreError } from "../store/find";
+import { type Position, type SelfCheck, type StoredFind, StoreError } from "../store/find";
 import {
+  checkedEdibility,
   confidenceText,
   edibilityText,
   fillIn,
@@ -36,6 +38,7 @@ import {
   formatFindTime,
   mapLink,
   positionSourceText,
+  selfCheckReason,
   timeSourceText,
 } from "./display";
 
@@ -46,7 +49,7 @@ type Loaded =
   | { kind: "absent" }
   /** The store could not read the find. */
   | { kind: "unreadable" }
-  | { kind: "ready"; find: Find };
+  | { kind: "ready"; find: StoredFind };
 
 /** The message of the last action on the screen; shown in the language in use. */
 type Message =
@@ -65,6 +68,12 @@ type Message =
  * goes through the queue; a failed new analysis of an analysed find keeps its answer and shows the
  * failure in the message only. "Delete" asks first. The find is read again when the queue's run
  * ends and after an analysis from here.
+ *
+ * The find is read as `getStored` reads it (PBI-2.4). A text find shows its description, which
+ * cannot be edited (SPEC 3.9); without photos, it shows no photo, the disclaimer for a lookup
+ * without photos, and "no mushroom" and "cannot tell" in the words of a description. A find with
+ * photos shows its first photo, as in Phase 1, until PBI-2.5. An answer from the text alone shows
+ * the edibility "unknown" until its self-check agrees, and says why (SPEC 3.9).
  */
 export function FindScreen({ id }: { readonly id: number | null }) {
   const { language, strings } = useLanguage();
@@ -85,7 +94,7 @@ export function FindScreen({ id }: { readonly id: number | null }) {
       next = { kind: "absent" };
     } else {
       try {
-        const find = await (await findLog()).get(id);
+        const find = await (await findLog()).getStored(id);
         next = find === null ? { kind: "absent" } : { kind: "ready", find };
       } catch {
         next = { kind: "unreadable" };
@@ -155,10 +164,13 @@ export function FindScreen({ id }: { readonly id: number | null }) {
   }
 
   const t = strings.find;
+  const subject: LookupSubject =
+    loaded.kind === "ready" && loaded.find.photos.length === 0 ? "described" : "photo";
   const deleteControls =
     id === null ? null : (
       <DeleteControls
         strings={strings}
+        question={subject === "described" ? t.deleteConfirmDescribed : t.deleteConfirm}
         busy={busy}
         confirming={confirming}
         onAsk={() => setConfirming(true)}
@@ -192,16 +204,28 @@ export function FindScreen({ id }: { readonly id: number | null }) {
       break;
     case "ready": {
       const { find } = loaded;
+      const photo = find.photos[0];
       body = (
         <>
-          <Image
-            source={{ uri: find.photoUri }}
-            accessibilityLabel={t.photo}
-            resizeMode="contain"
-            style={styles.photo}
-          />
+          {photo !== undefined && (
+            <Image
+              source={{ uri: photo.uri }}
+              accessibilityLabel={t.photo}
+              resizeMode="contain"
+              style={styles.photo}
+            />
+          )}
+          {find.text !== null && (
+            <View style={styles.section}>
+              <Text accessibilityRole="header" style={styles.heading}>
+                {t.description}
+              </Text>
+              <Text style={styles.text}>{find.text}</Text>
+            </View>
+          )}
           <AnalysisView
             find={find}
+            subject={subject}
             language={language}
             strings={strings}
             formatTime={formatTime}
@@ -237,7 +261,12 @@ export function FindScreen({ id }: { readonly id: number | null }) {
     <ScrollView contentContainerStyle={styles.container}>
       {body}
       {message !== null && (
-        <MessageView message={message} strings={strings} formatTime={formatTime} />
+        <MessageView
+          message={message}
+          subject={subject}
+          strings={strings}
+          formatTime={formatTime}
+        />
       )}
     </ScrollView>
   );
@@ -245,7 +274,7 @@ export function FindScreen({ id }: { readonly id: number | null }) {
 
 /** For a waiting find with no message of its own: why the queue left it waiting, if it did. */
 function queueNoticeFor(
-  find: Find,
+  find: StoredFind,
   message: Message | null,
   state: QueueState,
 ): QueueNotice | null {
@@ -259,14 +288,22 @@ function queueNoticeFor(
 }
 
 type AnalysisViewProps = {
-  readonly find: Find;
+  readonly find: StoredFind;
+  readonly subject: LookupSubject;
   readonly language: Language;
   readonly strings: Strings;
   readonly formatTime: FormatTime;
   readonly queueNotice: QueueNotice | null;
 };
 
-function AnalysisView({ find, language, strings, formatTime, queueNotice }: AnalysisViewProps) {
+function AnalysisView({
+  find,
+  subject,
+  language,
+  strings,
+  formatTime,
+  queueNotice,
+}: AnalysisViewProps) {
   const t = strings.find;
   const { analysis } = find;
   switch (analysis.state) {
@@ -275,7 +312,12 @@ function AnalysisView({ find, language, strings, formatTime, queueNotice }: Anal
         <View style={styles.section}>
           <Text style={styles.text}>{t.waiting}</Text>
           {queueNotice !== null && (
-            <NoticeView notice={queueNotice} strings={strings} formatTime={formatTime} />
+            <NoticeView
+              notice={queueNotice}
+              subject={subject}
+              strings={strings}
+              formatTime={formatTime}
+            />
           )}
         </View>
       );
@@ -283,30 +325,74 @@ function AnalysisView({ find, language, strings, formatTime, queueNotice }: Anal
       return (
         <View style={styles.section}>
           <Text style={styles.text}>{t.failed}</Text>
-          <Text style={styles.text}>{failureMessage(analysis.failure, strings)}</Text>
+          <Text style={styles.text}>{failureMessage(analysis.failure, strings, subject)}</Text>
         </View>
       );
     case "done":
-      switch (analysis.answer.result) {
-        case "match":
-          return <MatchView match={analysis.answer} language={language} strings={strings} />;
-        case "no_mushroom":
-          return <Text style={styles.text}>{t.noMushroom}</Text>;
-        case "cannot_tell":
-          return <Text style={styles.text}>{t.cannotTell}</Text>;
-      }
+      return (
+        <AnswerView
+          answer={analysis.answer}
+          selfCheck={find.selfCheck}
+          subject={subject}
+          language={language}
+          strings={strings}
+        />
+      );
+  }
+}
+
+type AnswerViewProps = {
+  readonly answer: Answer;
+  /**
+   * The self-check of an answer from the text alone; null for any other answer. Until it agrees,
+   * the edibility shown is "unknown", with why (SPEC 3.9).
+   */
+  readonly selfCheck: SelfCheck | null;
+  /** What was analysed: for a lookup without photos, the answers speak of the description. */
+  readonly subject: LookupSubject;
+  readonly language: Language;
+  readonly strings: Strings;
+};
+
+/**
+ * An answer as a find's screen shows it (SPEC 3.1, 3.5, 3.9): a match with its edibility and the
+ * disclaimer, or what Claude could not name. The text lookup screen shows an unsaved lookup's
+ * answer with it too.
+ */
+export function AnswerView({ answer, selfCheck, subject, language, strings }: AnswerViewProps) {
+  const t = strings.find;
+  const described = subject === "described";
+  switch (answer.result) {
+    case "match":
+      return (
+        <MatchView
+          match={answer}
+          selfCheck={selfCheck}
+          disclaimer={described ? strings.disclaimerDescribed : strings.disclaimer}
+          language={language}
+          strings={strings}
+        />
+      );
+    case "no_mushroom":
+      return <Text style={styles.text}>{described ? t.noMushroomDescribed : t.noMushroom}</Text>;
+    case "cannot_tell":
+      return <Text style={styles.text}>{described ? t.cannotTellDescribed : t.cannotTell}</Text>;
   }
 }
 
 type MatchViewProps = {
   readonly match: Match;
+  readonly selfCheck: SelfCheck | null;
+  /** The disclaimer next to the edibility: SPEC 3.5's, or 3.9's for a lookup without photos. */
+  readonly disclaimer: string;
   readonly language: Language;
   readonly strings: Strings;
 };
 
-function MatchView({ match, language, strings }: MatchViewProps) {
+function MatchView({ match, selfCheck, disclaimer, language, strings }: MatchViewProps) {
   const t = strings.find;
-  const edibility = edibilityText(shownEdibility(match), strings);
+  const edibility = edibilityText(checkedEdibility(match, selfCheck), strings);
+  const reason = selfCheckReason(selfCheck, match.names, language, strings);
   return (
     <View style={styles.section}>
       <View testID="match-names">
@@ -314,7 +400,8 @@ function MatchView({ match, language, strings }: MatchViewProps) {
       </View>
       <View testID="match-edibility" style={styles.edibility}>
         <Text style={styles.strong}>{fillIn(t.edibility, { edibility })}</Text>
-        <Text style={styles.disclaimer}>{strings.disclaimer}</Text>
+        {reason !== null && <Text style={styles.text}>{reason}</Text>}
+        <Text style={styles.disclaimer}>{disclaimer}</Text>
       </View>
       <Text style={styles.text}>{confidenceText(match.confidence, strings)}</Text>
       <Text style={styles.note}>{t.confidenceNote}</Text>
@@ -375,7 +462,7 @@ function NamesView({ names, language, strings, heading = false }: NamesViewProps
 }
 
 type TimeAndPositionProps = {
-  readonly find: Find;
+  readonly find: StoredFind;
   readonly language: Language;
   readonly strings: Strings;
   readonly onOpenMap: (position: Position) => void;
@@ -417,6 +504,8 @@ function TimeAndPosition({ find, language, strings, onOpenMap }: TimeAndPosition
 
 type DeleteControlsProps = {
   readonly strings: Strings;
+  /** The question asked first, which names the photo only for a find that has one. */
+  readonly question: string;
   readonly busy: boolean;
   readonly confirming: boolean;
   readonly onAsk: () => void;
@@ -427,6 +516,7 @@ type DeleteControlsProps = {
 /** "Delete the find", and the confirmation it asks for first. */
 function DeleteControls({
   strings,
+  question,
   busy,
   confirming,
   onAsk,
@@ -449,7 +539,7 @@ function DeleteControls({
   return (
     <View style={styles.section}>
       <Text accessibilityLiveRegion="polite" style={styles.text}>
-        {t.deleteConfirm}
+        {question}
       </Text>
       <View style={styles.row}>
         <Pressable
@@ -475,16 +565,20 @@ function DeleteControls({
 
 type NoticeViewProps = {
   readonly notice: QueueNotice;
+  readonly subject: LookupSubject;
   readonly strings: Strings;
   readonly formatTime: FormatTime;
 };
 
-/** A queue notice in plain words, with a link to Settings when its stop names a setting. */
-function NoticeView({ notice, strings, formatTime }: NoticeViewProps) {
+/**
+ * A queue notice in plain words, with a link to Settings when its stop names a setting. The text
+ * lookup screen shows an unsaved lookup's notice with it too.
+ */
+export function NoticeView({ notice, subject, strings, formatTime }: NoticeViewProps) {
   return (
     <>
       <Text accessibilityLiveRegion="polite" style={styles.text}>
-        {noticeMessage(notice, strings, formatTime)}
+        {noticeMessage(notice, strings, formatTime, subject)}
       </Text>
       {notice.kind === "stopped" && stopNeedsSettings(notice.stop) && (
         <Link href="/settings" accessibilityRole="link" style={styles.link}>
@@ -497,11 +591,12 @@ function NoticeView({ notice, strings, formatTime }: NoticeViewProps) {
 
 type MessageViewProps = {
   readonly message: Message;
+  readonly subject: LookupSubject;
   readonly strings: Strings;
   readonly formatTime: FormatTime;
 };
 
-function MessageView({ message, strings, formatTime }: MessageViewProps) {
+function MessageView({ message, subject, strings, formatTime }: MessageViewProps) {
   const t = strings.find;
   switch (message.kind) {
     case "notice":
@@ -512,7 +607,12 @@ function MessageView({ message, strings, formatTime }: MessageViewProps) {
               {strings.queue.answerKept}
             </Text>
           )}
-          <NoticeView notice={message.notice} strings={strings} formatTime={formatTime} />
+          <NoticeView
+            notice={message.notice}
+            subject={subject}
+            strings={strings}
+            formatTime={formatTime}
+          />
         </View>
       );
     case "analysis-error":

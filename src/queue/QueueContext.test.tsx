@@ -4,8 +4,8 @@ import { Text } from "react-native";
 import type { ReadKeyResult } from "../key/apiKey";
 import { type KeyState, useApiKey } from "../key/KeyContext";
 import { FindLogProvider, useFindLog } from "../store/FindLogContext";
-import type { NewFind } from "../store/find";
-import type { FindStore } from "../store/findStore";
+import type { NewFind, NewTextFind, StoredFind } from "../store/find";
+import type { FindLog } from "../store/findStore";
 import type { NetworkSource } from "./networkState";
 import {
   type AppStateSource,
@@ -25,15 +25,38 @@ const NEW_FIND: NewFind = {
   position: null,
 };
 
-/** A find log with no finds waiting, whose `add` gives the next ID. */
-function emptyLog(): FindStore {
+const NEW_TEXT_FIND: NewTextFind = {
+  text: "A yellow funnel.",
+  time: NEW_FIND.time,
+  position: null,
+};
+
+/** A waiting find with one photo, as the store reads it in full. */
+const WAITING: StoredFind = {
+  id: 1,
+  text: null,
+  photos: [{ uri: "file:///p/1.jpg", batch: 1 }],
+  batchOpen: false,
+  time: NEW_FIND.time,
+  position: null,
+  analysis: { state: "waiting" },
+  addedPhotos: null,
+  picture: null,
+  selfCheck: null,
+};
+
+/** A find log with no finds waiting, whose `add` and `addText` give the next ID. */
+function emptyLog(): FindLog {
   let ids = 0;
+  const next = async () => {
+    ids += 1;
+    return ids;
+  };
   return {
-    add: jest.fn(async () => {
-      ids += 1;
-      return ids;
-    }),
+    add: jest.fn(next),
+    addText: jest.fn(next),
     get: jest.fn(async () => null),
+    getStored: jest.fn(async () => null),
     list: jest.fn(async () => []),
     oldestWaiting: jest.fn(async () => null),
     setAnswer: jest.fn(),
@@ -96,7 +119,7 @@ beforeEach(() => {
 });
 
 let context: QueueContextValue | undefined;
-let screenLog: (() => Promise<FindStore>) | undefined;
+let screenLog: (() => Promise<FindLog>) | undefined;
 
 function Probe() {
   context = useQueue();
@@ -106,7 +129,7 @@ function Probe() {
 
 /** Renders the provider with fakes; gives the queue it made and the deps it made it with. */
 async function renderQueue(
-  options: { appState?: string; log?: FindStore; preparePhoto?: QueueDeps["preparePhoto"] } = {},
+  options: { appState?: string; log?: FindLog; preparePhoto?: QueueDeps["preparePhoto"] } = {},
 ) {
   const log = options.log ?? emptyLog();
   const appState = fakeAppState(options.appState ?? "active");
@@ -223,6 +246,29 @@ describe("QueueProvider, the triggers (SPEC 3.4)", () => {
     expect(queue.trigger).toHaveBeenCalledTimes(1);
   });
 
+  it("runs it when a text find is saved through the find log the screens get, after the save (PBI-2.4)", async () => {
+    const { queue, log } = await renderQueue();
+    let id = 0;
+    await act(async () => {
+      const store = await screenLog?.();
+      id = (await store?.addText(NEW_TEXT_FIND)) ?? 0;
+    });
+    expect(id).toBe(1);
+    expect(log.addText).toHaveBeenCalledWith(NEW_TEXT_FIND);
+    expect(queue.trigger).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not run it when saving a text find fails (PBI-2.4)", async () => {
+    const log = emptyLog();
+    jest.mocked(log.addText).mockRejectedValue(new Error("disk full"));
+    const { queue } = await renderQueue({ log });
+    await act(async () => {
+      const store = await screenLog?.();
+      await expect(store?.addText(NEW_TEXT_FIND)).rejects.toThrow("disk full");
+    });
+    expect(queue.trigger).toHaveBeenCalledTimes(1);
+  });
+
   it("gives the screens the rest of the find log unchanged", async () => {
     const { log } = await renderQueue();
     const store = await screenLog?.();
@@ -250,13 +296,7 @@ describe("QueueProvider, what it gives the screens", () => {
   it("gives the queue's state, and its changes", async () => {
     const log = emptyLog();
     jest.mocked(log.oldestWaiting).mockResolvedValueOnce(1);
-    jest.mocked(log.get).mockResolvedValue({
-      id: 1,
-      photoUri: "file:///p/1.jpg",
-      time: NEW_FIND.time,
-      position: null,
-      analysis: { state: "waiting" },
-    });
+    jest.mocked(log.getStored).mockResolvedValue(WAITING);
     await renderQueue({ log });
     expect(JSON.parse(String(screen.getByTestId("queue-state").props.children))).toEqual({
       running: false,
@@ -289,6 +329,14 @@ describe("QueueProvider, what it gives the screens", () => {
     await expect(current().analyseFind(4)).resolves.toEqual({ ok: true });
     expect(analyseFind).toHaveBeenCalledWith(4);
   });
+
+  it("analyses an unsaved text lookup on asking (PBI-2.4)", async () => {
+    const { queue } = await renderQueue();
+    const result = { ok: false, notice: { kind: "paused", cause: "network" } } as const;
+    const analyseLookup = jest.spyOn(queue, "analyseLookup").mockResolvedValue(result);
+    await expect(current().analyseLookup("A yellow funnel.")).resolves.toEqual(result);
+    expect(analyseLookup).toHaveBeenCalledWith("A yellow funnel.");
+  });
 });
 
 describe("QueueProvider, once it is gone", () => {
@@ -310,7 +358,7 @@ describe("QueueProvider, a run that rejects (Clead's decision on #17)", () => {
   const INTERNAL = { running: false, stop: { reason: "internal-error" }, pause: null };
 
   /** A log whose search for a waiting find rejects, as a programming or store error would. */
-  function failingLog(): FindStore {
+  function failingLog(): FindLog {
     const log = emptyLog();
     jest.mocked(log.oldestWaiting).mockRejectedValue(new RangeError("timeLimitMs must be…"));
     return log;
@@ -378,16 +426,19 @@ describe("QueueProvider, a run that rejects (Clead's decision on #17)", () => {
     expect(shownState()).toEqual(INTERNAL);
   });
 
+  it("analysing an unsaved text lookup: stops the queue, and the screen still gets the rejection (PBI-2.4)", async () => {
+    const { queue } = await renderQueue();
+    jest.spyOn(queue, "analyseLookup").mockRejectedValue(new RangeError("bad"));
+    await act(async () => {
+      await expect(current().analyseLookup("A yellow funnel.")).rejects.toBeInstanceOf(RangeError);
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
   it("when storage is full while the photo is prepared: the queue stops and the find stays waiting (PBI-1.21)", async () => {
     const log = emptyLog();
     jest.mocked(log.oldestWaiting).mockResolvedValueOnce(1);
-    jest.mocked(log.get).mockResolvedValue({
-      id: 1,
-      photoUri: "file:///p/1.jpg",
-      time: NEW_FIND.time,
-      position: null,
-      analysis: { state: "waiting" },
-    });
+    jest.mocked(log.getStored).mockResolvedValue(WAITING);
     await renderQueue({
       log,
       preparePhoto: async () => {

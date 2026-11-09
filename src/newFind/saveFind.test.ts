@@ -1,6 +1,13 @@
 import type { PositionTracker } from "../position/positionTracker";
-import { type NewFind, type Position, StoreError } from "../store/find";
-import { phoneTimeNow, type SaveDeps, saveCameraFind, saveGalleryFind } from "./saveFind";
+import { type NewFind, type NewTextFind, type Position, StoreError } from "../store/find";
+import {
+  phoneTimeNow,
+  type SaveDeps,
+  saveCameraFind,
+  saveGalleryFind,
+  saveTextFind,
+  type TextSaveDeps,
+} from "./saveFind";
 
 const NOW = new Date(Date.UTC(2026, 10, 9, 10, 15, 0));
 const FIX: Position = { latitude: 59.64, longitude: 17.08, accuracyM: 6, source: "fix" };
@@ -18,6 +25,16 @@ class FakeStore {
     }
     this.added.push(find);
     return 41 + this.added.length;
+  }
+
+  addedText: NewTextFind[] = [];
+
+  async addText(find: NewTextFind): Promise<number> {
+    if (this.addError !== null) {
+      throw this.addError;
+    }
+    this.addedText.push(find);
+    return 41 + this.addedText.length;
   }
 
   async setPosition(id: number, position: Position): Promise<void> {
@@ -51,7 +68,7 @@ class FakeTracker implements PositionTracker {
 
 let store: FakeStore;
 let tracker: FakeTracker;
-let deps: SaveDeps;
+let deps: SaveDeps & TextSaveDeps;
 
 beforeEach(() => {
   store = new FakeStore();
@@ -206,5 +223,59 @@ describe("saveGalleryFind", () => {
     await expect(
       saveGalleryFind({ uri: "file:///cache/picked.jpg", exif: null }, deps),
     ).rejects.toThrow("database is locked");
+  });
+});
+
+describe("saveTextFind (SPEC 3.9: the time of saving, the position as for a camera find)", () => {
+  const TEXT = "A yellow funnel with false gills.";
+
+  it("saves the text at once, at the moment of saving, with the best fix the tracker has", async () => {
+    tracker.now = FIX;
+    const saved = await saveTextFind(TEXT, tracker, deps);
+    expect(saved).toEqual({ id: 42, positionLater: null });
+    expect(store.addedText).toEqual([{ text: TEXT, time: phoneTimeNow(NOW), position: FIX }]);
+    expect(store.added).toEqual([]);
+    expect(tracker.stops).toBe(1);
+  });
+
+  it("saves the last known position the tracker gives, marked as such", async () => {
+    tracker.now = { ...FIX, source: "last-known" };
+    await saveTextFind(TEXT, tracker, deps);
+    expect(store.addedText[0]?.position).toEqual({ ...FIX, source: "last-known" });
+  });
+
+  it("saves without a position when it has none, then adds the first fix that comes", async () => {
+    let comes: (position: Position | null) => void = () => undefined;
+    tracker.first = new Promise((resolve) => {
+      comes = resolve;
+    });
+    const saved = await saveTextFind(TEXT, tracker, deps);
+    expect(store.addedText[0]?.position).toBeNull();
+    expect(tracker.stops).toBe(0);
+    comes(FIX);
+    await expect(saved.positionLater).resolves.toEqual(FIX);
+    expect(store.positions).toEqual([[42, FIX]]);
+    expect(tracker.stops).toBe(1);
+  });
+
+  it("gives up the later fix quietly when the store refuses it, for example after a delete", async () => {
+    tracker.first = Promise.resolve(FIX);
+    store.setPositionError = new StoreError("not-found", "no find has the ID 42");
+    const saved = await saveTextFind(TEXT, tracker, deps);
+    await expect(saved.positionLater).resolves.toBeNull();
+    expect(tracker.stops).toBe(1);
+  });
+
+  it("saves without a position, and waits for none, without the location permission", async () => {
+    const saved = await saveTextFind(TEXT, null, deps);
+    expect(saved).toEqual({ id: 42, positionLater: null });
+    expect(store.addedText[0]?.position).toBeNull();
+  });
+
+  it("passes the store's error on and keeps the tracker running, so the save can be tried again", async () => {
+    store.addError = new StoreError("invalid-input", "the text is empty");
+    await expect(saveTextFind(" ", tracker, deps)).rejects.toMatchObject({ code: "invalid-input" });
+    expect(tracker.stops).toBe(0);
+    expect(tracker.firstFixAsked).toBe(0);
   });
 });

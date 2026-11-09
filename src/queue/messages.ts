@@ -23,10 +23,17 @@ function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{([a-z]+)\}/g, (whole, name: string) => values[name] ?? whole);
 }
 
+/**
+ * What a lookup analysed: a photo, or for a lookup without photos its description (docs/SPEC.md
+ * 3.9), which some messages name in place of the photo.
+ */
+export type LookupSubject = "photo" | "described";
+
 export function noticeMessage(
   notice: QueueNotice,
   strings: Strings,
   formatTime: FormatTime,
+  subject: LookupSubject = "photo",
 ): string {
   const t = strings.queue;
   switch (notice.kind) {
@@ -39,7 +46,7 @@ export function noticeMessage(
     case "stopped":
       return stopMessage(notice.stop, strings, formatTime);
     case "find-failed":
-      return failureMessage(notice.failure, strings);
+      return failureMessage(notice.failure, strings, subject);
   }
 }
 
@@ -78,9 +85,14 @@ function stopMessage(stop: QueueStop, strings: Strings, formatTime: FormatTime):
  * detail is read for its form, as the modules that write it give it, and each form has its own
  * sentence; nothing of the detail itself is shown, so no code, marker number, status, native
  * message or file path reaches the user. A form the app does not know gets the cause's general
- * sentence. Details already stored in these forms are read the same way.
+ * sentence. Details already stored in these forms are read the same way. For a lookup without
+ * photos, a refusal names the description, not the photo (PBI-2.4).
  */
-export function failureMessage(failure: FindFailure, strings: Strings): string {
+export function failureMessage(
+  failure: FindFailure,
+  strings: Strings,
+  subject: LookupSubject = "photo",
+): string {
   const t = strings.queue.failed;
   const { detail } = failure;
   switch (failure.cause) {
@@ -106,7 +118,7 @@ export function failureMessage(failure: FindFailure, strings: Strings): string {
       }
       return CUT_OFF.test(detail) ? t.answer.cutOff : t.answer.shape;
     case "refused":
-      return t.refused;
+      return subject === "described" ? t.refusedDescribed : t.refused;
   }
 }
 

@@ -341,6 +341,7 @@ describe("the migration to schema version 2, on a version 1 database (PBI-2.2)",
       id: ids.lowMatch,
       photoUri: "file:///photos/d.jpg",
       time: time(4_000),
+      selfCheck: null,
       analysis: {
         state: "done",
         result: "match",
