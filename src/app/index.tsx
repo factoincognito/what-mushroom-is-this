@@ -18,15 +18,13 @@ import type { Strings } from "../i18n/strings";
 import { formatTimeIn, noticeMessage, stopNeedsSettings } from "../queue/messages";
 import { useQueue } from "../queue/QueueContext";
 import { useFindLog } from "../store/FindLogContext";
-import type { FindSummary } from "../store/find";
+import type { FindSummary, ListedFind } from "../store/find";
 
 /**
- * One entry of the store's list. On `main` every entry is a readable find. When the store marks an
- * unreadable row in the list (PBI-1.16), this becomes the store's entry type, `LogRow` gains a case
- * for it, and the row key (`entryKey`) one for an entry without an ID; nothing else in the screen
- * reads an entry.
+ * One entry of the store's list: a find it could read, or the mark of one it could not, in its
+ * place (PBI-1.16).
  */
-type LogEntry = FindSummary;
+type LogEntry = ListedFind;
 
 /** What the screen has read of the log. */
 type ListState =
@@ -40,8 +38,9 @@ type ListState =
  * them, each with its photo, date and time, the species name in the app's language and the
  * edibility of the matched species ("unknown" when the confidence is low, SPEC 3.3) with the
  * disclaimer next to it (SPEC 3.5); a find still waiting or failed says so, and each opens its own
- * screen. A list the store cannot read is shown as unreadable, with a way to read it again: the
- * store gives the list whole or not at all (PBI-1.16). The list is read again when the screen
+ * screen. A find the store cannot read is a row of its own, in its place, saying so; with its ID it
+ * opens the find's screen, where it can be deleted (PBI-1.16). A list the store cannot give at all
+ * is shown as unreadable, with a way to read it again. The list is read again when the screen
  * comes into view and when a queue run ends. When the queue has stopped, it says why and offers
  * "analyse now", and a link to Settings when the stop names a setting; when the last run left the
  * finds waiting, it says why. "New find" opens the New find screen.
@@ -155,14 +154,42 @@ type LogRowProps = {
   readonly strings: Strings;
 };
 
-/** The key of an entry's row: its find's ID. */
-function entryKey(entry: LogEntry): string {
-  return String(entry.id);
+/**
+ * The key of an entry's row: its find's ID. An entry without an ID is keyed by its place in the
+ * list, which is the store's order and so the same at every reading of an unchanged log.
+ */
+function entryKey(entry: LogEntry, index: number): string {
+  return entry.id === null ? `no-id-${index}` : String(entry.id);
 }
 
-/** One entry of the list, by its kind: today always a readable find. */
+/** One entry of the list, by its kind. */
 function LogRow({ entry, language, strings }: LogRowProps) {
+  if (!entry.readable) {
+    return <UnreadableRow id={entry.id} strings={strings} />;
+  }
   return <FindRow find={entry} language={language} strings={strings} />;
+}
+
+/**
+ * A find the store cannot read. With its ID, it opens the find's own screen, which says the same
+ * and offers Delete; without one there is nothing to open, so it is text alone.
+ */
+function UnreadableRow({ id, strings }: { readonly id: number | null; readonly strings: Strings }) {
+  const text = <Text style={styles.text}>{strings.find.unreadable}</Text>;
+  if (id === null) {
+    return (
+      <View testID="unreadable-row" style={styles.findRow}>
+        {text}
+      </View>
+    );
+  }
+  return (
+    <Link href={`/find/${id}`} asChild>
+      <Pressable accessibilityRole="link" testID={`find-row-${id}`} style={styles.findRow}>
+        {text}
+      </Pressable>
+    </Link>
+  );
 }
 
 type FindRowProps = {
