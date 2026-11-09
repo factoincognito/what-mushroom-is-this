@@ -10,7 +10,7 @@ Last update: 2026-11-09
 Build: Phase 1, the first version ([`docs/BACKLOG.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/BACKLOG.md)); the specification's intent is approved ([`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/SPEC.md)).
 
 ## Current focus
-The Phase 1 items: the Log and Find screens, [PBI-1.8](https://github.com/factoincognito/what-mushroom-is-this/blob/211a431326c57a8a2c9cbd81bd5815e7a8bb6881/docs/BACKLOG.md?plain=1#L47), and the follow-ups that need no phone; then the EAS build, once Adam has run `eas init`.
+The app's Phase 1 code is in, short of the phone's position. Left before the EAS build: the follow-ups that need no phone, among them the SDK version refresh, [PBI-1.15](https://github.com/factoincognito/what-mushroom-is-this/blob/d90ab5357ee7f3132ee7b44c9a290e6f05aa6791/docs/BACKLOG.md?plain=1#L54), and the new find's, [PBI-1.20](https://github.com/factoincognito/what-mushroom-is-this/blob/d90ab5357ee7f3132ee7b44c9a290e6f05aa6791/docs/BACKLOG.md?plain=1#L59); then the EAS build, once Adam has run `eas init`.
 
 ## Next step
 Clead and Crog: the Phase 1 items up to the EAS build, unattended, one PR each ([PO-159](https://github.com/factoincognito/product-office/blob/3be9e7f707f0da0811be1f1d8249482792d1c3f6/BACKLOG.md?plain=1#L390) step 4 in the product office).
