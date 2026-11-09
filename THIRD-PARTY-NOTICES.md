@@ -26,7 +26,7 @@ shipped in the app (internal tooling).
 
 | Library | Version | Licence | Mode | Source | Added for |
 |---|---|---|---|---|---|
-| `expo` | 57.0.26 | MIT | depend | https://github.com/expo/expo, `packages/expo` | the Expo SDK (project setup) |
+| `expo` | 57.0.32 | MIT | depend | https://github.com/expo/expo, `packages/expo` | the Expo SDK (project setup) |
 | `expo-status-bar` | 57.0.1 | MIT | depend | https://github.com/expo/expo, `packages/expo-status-bar` | the status bar (project setup) |
 | `react` | 19.2.3 | MIT | depend | https://github.com/facebook/react, `packages/react` | React (project setup) |
 | `react-native` | 0.86.3 | MIT | depend | https://github.com/react/react-native, `packages/react-native` | React Native (project setup) |
@@ -86,6 +86,6 @@ are for the release gate and PBI-1.9.
 | `@types/jest` | 29.5.14 | MIT | depend | https://github.com/DefinitelyTyped/DefinitelyTyped, `types/jest` | Jest's types (project setup) |
 | `@types/react` | 19.2.18 | MIT | depend | https://github.com/DefinitelyTyped/DefinitelyTyped, `types/react` | React's types (project setup) |
 | `jest` | 29.7.0 | MIT | depend | https://github.com/jestjs/jest, `packages/jest` | the test runner (project setup) |
-| `jest-expo` | 57.0.5 | MIT | depend | https://github.com/expo/expo, `packages/jest-expo` | the Jest preset of Expo (project setup) |
+| `jest-expo` | 57.0.6 | MIT | depend | https://github.com/expo/expo, `packages/jest-expo` | the Jest preset of Expo (project setup) |
 | `test-renderer` | 1.2.0 | MIT (`package.json`; the package ships no licence file) | depend | https://github.com/mdjastrzebski/test-renderer | the renderer of the component tests (project setup) |
 | `typescript` | 6.0.3 | Apache-2.0 | depend | https://github.com/microsoft/TypeScript | the type check (project setup) |
