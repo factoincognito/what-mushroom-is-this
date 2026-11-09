@@ -5,11 +5,14 @@
  * photo find (`Find`) or as everything the store holds (`StoredFind`, for a text find, PBI-2.4).
  * A find whose ID is in `unreadable` stands for a row the store cannot read (PBI-1.16): the list
  * marks it in its place, `get` and `getStored` refuse it as corrupt, the queue's pick passes over
- * it, and `delete` still removes it. As in the store, `get` refuses a find without a photo.
+ * it, and `delete` still removes it. As in the store, `get` refuses a find without a photo, and an
+ * answer to a text find from its text alone starts its self-check, waiting (PBI-2.4).
  */
 
 import {
+  type AnalysedAnswer,
   type Analysis,
+  type AnalysisSent,
   type Find,
   type FindSummary,
   type ListedFind,
@@ -107,6 +110,35 @@ export function memoryFindLog(): MemoryFindLog {
     finds.set(id, { ...find, analysis });
   }
 
+  /**
+   * Stores an answer as the real store's `ANSWER_COLUMNS` do (`src/store/findStore.ts`): the
+   * self-check waits when the analysis sent no photo, the answer names a species and the find has
+   * text, so the answer is from the text alone (docs/SPEC.md 3.9), and is none otherwise; the
+   * picture goes; the photos added since wait when the find holds one the analysis did not send.
+   * A find given as Phase 1's view has no text, so its answer never has a check.
+   */
+  function answer(
+    id: number,
+    from: readonly string[],
+    analysed: AnalysedAnswer,
+    sent: AnalysisSent,
+  ): void {
+    change(id, from, { state: "done", ...analysed });
+    const find = existing(id);
+    if (!isStored(find)) {
+      return;
+    }
+    const fromTextAlone =
+      sent.photoUris.length === 0 && analysed.answer.result === "match" && find.text !== null;
+    const notSent = find.photos.some((photo) => !sent.photoUris.includes(photo.uri));
+    finds.set(id, {
+      ...find,
+      addedPhotos: notSent ? "waiting" : "analysed",
+      picture: null,
+      selfCheck: fromTextAlone ? { state: "waiting" } : null,
+    });
+  }
+
   function readable(id: number): Find | StoredFind | null {
     if (unreadable.has(id) && finds.has(id)) {
       throw new StoreError("corrupt", `find ${id} cannot be read`);
@@ -174,11 +206,11 @@ export function memoryFindLog(): MemoryFindLog {
       );
       return waiting.length === 0 ? null : Math.min(...waiting.map((find) => find.id));
     },
-    async setAnswer(id, analysed) {
-      change(id, ["waiting", "failed"], { state: "done", ...analysed });
+    async setAnswer(id, analysed, sent) {
+      answer(id, ["waiting", "failed"], analysed, sent);
     },
-    async replaceAnswer(id, analysed) {
-      change(id, ["done"], { state: "done", ...analysed });
+    async replaceAnswer(id, analysed, sent) {
+      answer(id, ["done"], analysed, sent);
     },
     async markFailed(id, failure) {
       change(id, ["waiting", "failed"], { state: "failed", failure });
