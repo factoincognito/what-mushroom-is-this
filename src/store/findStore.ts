@@ -87,7 +87,8 @@ export interface FindStore {
   /**
    * Deletes a find whose ID the store cannot read (an ID of 0 or below, or one past 2^53, which
    * only a damaged file can hold), named by the `storedId` the list gives it, then its photo when
-   * its name can be read (PBI-1.26). `photoRemoved` is false when it could not be.
+   * its name can be read (PBI-1.26). `photoRemoved` is false when it could not be. A find whose ID
+   * the store can read is never deleted here: for its ID this gives `not-found`.
    */
   deleteUnreadable(storedId: string): Promise<{ photoRemoved: boolean }>;
 }
@@ -138,9 +139,14 @@ const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, resul
  */
 const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting'
   AND finds.id > ? AND finds.id <= ${Number.MAX_SAFE_INTEGER} ORDER BY finds.id ASC LIMIT 1`;
+/**
+ * The IDs the store cannot read, those `SAFE_ID` gives back as NULL: `deleteUnreadable` matches
+ * only these, so it never deletes a find whose ID the store can read, which `delete` is for.
+ */
+const UNREADABLE_ID = `(id < 1 OR id > ${Number.MAX_SAFE_INTEGER})`;
 /** The photo of, and the deletion of, a find named by its ID as SQLite writes it. */
-const PHOTO_OF_STORED = "SELECT photo_file FROM finds WHERE CAST(id AS TEXT) = ?";
-const DELETE_STORED = "DELETE FROM finds WHERE CAST(id AS TEXT) = ?";
+const PHOTO_OF_STORED = `SELECT photo_file FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
+const DELETE_STORED = `DELETE FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
 /** An SQLite integer's decimal form, as CAST(… AS TEXT) writes it: at most 19 digits. */
 const STORED_ID = /^(0|-?[1-9][0-9]{0,18})$/;
 const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL,

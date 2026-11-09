@@ -152,8 +152,10 @@ const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, ti
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
 const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND finds.id > ? AND finds.id <= 9007199254740991 ORDER BY finds.id ASC LIMIT 1`;
 const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv, name_en, name_it, edibility, confidence FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
-const PHOTO_OF_STORED = "SELECT photo_file FROM finds WHERE CAST(id AS TEXT) = ?";
-const DELETE_STORED = "DELETE FROM finds WHERE CAST(id AS TEXT) = ?";
+/** Only among the IDs the store cannot read: a readable find is deleted by `delete` alone. */
+const UNREADABLE_ID = "(id < 1 OR id > 9007199254740991)";
+const PHOTO_OF_STORED = `SELECT photo_file FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
+const DELETE_STORED = `DELETE FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
 const ANSWER_COLUMNS =
   "state = 'done', failure_cause = NULL, failure_detail = NULL, answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?, name_it = ?, edibility = ?, confidence = ?";
 const SET_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state IN ('waiting', 'failed')`;
