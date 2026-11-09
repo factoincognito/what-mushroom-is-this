@@ -109,7 +109,8 @@ export type Strings = {
       readonly noCredit: string;
       readonly modelUnknown: string;
       readonly answer: string;
-      readonly photoUnreadable: string;
+      /** A run failed inside the app; the error itself is not shown. */
+      readonly internalError: string;
       /** `{status}`: the answer's HTTP status. */
       readonly other: string;
     };
@@ -118,6 +119,8 @@ export type Strings = {
       readonly segmentCheck: string;
       readonly request: string;
       readonly answer: string;
+      /** The photo could not be read for analysis. */
+      readonly photo: string;
     };
     /** A failed new analysis of a find that has an answer. */
     readonly answerKept: string;
@@ -258,8 +261,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         modelUnknown: "Claude-API:t känner inte till modellen. Välj en annan i Inställningar.",
         answer:
           "Ett svar hade inte den väntade formen, eller kom inte från Claude-API:t (till exempel en inloggningssida för wifi). Det fyndet är markerat som misslyckat. Tryck på Analysera nu för att fortsätta.",
-        photoUnreadable:
-          "Ett fynds foto gick inte att läsa för analys. Tryck på Analysera nu för att försöka igen.",
+        internalError:
+          "Något gick fel i appen under analysen. Fynden finns kvar. Tryck på Analysera nu för att försöka igen.",
         other:
           "Claude-API:t svarade med status {status}. Tryck på Analysera nu för att försöka igen.",
       },
@@ -268,6 +271,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "Fotot innehåller data som inte skickas ({detail}), så det analyserades inte.",
         request: "Claude-API:t avvisade förfrågan ({detail}).",
         answer: "Svaret hade inte den väntade formen ({detail}).",
+        photo: "Fotot gick inte att läsa för analys ({detail}).",
       },
       answerKept: "Den nya analysen misslyckades. Det tidigare svaret finns kvar.",
     },
@@ -365,14 +369,15 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         modelUnknown: "The Claude API does not know the model. Choose another in Settings.",
         answer:
           "An answer did not have the expected form, or did not come from the Claude API (for example a Wi-Fi sign-in page). That find is marked failed. Tap Analyse now to go on.",
-        photoUnreadable:
-          "A find's photo could not be read for analysis. Tap Analyse now to try again.",
+        internalError:
+          "Something went wrong inside the app during the analysis. The finds are kept. Tap Analyse now to try again.",
         other: "The Claude API answered with status {status}. Tap Analyse now to try again.",
       },
       failed: {
         segmentCheck: "The photo holds data that is not sent ({detail}), so it was not analysed.",
         request: "The Claude API refused the request ({detail}).",
         answer: "The answer did not have the expected form ({detail}).",
+        photo: "The photo could not be read for analysis ({detail}).",
       },
       answerKept: "The new analysis failed. The earlier answer is kept.",
     },
@@ -474,8 +479,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         modelUnknown: "L'API di Claude non conosce il modello. Scegline un altro in Impostazioni.",
         answer:
           "Una risposta non aveva la forma prevista, oppure non veniva dall'API di Claude (ad esempio una pagina di accesso al Wi-Fi). Quel ritrovamento è segnato come non riuscito. Tocca Analizza ora per continuare.",
-        photoUnreadable:
-          "Non è stato possibile leggere la foto di un ritrovamento per l'analisi. Tocca Analizza ora per riprovare.",
+        internalError:
+          "Qualcosa è andato storto nell'app durante l'analisi. I ritrovamenti sono conservati. Tocca Analizza ora per riprovare.",
         other:
           "L'API di Claude ha risposto con lo stato {status}. Tocca Analizza ora per riprovare.",
       },
@@ -484,6 +489,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "La foto contiene dati che non vengono inviati ({detail}), quindi non è stata analizzata.",
         request: "L'API di Claude ha rifiutato la richiesta ({detail}).",
         answer: "La risposta non aveva la forma prevista ({detail}).",
+        photo: "Non è stato possibile leggere la foto per l'analisi ({detail}).",
       },
       answerKept: "La nuova analisi non è riuscita. La risposta precedente è mantenuta.",
     },

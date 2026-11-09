@@ -47,8 +47,9 @@ type QueueProviderProps = {
  * Runs the analysis queue (docs/SPEC.md 3.4) on its triggers: when the app comes to the front (and
  * at the start, when it starts in front), when a find is saved through the find log it gives the
  * screens, and when the phone reports that the network is back. The key is the one KeyProvider
- * reads only after the first-start clearing. A run's error that the queue does not handle is not
- * caught here: its promise rejects (a programming error passes through).
+ * reads only after the first-start clearing. A run that rejects, with an error the queue does not
+ * handle, is caught here and stops the queue with an internal error, which the Log screen shows
+ * without the error itself (Clead's decision on #17); "analyse now" tries again.
  */
 export function QueueProvider({
   children,
@@ -72,20 +73,23 @@ export function QueueProvider({
     let inFront = appState.currentState === "active";
     queue.setInFront(inFront);
     if (inFront) {
-      void queue.trigger();
+      caught(queue, queue.trigger());
     }
     const subscription = appState.addEventListener("change", (next) => {
       const comesToFront = next === "active" && !inFront;
       inFront = next === "active";
       queue.setInFront(inFront);
       if (comesToFront) {
-        void queue.trigger();
+        caught(queue, queue.trigger());
       }
     });
     return () => subscription.remove();
   }, [queue, appState]);
 
-  useEffect(() => watchNetworkBack(() => void queue.trigger(), network), [queue, network]);
+  useEffect(
+    () => watchNetworkBack(() => caught(queue, queue.trigger()), network),
+    [queue, network],
+  );
 
   useEffect(() => () => queue.dispose(), [queue]);
 
@@ -95,7 +99,7 @@ export function QueueProvider({
       ...store,
       async add(find) {
         const id = await store.add(find);
-        void queue.trigger();
+        caught(queue, queue.trigger());
         return id;
       },
     };
@@ -104,9 +108,14 @@ export function QueueProvider({
   const value = useMemo<QueueContextValue>(
     () => ({
       state,
-      analyseNow: () => void queue.analyseNow(),
-      settingChanged: (setting) => void queue.settingChanged(setting),
-      analyseFind: (id) => queue.analyseFind(id),
+      analyseNow: () => caught(queue, queue.analyseNow()),
+      settingChanged: (setting) => caught(queue, queue.settingChanged(setting)),
+      // The screen that asked still gets the rejection, to say that its analysis did not run.
+      analyseFind: (id) =>
+        queue.analyseFind(id).catch((error: unknown) => {
+          queue.stopForInternalError();
+          throw error;
+        }),
     }),
     [state, queue],
   );
@@ -116,6 +125,11 @@ export function QueueProvider({
       <FindLogProvider open={screensLog}>{children}</FindLogProvider>
     </QueueContext.Provider>
   );
+}
+
+/** Stops the queue with an internal error when a run the provider started rejects. */
+function caught(queue: AnalysisQueue, run: Promise<void>): void {
+  run.catch(() => queue.stopForInternalError());
 }
 
 export function useQueue(): QueueContextValue {

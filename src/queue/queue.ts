@@ -7,7 +7,9 @@
  *
  * Errors the queue does not know how to handle pass through: a programming or configuration error
  * (the time limit's RangeError, an image limit or JPEG quality the image module refuses) and a
- * store error reject the run, leave the find as it was, and end the run.
+ * store error reject the run, leave the find as it was, and end the run. Whoever started the run
+ * then stops the queue with `stopForInternalError` (the provider for the runs it starts, the
+ * queue for the restart after a `retry-after`), so no rejection goes unhandled.
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
@@ -39,8 +41,11 @@ export type QueueStop =
   | { reason: "model-unknown" }
   /** An answer not of the shape, or not from the API; that find was marked failed. */
   | { reason: "answer" }
-  /** The encoder could not read a find's photo; the find stays waiting. */
-  | { reason: "photo-unreadable" }
+  /**
+   * A run rejected with an error the queue does not handle (a programming, configuration or store
+   * error), or a find's analysis did. The finds are as they were; only "analyse now" lifts it.
+   */
+  | { reason: "internal-error" }
   /** Any other status. */
   | { reason: "other"; status: number };
 
@@ -223,6 +228,14 @@ export class AnalysisQueue {
     });
   }
 
+  /**
+   * Stops the queue for an error it does not handle: whoever starts a run sets this when the run
+   * rejects. The error is not kept: the user is told only that something went wrong.
+   */
+  stopForInternalError(): void {
+    this.setStop({ reason: "internal-error" });
+  }
+
   /** Cancels a pending restart; the queue is not used after this. */
   dispose(): void {
     this.cancelRestart?.();
@@ -305,7 +318,12 @@ export class AnalysisQueue {
       if (error instanceof PhotoPreparationError && error.code !== "invalid-size") {
         throw error;
       }
-      return { type: "stop", stop: { reason: "photo-unreadable" } };
+      // The photo of this find cannot be read: it fails, and the queue goes on (Clead, #17).
+      return {
+        type: "find-failed",
+        failure: { cause: "photo", detail: photoReason(error) },
+        stop: null,
+      };
     }
     if (!photo.ok) {
       return { type: "find-failed", failure: photo.failure, stop: null };
@@ -346,7 +364,8 @@ export class AnalysisQueue {
       this.cancelRestart = this.deps.schedule(() => {
         if (this.state.stop === stop) {
           this.clearStop();
-          void this.trigger();
+          // This run the queue starts itself, so it handles its rejection itself.
+          this.trigger().catch(() => this.stopForInternalError());
         }
       }, delay);
     }
@@ -378,6 +397,17 @@ export class AnalysisQueue {
       listener(this.state);
     }
   }
+}
+
+/**
+ * Why a photo could not be read, for the failed find's detail: the encoder's message, with the
+ * code of a `PhotoPreparationError` before it; never empty.
+ */
+function photoReason(error: unknown): string {
+  if (!(error instanceof Error) || error.message.trim() === "") {
+    return "the photo could not be read";
+  }
+  return error instanceof PhotoPreparationError ? `${error.code}: ${error.message}` : error.message;
 }
 
 /** The outcome of SPEC 3.3's table for an error class. */

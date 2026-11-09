@@ -121,7 +121,9 @@ function insertFailed(cause: string): void {
 
 describe("schema version 1 on a real SQLite", () => {
   it("is accepted by SQLite, at user_version 1", () => {
-    expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({ user_version: MIGRATIONS.length });
+    expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({
+      user_version: MIGRATIONS.length,
+    });
   });
 
   it.each(FAILURE_CAUSES)("accepts the failure cause %s the store knows", (cause) => {

@@ -63,8 +63,8 @@ function stopMessage(stop: QueueStop, strings: Strings, formatTime: FormatTime):
       return t.modelUnknown;
     case "answer":
       return t.answer;
-    case "photo-unreadable":
-      return t.photoUnreadable;
+    case "internal-error":
+      return t.internalError;
     case "other":
       return fill(t.other, { status: String(stop.status) });
   }
@@ -77,6 +77,7 @@ export function failureMessage(failure: FindFailure, strings: Strings): string {
     "segment-check": t.segmentCheck,
     request: t.request,
     answer: t.answer,
+    photo: t.photo,
   }[failure.cause];
   return fill(template, { detail: failure.detail });
 }

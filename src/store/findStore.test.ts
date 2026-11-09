@@ -729,7 +729,11 @@ describe("markFailed", () => {
   });
 
   it("reads a find that failed for its photo", async () => {
-    db.reply("first", GET, row({ state: "failed", failure_cause: "photo", failure_detail: "gone" }));
+    db.reply(
+      "first",
+      GET,
+      row({ state: "failed", failure_cause: "photo", failure_detail: "gone" }),
+    );
     await expect(store.get(7)).resolves.toMatchObject({
       analysis: { state: "failed", failure: { cause: "photo", detail: "gone" } },
     });
