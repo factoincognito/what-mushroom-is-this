@@ -20,10 +20,18 @@ import { useQueue } from "../queue/QueueContext";
 import { useFindLog } from "../store/FindLogContext";
 import type { FindSummary } from "../store/find";
 
+/**
+ * One entry of the store's list. On `main` every entry is a readable find. When the store marks an
+ * unreadable row in the list (PBI-1.16), this becomes the store's entry type, `LogRow` gains a case
+ * for it, and the row key (`entryKey`) one for an entry without an ID; nothing else in the screen
+ * reads an entry.
+ */
+type LogEntry = FindSummary;
+
 /** What the screen has read of the log. */
 type ListState =
   | { kind: "loading" }
-  | { kind: "ready"; finds: FindSummary[] }
+  | { kind: "ready"; entries: LogEntry[] }
   /** The store could not give the list; the error itself is not shown. */
   | { kind: "unreadable" };
 
@@ -52,7 +60,7 @@ export default function LogScreen() {
     const read = ++latestRead.current;
     let next: ListState;
     try {
-      next = { kind: "ready", finds: await (await findLog()).list() };
+      next = { kind: "ready", entries: await (await findLog()).list() };
     } catch {
       next = { kind: "unreadable" };
     }
@@ -91,9 +99,9 @@ export default function LogScreen() {
         )}
         {list.kind === "ready" && (
           <FlatList
-            data={list.finds}
-            keyExtractor={(find) => String(find.id)}
-            renderItem={({ item }) => <FindRow find={item} language={language} strings={strings} />}
+            data={list.entries}
+            keyExtractor={entryKey}
+            renderItem={({ item }) => <LogRow entry={item} language={language} strings={strings} />}
             ListEmptyComponent={
               <View style={styles.centred}>
                 <Text style={styles.empty}>{strings.log.empty}</Text>
@@ -139,6 +147,22 @@ export default function LogScreen() {
       </Link>
     </View>
   );
+}
+
+type LogRowProps = {
+  readonly entry: LogEntry;
+  readonly language: Language;
+  readonly strings: Strings;
+};
+
+/** The key of an entry's row: its find's ID. */
+function entryKey(entry: LogEntry): string {
+  return String(entry.id);
+}
+
+/** One entry of the list, by its kind: today always a readable find. */
+function LogRow({ entry, language, strings }: LogRowProps) {
+  return <FindRow find={entry} language={language} strings={strings} />;
 }
 
 type FindRowProps = {
