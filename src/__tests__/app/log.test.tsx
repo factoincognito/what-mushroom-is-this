@@ -357,10 +357,48 @@ describe("a find whose ID the store cannot read, in the list (PBI-1.26)", () => 
     await fireEvent.press(within(first).getByRole("button", { name: en.find.delete }));
     await fireEvent.press(within(first).getByRole("button", { name: en.find.deleteYes }));
     expect(remove).toHaveBeenCalledWith("0");
-    expect(await screen.findAllByTestId("unreadable-row")).toHaveLength(1);
+    const left = await screen.findAllByTestId("unreadable-row");
+    expect(left).toHaveLength(1);
     expect(mockLog.withoutId).toEqual(["-3"]);
     expect(screen.getByTestId("find-row-1")).toBeOnTheScreen();
+    // The "-3" row does not inherit the deleted row's open question (Clead's review of #33, fix 1).
+    const [other] = left;
+    if (other === undefined) {
+      throw new Error("no row without an ID left");
+    }
+    expect(within(other).getByRole("button", { name: en.find.delete })).toBeOnTheScreen();
+    expect(screen.queryByText(en.find.deleteConfirm)).not.toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.find.deleteYes })).not.toBeOnTheScreen();
     remove.mockRestore();
+  });
+
+  it("keeps a question the user opened on another such row with that row when one is deleted", async () => {
+    mockLog.withoutId.push("0", "-3");
+    await startApp();
+    const [first, second] = await screen.findAllByTestId("unreadable-row");
+    if (first === undefined || second === undefined) {
+      throw new Error("not two rows without an ID");
+    }
+    await fireEvent.press(within(second).getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(within(first).getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(within(first).getByRole("button", { name: en.find.deleteYes }));
+    const left = await screen.findAllByTestId("unreadable-row");
+    expect(mockLog.withoutId).toEqual(["-3"]);
+    expect(left).toHaveLength(1);
+    expect(screen.getAllByText(en.find.deleteConfirm)).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: en.find.delete })).not.toBeOnTheScreen();
+  });
+
+  it("closes its question once the delete succeeds, even while the list still shows the find", async () => {
+    mockLog.withoutId.push("0");
+    jest.spyOn(mockLog, "deleteUnreadable").mockResolvedValueOnce({ photoRemoved: true });
+    await startApp();
+    const row = within(await screen.findByTestId("unreadable-row"));
+    await fireEvent.press(row.getByRole("button", { name: en.find.delete }));
+    await fireEvent.press(row.getByRole("button", { name: en.find.deleteYes }));
+    expect(await row.findByRole("button", { name: en.find.delete })).toBeOnTheScreen();
+    expect(row.queryByText(en.find.deleteConfirm)).not.toBeOnTheScreen();
+    jest.mocked(mockLog.deleteUnreadable).mockRestore();
   });
 
   it("says so in its row when the find cannot be deleted, without the error's text, and keeps it", async () => {

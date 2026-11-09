@@ -165,11 +165,20 @@ type LogRowProps = {
 };
 
 /**
- * The key of an entry's row: its find's ID. An entry without an ID is keyed by its place in the
- * list, which is the store's order and so the same at every reading of an unchanged log.
+ * The key of an entry's row: its find's ID; for an entry without an ID, its ID as SQLite writes it,
+ * so that a row keeps its own state, and no other row takes it over, when a row before it goes
+ * (Clead's review of #33, fix 1). Only an entry with neither is keyed by its place in the list,
+ * which is the store's order and so the same at every reading of an unchanged log; such a row has
+ * no state of its own.
  */
 function entryKey(entry: LogEntry, index: number): string {
-  return entry.id === null ? `no-id-${index}` : String(entry.id);
+  if (entry.id !== null) {
+    return String(entry.id);
+  }
+  if (entry.storedId !== null) {
+    return `stored-${entry.storedId}`;
+  }
+  return `no-id-${index}`;
 }
 
 /** One entry of the list, by its kind. */
@@ -207,6 +216,8 @@ function WithoutIdRow({ storedId, strings, onRemoved }: WithoutIdRowProps) {
     setFailed(false);
     try {
       await (await findLog()).deleteUnreadable(id);
+      // Its question is answered: it does not stay open (Clead's review of #33, fix 1).
+      setConfirming(false);
       onRemoved();
     } catch (error) {
       if (error instanceof StoreError && error.code === "not-found") {
