@@ -27,7 +27,10 @@ class FakeDatabase implements FindDatabase {
     this.reply("first", "PRAGMA user_version", { user_version: MIGRATIONS.length });
   }
 
-  /** The reply to a statement; an Error is thrown. A later reply to the same statement wins. */
+  /**
+   * The reply to a statement; an Error is thrown, and a function is called with the statement's
+   * parameters to give the reply. A later reply to the same statement wins.
+   */
   reply(method: Method, sql: string, value: unknown): void {
     this.replies.unshift({ method, sql: sqlOf(sql), value });
   }
@@ -41,10 +44,11 @@ class FakeDatabase implements FindDatabase {
         method
       ];
     }
-    if (found.value instanceof Error) {
-      throw found.value;
+    const value = typeof found.value === "function" ? found.value(params) : found.value;
+    if (value instanceof Error) {
+      throw value;
     }
-    return found.value;
+    return value;
   }
 
   async execAsync(source: string): Promise<void> {
@@ -96,6 +100,7 @@ class FakePhotos implements PhotoFiles {
   readonly files = new Set<string>();
   readonly stuck = new Set<string>();
   copyError: Error | null = null;
+  uriError: Error | null = null;
 
   constructor(readonly events: Event[]) {}
 
@@ -126,14 +131,19 @@ class FakePhotos implements PhotoFiles {
   }
 
   uriOf(name: string): string {
+    if (this.uriError !== null) {
+      throw this.uriError;
+    }
     return `file:///doc/photos/${name}`;
   }
 }
 
 const INSERT =
   "INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting')";
-const GET =
-  "SELECT id, taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail, answer_json, model, analysed_at_ms FROM finds WHERE id = ?";
+const FIND_COLUMNS =
+  "id, taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photo_file, state, failure_cause, failure_detail, answer_json, model, analysed_at_ms";
+const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE id = ?`;
+const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND id > ? ORDER BY id ASC LIMIT 1`;
 const LIST =
   "SELECT id, taken_at_ms, utc_offset_min, time_source, photo_file, state, failure_cause, failure_detail, result, name_sv, name_en, name_it, edibility, confidence FROM finds ORDER BY taken_at_ms DESC, id DESC";
 const ANSWER_COLUMNS =
@@ -514,6 +524,7 @@ describe("list", () => {
     const time = { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" };
     await expect(store.list()).resolves.toEqual([
       {
+        readable: true,
         id: 9,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
@@ -526,18 +537,26 @@ describe("list", () => {
         },
       },
       {
+        readable: true,
         id: 8,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         analysis: { state: "done", result: "no_mushroom" },
       },
       {
+        readable: true,
         id: 7,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         analysis: { state: "failed", failure: { cause: "answer", detail: "shape" } },
       },
-      { id: 6, photoUri: "file:///doc/photos/p7.jpg", time, analysis: { state: "waiting" } },
+      {
+        readable: true,
+        id: 6,
+        photoUri: "file:///doc/photos/p7.jpg",
+        time,
+        analysis: { state: "waiting" },
+      },
     ]);
     expect(events).toEqual([{ method: "all", sql: LIST, params: [] }]);
   });
@@ -584,32 +603,106 @@ describe("list", () => {
       },
     ],
     ["a done find with an unknown result", { state: "done", result: "maybe" }],
-  ])("refuses a stored row with %s", async (_, overrides) => {
-    db.reply("all", LIST, [summaryRow(overrides)]);
-    await expect(store.list()).rejects.toMatchObject({ code: "corrupt" });
+    ["an unknown state", { state: "lost" }],
+    ["a time stored as text", { taken_at_ms: "1762590000000" }],
+    ["a photo name stored as a number", { photo_file: 7 }],
+    ["a failed find without a cause", { state: "failed", failure_detail: "x" }],
+  ])(
+    "marks a stored row with %s as unreadable, by its ID, and lists the others (PBI-1.16)",
+    async (_, overrides) => {
+      db.reply("all", LIST, [
+        summaryRow({ id: 9 }),
+        summaryRow({ id: 8, ...overrides }),
+        summaryRow({ id: 7 }),
+      ]);
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: 9 }),
+        { readable: false, id: 8 },
+        expect.objectContaining({ readable: true, id: 7 }),
+      ]);
+    },
+  );
+
+  it.each<[string, unknown]>([
+    ["a row that is not an object", "a row"],
+    ["a row without an ID", summaryRow({ id: null })],
+    ["a row whose ID is not a positive whole number", summaryRow({ id: 0.5 })],
+  ])("marks %s as unreadable without an ID (PBI-1.16)", async (_, stored) => {
+    db.reply("all", LIST, [stored, summaryRow({ id: 7 })]);
+    await expect(store.list()).resolves.toEqual([
+      { readable: false, id: null },
+      expect.objectContaining({ readable: true, id: 7 }),
+    ]);
+  });
+
+  it("passes on an error that does not come from what is stored", async () => {
+    photos.uriError = new Error("the document directory is gone");
+    db.reply("all", LIST, [summaryRow()]);
+    await expect(store.list()).rejects.toThrow("the document directory is gone");
   });
 });
 
-describe("oldestWaiting (PBI-1.7)", () => {
-  const OLDEST_WAITING = "SELECT id FROM finds WHERE state = 'waiting' ORDER BY id ASC LIMIT 1";
-
-  it("asks for the waiting find saved first, by its ID, and gives its ID", async () => {
-    db.reply("first", OLDEST_WAITING, { id: 4 });
+describe("oldestWaiting (PBI-1.7, PBI-1.16)", () => {
+  it("asks for the waiting find saved first, by its ID, reads it and gives its ID", async () => {
+    db.reply("first", NEXT_WAITING, row({ id: 4 }));
     await expect(store.oldestWaiting()).resolves.toBe(4);
-    expect(events).toEqual([{ method: "first", sql: OLDEST_WAITING, params: [] }]);
+    expect(events).toEqual([{ method: "first", sql: NEXT_WAITING, params: [0] }]);
   });
 
   it("gives null when no find is waiting", async () => {
     await expect(store.oldestWaiting()).resolves.toBeNull();
   });
 
+  it("passes over a waiting find whose row it cannot read, and gives the next one after it", async () => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) => {
+      const after = params[0];
+      if (after === 0) {
+        return row({ id: 2, time_source: "gps" });
+      }
+      return after === 2 ? row({ id: 5 }) : null;
+    });
+    await expect(store.oldestWaiting()).resolves.toBe(5);
+    expect(events).toEqual([
+      { method: "first", sql: NEXT_WAITING, params: [0] },
+      { method: "first", sql: NEXT_WAITING, params: [2] },
+    ]);
+    expect(events.filter((event) => "method" in event && event.method === "run")).toEqual([]);
+  });
+
+  it("gives null when every waiting find is one it cannot read", async () => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) =>
+      params[0] === 0 ? row({ id: 3, state: "lost" }) : null,
+    );
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
   it.each([
-    ["not a whole number", { id: 4.5 }],
-    ["not a number", { id: "4" }],
-    ["missing", {}],
-  ])("refuses a stored ID that is %s as corrupt", async (_name, reply) => {
-    db.reply("first", OLDEST_WAITING, reply);
+    ["not a whole number", row({ id: 4.5 })],
+    ["not a number", row({ id: "4" })],
+    ["missing", row({ id: undefined })],
+  ])(
+    "refuses a stored ID that is %s as corrupt, since it cannot pass over it",
+    async (_name, reply) => {
+      db.reply("first", NEXT_WAITING, reply);
+      await expect(store.oldestWaiting()).rejects.toMatchObject({ code: "corrupt" });
+    },
+  );
+
+  it("refuses a stored row that is not an object as corrupt", async () => {
+    db.reply("first", NEXT_WAITING, "a row");
     await expect(store.oldestWaiting()).rejects.toMatchObject({ code: "corrupt" });
+  });
+
+  it("passes on an error of the database", async () => {
+    db.reply("first", NEXT_WAITING, new Error("database is locked"));
+    await expect(store.oldestWaiting()).rejects.toThrow("database is locked");
+  });
+
+  it("passes on an error while it reads the row that does not come from what is stored, passing over nothing", async () => {
+    photos.uriError = new Error("the document directory is gone");
+    db.reply("first", NEXT_WAITING, row({ id: 4 }));
+    await expect(store.oldestWaiting()).rejects.toThrow("the document directory is gone");
+    expect(events).toEqual([{ method: "first", sql: NEXT_WAITING, params: [0] }]);
   });
 });
 

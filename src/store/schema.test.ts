@@ -1,5 +1,6 @@
 import type { SQLiteBindParams } from "expo-sqlite";
 
+import { EDIBILITIES } from "../analysis/answer";
 import type { FindDatabase, SqlRunner } from "./database";
 import { StoreError } from "./find";
 import { MIGRATIONS, migrate } from "./schema";
@@ -140,6 +141,15 @@ describe("schema version 1", () => {
   it("lets the database hold an answer only on a done find, and a failure only on a failed one", () => {
     expect(v1).toContain("CHECK ((state = 'done') = (answer_json IS NOT NULL))");
     expect(v1).toContain("CHECK ((state = 'failed') = (failure_cause IS NOT NULL))");
+  });
+
+  it("is a STRICT table, so SQLite refuses a value of the wrong type (PBI-1.16)", () => {
+    expect(v1).toMatch(/\) STRICT;/);
+  });
+
+  it("lets the database refuse an edibility the answer's shape does not have (PBI-1.16)", () => {
+    const listed = EDIBILITIES.map((edibility) => `'${edibility}'`).join(", ");
+    expect(v1).toContain(`edibility TEXT CHECK (edibility IN (${listed}))`);
   });
 
   it("indexes the finds in the Log's order", () => {

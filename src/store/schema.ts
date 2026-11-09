@@ -11,7 +11,9 @@ import { corrupt, StoreError } from "./find";
 /**
  * Version 1: one row per find, its answer as JSON and, beside it, what the Log list shows. Not yet
  * released, so it is still changed in place: the failure causes `photo` (PBI-1.7) and `refused`
- * (PBI-1.21) were added without a migration (Clead's decisions on #17 and for PBI-1.21).
+ * (PBI-1.21) were added without a migration (Clead's decisions on #17 and for PBI-1.21), and the
+ * table made STRICT, with a CHECK on the edibility (PBI-1.16). The edibilities are written out,
+ * not taken from the analysis module, so a later change there cannot change this version.
  */
 const VERSION_1 = `
 CREATE TABLE finds (
@@ -34,7 +36,7 @@ CREATE TABLE finds (
   name_sv TEXT,
   name_en TEXT,
   name_it TEXT,
-  edibility TEXT,
+  edibility TEXT CHECK (edibility IN ('edible', 'edible_after_preparation', 'not_edible', 'poisonous', 'deadly_poisonous', 'unknown')),
   confidence TEXT CHECK (confidence IN ('low', 'medium', 'high')),
   CHECK ((latitude IS NULL) = (position_source IS NULL)),
   CHECK ((longitude IS NULL) = (position_source IS NULL)),
@@ -47,7 +49,7 @@ CREATE TABLE finds (
   CHECK ((answer_json IS NULL) = (result IS NULL)),
   CHECK ((COALESCE(result, '') = 'match') = (name_sv IS NOT NULL AND name_en IS NOT NULL AND name_it IS NOT NULL AND edibility IS NOT NULL AND confidence IS NOT NULL)),
   CHECK (COALESCE(result, '') = 'match' OR (name_sv IS NULL AND name_en IS NULL AND name_it IS NULL AND edibility IS NULL AND confidence IS NULL))
-);
+) STRICT;
 CREATE INDEX finds_newest_first ON finds (taken_at_ms DESC, id DESC);
 `;
 

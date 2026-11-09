@@ -28,6 +28,7 @@ import {
   type FindTime,
   invalid,
   isOneOf,
+  type ListedFind,
   type NewFind,
   POSITION_SOURCES,
   type Position,
@@ -56,11 +57,16 @@ export interface FindStore {
   add(find: NewFind): Promise<number>;
   /** The find with the ID, or null when there is none. */
   get(id: number): Promise<Find | null>;
-  /** What the Log list shows of every find, the latest taken first. */
-  list(): Promise<FindSummary[]>;
+  /**
+   * What the Log list shows of every find, the latest taken first. A find whose row cannot be read
+   * is marked unreadable in its place, and the others are listed all the same.
+   */
+  list(): Promise<ListedFind[]>;
   /**
    * The ID of the waiting find saved first, or null when none waits: the queue's "oldest first" is
-   * the order of saving, the find's ID, not the time taken (docs/SPEC.md 3.4).
+   * the order of saving, the find's ID, not the time taken (docs/SPEC.md 3.4). A waiting find
+   * whose row cannot be read is passed over and left as it is, so it does not stop the queue; the
+   * list shows it as unreadable.
    */
   oldestWaiting(): Promise<number | null>;
   setAnswer(id: number, analysed: AnalysedAnswer): Promise<void>;
@@ -87,13 +93,16 @@ export interface StoreOptions {
 
 const INSERT = `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude,
   accuracy_m, position_source, photo_file, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting')`;
-const GET = `SELECT id, taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m,
+const FIND_COLUMNS = `id, taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m,
   position_source, photo_file, state, failure_cause, failure_detail, answer_json, model,
-  analysed_at_ms FROM finds WHERE id = ?`;
+  analysed_at_ms`;
+const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE id = ?`;
 const LIST = `SELECT id, taken_at_ms, utc_offset_min, time_source, photo_file, state, failure_cause,
   failure_detail, result, name_sv, name_en, name_it, edibility, confidence FROM finds
   ORDER BY taken_at_ms DESC, id DESC`;
-const OLDEST_WAITING = "SELECT id FROM finds WHERE state = 'waiting' ORDER BY id ASC LIMIT 1";
+/** The waiting find saved first after a given ID. */
+const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND id > ?
+  ORDER BY id ASC LIMIT 1`;
 const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL,
   answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?,
   name_it = ?, edibility = ?, confidence = ?`;
@@ -174,12 +183,24 @@ export async function createFindStore(
 
     async list() {
       const rows = await db.getAllAsync(LIST, []);
-      return rows.map((row) => readSummary(record(row), photos));
+      return rows.map((row) => listed(row, photos));
     },
 
     async oldestWaiting() {
-      const row = await db.getFirstAsync(OLDEST_WAITING, []);
-      return row === null ? null : integerOf(record(row), "id");
+      let after = 0;
+      for (;;) {
+        const found = await db.getFirstAsync(NEXT_WAITING, [after]);
+        if (found === null) {
+          return null;
+        }
+        const row = record(found);
+        // Without its ID there is no passing over it: the next ask would give the same row.
+        const id = integerOf(row, "id");
+        if (readsAsFind(row, photos)) {
+          return id;
+        }
+        after = id;
+      }
     },
 
     setAnswer: (id, analysed) => answer(id, analysed, SET_ANSWER),
@@ -299,6 +320,41 @@ function readFind(row: Row, photos: PhotoFiles): Find {
     position: readPosition(row),
     analysis: readAnalysis(row),
   };
+}
+
+/** Whether the row reads as a find; an error that is not about what is stored passes through. */
+function readsAsFind(row: Row, photos: PhotoFiles): boolean {
+  try {
+    readFind(row, photos);
+    return true;
+  } catch (error) {
+    if (isCorrupt(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/** A row of the list, or its mark when it cannot be read. */
+function listed(stored: unknown, photos: PhotoFiles): ListedFind {
+  try {
+    return { readable: true, ...readSummary(record(stored), photos) };
+  } catch (error) {
+    if (!isCorrupt(error)) {
+      throw error;
+    }
+    return { readable: false, id: storedId(stored) };
+  }
+}
+
+/** The ID of a row that cannot be read, when the ID itself can be; otherwise null. */
+function storedId(stored: unknown): number | null {
+  const id = typeof stored === "object" && stored !== null && "id" in stored ? stored.id : null;
+  return typeof id === "number" && Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function isCorrupt(error: unknown): boolean {
+  return error instanceof StoreError && error.code === "corrupt";
 }
 
 function readSummary(row: Row, photos: PhotoFiles): FindSummary {
