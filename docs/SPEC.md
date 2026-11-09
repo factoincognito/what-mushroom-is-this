@@ -187,7 +187,7 @@ When the queue has stopped (3.3), the Log screen says why and offers
   | no network, time limit passed, 500, 504, 529 | not reachable, or a fault on Anthropic's side | the find stays waiting; the queue tries it again at its next run |
   | 429 | rate limit or spend limit | the queue stops until the time the answer's `retry-after` gives; without one, until the user starts it again |
   | 400 `invalid_request_error` whose message starts "You have reached your specified API usage limits" or "You have reached your specified workspace API usage limits" | the key owner's own spend limit, or a workspace's, which the API reports this way (**[Clead]**, from the API's "Rate limits" page, read by Crog on 2026-11-08 for PBI-1.4 and #9) | as 429 without `retry-after` |
-  | 400 `invalid_request_error` whose message starts "This API key is not scoped to a workspace" | the key needs the `anthropic-workspace-id` header (Known unknown 8; **[Clead]**, from the API's "Authentication" page as Crog read it on 2026-11-08, checked against that page on 2026-11-09 for PBI-1.13) | as 401, 403 |
+  | 400 `invalid_request_error` whose message starts "This API key is not scoped to a workspace" | the key needs the `anthropic-workspace-id` header (Known unknown 8; **[Clead]**, from the API's "Authentication" page as Crog read it on 2026-11-08, checked against that page on 2026-11-09 for PBI-1.13) | as 401, 403, with a message of its own: the key must be replaced with one that belongs to a workspace (**[Clead]**, #17) |
   | 401, 403 | the key is refused or lacks permission | the queue stops; Settings asks for a key |
   | 402 or a billing error | no credit on the key's account | the queue stops; the message says so |
   | 404 | the model is not known (for example retired) | the queue stops; Settings asks for a model |
@@ -195,6 +195,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   | an answer whose `stop_reason` is `refusal` | Claude declined to answer (**[Clead]**, PBI-1.13) | that find is marked failed; the queue goes on with the next |
   | an answer that does not fit the shape, is cut off (`stop_reason` `max_tokens` or `model_context_window_exceeded`), or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops |
   | any other status | | the queue stops; the message gives the status |
+  | the find's photo cannot be loaded, decoded or sized | the photo itself is the problem (**[Clead]**, #17, PBI-1.21) | that find is marked failed; the queue goes on with the next |
+  | any other error in the app while a find is analysed (for example, full storage) | (**[Clead]**, #17, PBI-1.21) | the find stays waiting; the queue stops and the Log screen says so, without the error's text; "analyse now" starts it again |
 
   **[Clead]**, both: a billing error is told apart from other 400 answers
   by the error type in the answer's body, and a `retry-after` value that
@@ -310,7 +312,9 @@ this?" app.
    which needs Adam's Expo account: `eas init` signed in to that account
    links the project.
 6. A library for the network state, which the queue's "network is back"
-   trigger needs (3.4); not in the expected list above.
+   trigger needs (3.4); not in the expected list above. Settled for #17:
+   `expo-network`, not NetInfo, whose default reachability check sends a
+   request to a Google server, against section 2 (**[Clead]**).
 7. Whether a gallery photo's position arrives on Android. Android's
    documentation says reading it needs the `ACCESS_MEDIA_LOCATION`
    permission, and `expo-image-picker` does not ask for it, so it most

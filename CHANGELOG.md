@@ -17,6 +17,15 @@ All notable changes to What mushroom is this? are documented here.
 - Settings: the API key, the model and the kept language (#12).
 - New find: camera and gallery, the gallery photo's time and position, and
   the photo prepared for analysis (#14).
+- The analysis queue: its triggers, stops, restarts and messages, and
+  "analyse now" on the Log screen (#17).
+
+### Changed
+
+- The analysis module: a key that belongs to no workspace is refused, a
+  refused answer fails only its find, and an answer's text blocks are
+  joined (#18).
+- The image module checks the input of its token count (#19).
 
 ## Project created
 
