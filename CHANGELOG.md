@@ -4,6 +4,20 @@ All notable changes to What mushroom is this? are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- The specification, from the approved design (#4, #7, #9, #10, #13).
+- The image module: the resize to the model's image limits and the JPEG
+  segment check (#5).
+- The app shell: routes, the three languages, the disclaimer at first
+  start (#6).
+- The analysis module: the request, the answer's validation and the
+  error classes (#8, #15).
+- The find log store: the database and the photo files (#11).
+- Settings: the API key, the model and the kept language (#12).
+- New find: camera and gallery, the gallery photo's time and position, and
+  the photo prepared for analysis (#14).
+
 ## Project created
 
 - Bootstrapped from the Clead + Crog project template

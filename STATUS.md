@@ -10,10 +10,11 @@ Last update: 2026-11-08
 Build: Phase 1, the first version ([`docs/BACKLOG.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/BACKLOG.md)); the specification's intent is approved ([`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/SPEC.md)).
 
 ## Current focus
-The Phase 1 items: a new find, [PBI-1.6](https://github.com/factoincognito/what-mushroom-is-this/blob/df4eb7f9723803414cff29ab74274832469a751f/docs/BACKLOG.md?plain=1#L45), and the analysis module's follow-ups, [PBI-1.14](https://github.com/factoincognito/what-mushroom-is-this/blob/df4eb7f9723803414cff29ab74274832469a751f/docs/BACKLOG.md?plain=1#L53), first whether thinking can cut off the answer.
+The Phase 1 items: the queue, [PBI-1.7](https://github.com/factoincognito/what-mushroom-is-this/blob/164660eadd6e37875801a6e7a37f746e7d91abf3/docs/BACKLOG.md?plain=1#L46) ([#17](https://github.com/factoincognito/what-mushroom-is-this/pull/17)), and the analysis and image follow-ups ([#18](https://github.com/factoincognito/what-mushroom-is-this/pull/18), [#19](https://github.com/factoincognito/what-mushroom-is-this/pull/19)).
 
 ## Next step
 Clead and Crog: the Phase 1 items up to the EAS build, unattended, one PR each ([PO-159](https://github.com/factoincognito/product-office/blob/3be9e7f707f0da0811be1f1d8249482792d1c3f6/BACKLOG.md?plain=1#L390) step 4 in the product office).
 
 ## Blockers
-None.
+- Adam: `eas init` signed in to his Expo account, for the EAS build, [PBI-1.10](https://github.com/factoincognito/what-mushroom-is-this/blob/164660eadd6e37875801a6e7a37f746e7d91abf3/docs/BACKLOG.md?plain=1#L49).
+- Adam: his decision on the escalation of Google's `play-services-location`, in the product office's ["Waiting for Adam"](https://github.com/factoincognito/product-office/blob/763f2b299912ea659e72e0856f39511fe00af089/BACKLOG.md?plain=1#L15); until then a camera find has no position ([#16](https://github.com/factoincognito/what-mushroom-is-this/pull/16), parked).
