@@ -25,6 +25,8 @@ of the species, and keeps a log of the finds on the phone. The user
 provides their own Claude API key. It comes before a general "What is
 this?" app.
 
+The app's public name is "Washroom" (Adam's decision, 2026-11-09).
+
 The app's languages are Swedish, English and Italian. For each analysed
 find it shows the species' names in Swedish, English, Latin and Italian,
 its edibility, general information, and the poisonous look-alikes of the
