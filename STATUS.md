@@ -10,10 +10,10 @@ Last update: 2026-11-09
 Build: Phase 1, the first version ([`docs/BACKLOG.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/BACKLOG.md)); the specification's intent is approved ([`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/SPEC.md)).
 
 ## Current focus
-The first Android build, [PBI-1.10](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/BACKLOG.md?plain=1#L49): the app is linked to its Expo project and has its build profile ([#39](https://github.com/factoincognito/what-mushroom-is-this/pull/39), [#40](https://github.com/factoincognito/what-mushroom-is-this/pull/40), [#42](https://github.com/factoincognito/what-mushroom-is-this/pull/42)), and Adam started the build on 2026-11-09 16:18. The app is named Washroom ([#41](https://github.com/factoincognito/what-mushroom-is-this/pull/41)).
+Adam's test session on his Android phone, [PBI-1.11](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/BACKLOG.md?plain=1#L50). The first build, PBI-1.10, is installed on his phone (2026-11-09 17:44). The app is named Washroom ([#41](https://github.com/factoincognito/what-mushroom-is-this/pull/41)).
 
 ## Next step
-Adam: install the build on his phone, then his test session, [PBI-1.11](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/BACKLOG.md?plain=1#L50). Clead: what the build log shows of the lint check and the merged manifest, and Known unknowns 3 and 5 in [`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/SPEC.md?plain=1#L317).
+Adam: the test session; the first version is done when it passes. Clead: what it finds, and the Known unknowns it settles (2, 7, 9 and 10 in `docs/SPEC.md`).
 
 ## Blockers
 None.
