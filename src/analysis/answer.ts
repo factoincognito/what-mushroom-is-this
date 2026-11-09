@@ -67,11 +67,17 @@ export function shownEdibility(match: Match): Edibility {
 export const CUT_OFF_STOP_REASONS = ["max_tokens", "model_context_window_exceeded"];
 
 /**
+ * The `stop_reason` of a refusal (the same page): "Claude declined to respond", returned "as a
+ * normal HTTP 200 response, not an error".
+ */
+export const REFUSAL_STOP_REASON = "refusal";
+
+/**
  * Reads the body of a 2xx answer of the Messages API. The answer is its one text block; the
  * thinking blocks that Claude 5 models put before it (`thinking`, `redacted_thinking`; Claude
  * docs, "Thinking", https://platform.claude.com/docs/en/build-with-claude/thinking, read
- * 2026-11-09) and any other block are skipped. A cut-off answer fails with its own detail,
- * whatever its text holds.
+ * 2026-11-09) and any other block are skipped. A cut-off answer and a refusal each fail with
+ * their own detail, whatever the text holds.
  */
 export function readMessageBody(body: string): AnswerResult {
   const notApi: AnswerFailure = {
@@ -99,6 +105,9 @@ export function readMessageBody(body: string): AnswerResult {
   const stopReason = parsed.value.stop_reason;
   if (typeof stopReason === "string" && CUT_OFF_STOP_REASONS.includes(stopReason)) {
     return shapeFailure(`the answer was cut off (stop_reason ${stopReason})`);
+  }
+  if (stopReason === REFUSAL_STOP_REASON) {
+    return shapeFailure(`the answer was refused (stop_reason ${REFUSAL_STOP_REASON})`);
   }
   const [text] = texts;
   if (texts.length !== 1 || typeof text !== "string") {

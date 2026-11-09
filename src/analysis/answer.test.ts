@@ -410,6 +410,26 @@ describe("readMessageBody, thinking before the text", () => {
   });
 });
 
+describe("readMessageBody, a refusal", () => {
+  it.each([
+    ["no blocks", []],
+    ["thinking only", [omittedThinking]],
+    ["a text that is not JSON", [{ type: "text", text: "I can't help with that." }]],
+    ["a JSON text that fits the shape", [{ type: "text", text: '{"result":"no_mushroom"}' }]],
+  ])("says it was refused when it holds %s", (_label, content) => {
+    expect(readMessageBody(messageBody(content, "refusal"))).toEqual({
+      ok: false,
+      reason: "shape",
+      detail: "the answer was refused (stop_reason refusal)",
+    });
+  });
+
+  it("still fails a body that is not from the API as not from the API", () => {
+    const body = JSON.stringify({ type: "page", stop_reason: "refusal" });
+    expect(readMessageBody(body)).toMatchObject({ ok: false, reason: "not-api" });
+  });
+});
+
 describe("readMessageBody, a cut-off answer", () => {
   it.each([
     ["thinking only", [omittedThinking]],

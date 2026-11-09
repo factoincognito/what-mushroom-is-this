@@ -1,4 +1,4 @@
-import { type AnalysisConfig, analysisConfig, requestSettingsFor } from "../config/analysis";
+import { type AnalysisConfig, analysisConfig } from "../config/analysis";
 import { checkModelId } from "../config/modelSetting";
 import type { AnalysisError } from "./errors";
 import { ANALYSIS_PROMPT } from "./prompt";
@@ -84,7 +84,6 @@ export function buildAnalysisRequest(
   if (!model.ok) {
     return { ok: false, error: { kind: "model-unknown" } };
   }
-  const { effort, thinking } = requestSettingsFor(model.id, config);
   return {
     ok: true,
     request: {
@@ -98,8 +97,6 @@ export function buildAnalysisRequest(
       body: JSON.stringify({
         model: model.id,
         max_tokens: config.maxTokens,
-        ...(thinking === undefined ? {} : { thinking }),
-        ...(effort === undefined ? {} : { output_config: { effort } }),
         messages: [
           {
             role: "user",

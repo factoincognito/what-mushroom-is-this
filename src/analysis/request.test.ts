@@ -76,7 +76,7 @@ describe("buildAnalysisRequest", () => {
     expect(body).not.toContain('"citations"');
   });
 
-  it("sends only the model, max_tokens and one user message for a model the app does not list", () => {
+  it("sends only the model, max_tokens and one user message", () => {
     expect(parsedBody(built(input).body)).toEqual({
       model: "claude-test-model",
       max_tokens: 16_000,
@@ -89,37 +89,16 @@ describe("buildAnalysisRequest", () => {
     expect(parsedBody(built(input, config).body)).toHaveProperty("max_tokens", 1234);
   });
 
-  it.each(["claude-opus-5-5", "claude-fable-5-1"])(
-    "turns effort down to low for %s, and sends no thinking setting",
+  it.each(["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"])(
+    "sends no thinking or effort setting for %s, so it runs with its own default",
     (model) => {
       expect(parsedBody(built({ ...input, model }).body)).toEqual({
         model,
         max_tokens: 16_000,
-        output_config: { effort: "low" },
         messages: [userMessage],
       });
     },
   );
-
-  it("turns thinking off and effort down to low for Claude Haiku 5.5", () => {
-    expect(parsedBody(built({ ...input, model: "claude-haiku-5-5" }).body)).toEqual({
-      model: "claude-haiku-5-5",
-      max_tokens: 16_000,
-      thinking: { type: "disabled" },
-      output_config: { effort: "low" },
-      messages: [userMessage],
-    });
-  });
-
-  it("turns up-front thinking off and effort down to low for Claude Sonnet 5.5", () => {
-    expect(parsedBody(built({ ...input, model: "claude-sonnet-5-5" }).body)).toEqual({
-      model: "claude-sonnet-5-5",
-      max_tokens: 16_000,
-      thinking: { type: "between_tools" },
-      output_config: { effort: "low" },
-      messages: [userMessage],
-    });
-  });
 
   it("leaves the key out of the body", () => {
     expect(built(input).body).not.toContain("sk-test-key");

@@ -149,6 +149,27 @@ describe("analysePhoto, the outcome", () => {
     });
   });
 
+  it("fails the find with its own detail when the answer was refused", async () => {
+    const body = JSON.stringify({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "text", text: "I can't help with that." }],
+      stop_reason: "refusal",
+    });
+    const fetch = jest.fn(() => Promise.resolve(response(200, body)));
+    await expect(analysePhoto(input, { fetch, now: clock })).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: "find-failed",
+        reason: "shape",
+        detail: "the answer was refused (stop_reason refusal)",
+        status: 200,
+        queue: "stops",
+      },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("gives a network error when fetch fails, and does not retry it", async () => {
     const fetch = jest.fn(() => Promise.reject(new TypeError("Network request failed")));
     await expect(analysePhoto(input, { fetch, now: clock })).resolves.toEqual({

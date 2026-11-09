@@ -229,6 +229,26 @@ describe("classifyOutcome, a success answer", () => {
     });
   });
 
+  it("fails the find and stops the queue on a refusal, saying it was refused", () => {
+    const body = JSON.stringify({
+      type: "message",
+      role: "assistant",
+      content: [],
+      stop_reason: "refusal",
+      stop_details: { type: "refusal", category: "x" },
+    });
+    expect(classifyOutcome(http(200, body), receivedAt)).toEqual({
+      ok: false,
+      error: {
+        kind: "find-failed",
+        reason: "shape",
+        detail: "the answer was refused (stop_reason refusal)",
+        status: 200,
+        queue: "stops",
+      },
+    });
+  });
+
   it.each([
     [200, "<html><body>Sign in to the Wi-Fi</body></html>"],
     [204, ""],
