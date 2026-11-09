@@ -161,6 +161,13 @@
       "textId": "expo"
     },
     {
+      "name": "expo-location",
+      "version": "57.0.23",
+      "licence": "MIT",
+      "source": "https://github.com/expo/expo",
+      "textId": "expo"
+    },
+    {
       "name": "com.vanniktech:android-image-cropper",
       "version": "4.7.0",
       "licence": "Apache-2.0",
@@ -222,6 +229,55 @@
       "licence": "MIT",
       "source": "https://github.com/SDWebImage/SDWebImageWebPCoder",
       "textId": null
+    },
+    {
+      "name": "com.google.android.gms:play-services-location",
+      "version": "21.0.1",
+      "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": null
+    },
+    {
+      "name": "com.google.android.gms:play-services-base",
+      "version": "18.1.0",
+      "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": null
+    },
+    {
+      "name": "com.google.android.gms:play-services-basement",
+      "version": "18.1.0",
+      "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": null
+    },
+    {
+      "name": "com.google.android.gms:play-services-tasks",
+      "version": "18.0.2",
+      "licence": "Android Software Development Kit License, https://developer.android.com/studio/terms.html",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": null
+    },
+    {
+      "name": "androidx.collection:collection",
+      "version": "1.0.0",
+      "licence": "Apache-2.0",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": "Apache-2.0"
+    },
+    {
+      "name": "androidx.core:core",
+      "version": "1.2.0",
+      "licence": "Apache-2.0",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": "Apache-2.0"
+    },
+    {
+      "name": "androidx.fragment:fragment",
+      "version": "1.0.0",
+      "licence": "Apache-2.0",
+      "source": "https://dl.google.com/dl/android/maven2/",
+      "textId": "Apache-2.0"
     }
   ],
   "texts": {

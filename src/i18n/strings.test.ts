@@ -141,6 +141,7 @@ describe("the strings of the new find", () => {
       "newFind.leaveCancel",
       "newFind.leaveConfirm",
       "newFind.leaveYes",
+      "newFind.locationDenied",
       "newFind.openSettings",
       "newFind.pickFailed",
       "newFind.pickFromGallery",

@@ -1,8 +1,10 @@
-import type { NewFind } from "../store/find";
+import type { LocationSource } from "../position/positionTracker";
+import type { NewFind, Position } from "../store/find";
 import type { PickResult } from "./devicePicker";
 import { INITIAL_VIEW, NewFindFlow, type NewFindView } from "./newFindFlow";
 
 const granted = { status: "granted", granted: true, canAskAgain: true, expires: "never" };
+const denied = { status: "denied", granted: false, canAskAgain: false, expires: "never" };
 const photo = (uri: string): PickResult => ({ kind: "photo", uri, exif: null });
 
 /**
@@ -31,9 +33,16 @@ function setUp(failures: number) {
           added.push(find);
           return added.length;
         },
+        setPosition: async () => undefined,
       }),
       camera: { permission: { get: async () => granted, request: async () => granted }, take },
       gallery: { pick },
+      // No location permission: these tests are of the photo, not the position.
+      location: {
+        permission: { get: async () => denied, request: async () => denied },
+        source: { watch: async () => () => undefined, lastKnown: async () => null },
+      },
+      appConfig: { lastKnownPositionMaxAgeMs: 120_000, positionFixWaitMs: 30_000 },
       now: () => new Date(Date.UTC(2026, 10, 9, 12, 0, 0)),
     },
     (view) => views.push(view),
@@ -104,6 +113,222 @@ describe("NewFindFlow: a photo whose save failed", () => {
     expect(last()).toMatchObject({ message: "saveFailed", canRetrySave: true });
     await flow.retrySave();
     expect(added.map((find) => find.photoUri)).toEqual(["file:///cache/first.jpg"]);
+  });
+});
+
+const NOW_MS = Date.UTC(2026, 10, 9, 12, 0, 0);
+
+/** Stands in for the phone's location service: fixes are sent by the test. */
+class FakeLocation implements LocationSource {
+  onFix: ((fix: unknown) => void) | null = null;
+  stops = 0;
+  lastKnownAsked: number[] = [];
+  lastKnownReply: unknown = null;
+
+  async watch(onFix: (fix: unknown) => void): Promise<() => void> {
+    this.onFix = onFix;
+    return () => {
+      this.stops += 1;
+      this.onFix = null;
+    };
+  }
+
+  async lastKnown(maxAgeMs: number): Promise<unknown> {
+    this.lastKnownAsked.push(maxAgeMs);
+    return this.lastKnownReply;
+  }
+
+  send(latitude: number, longitude: number, accuracy: number): void {
+    this.onFix?.({ coords: { latitude, longitude, accuracy }, timestamp: NOW_MS });
+  }
+}
+
+/**
+ * A flow with the location permission, a camera that gives a photo, and a store that opens only
+ * when the test lets it (`openLog`), whose saves fail while `addFails` is set.
+ */
+function setUpWithLocation(limits: {
+  lastKnownPositionMaxAgeMs: number;
+  positionFixWaitMs: number;
+}) {
+  const location = new FakeLocation();
+  const added: NewFind[] = [];
+  const positions: [number, Position][] = [];
+  const state = { addFails: false, logAsked: false };
+  let openLog: () => void = () => undefined;
+  const logOpen = new Promise<void>((resolve) => {
+    openLog = resolve;
+  });
+  let view: NewFindView = INITIAL_VIEW;
+  const flow = new NewFindFlow(
+    {
+      findLog: async () => {
+        state.logAsked = true;
+        await logOpen;
+        return {
+          add: async (find: NewFind) => {
+            if (state.addFails) {
+              throw new Error("database is locked");
+            }
+            added.push(find);
+            return added.length;
+          },
+          setPosition: async (id: number, position: Position) => {
+            positions.push([id, position]);
+          },
+        };
+      },
+      camera: {
+        permission: { get: async () => granted, request: async () => granted },
+        take: async () => photo("file:///cache/first.jpg"),
+      },
+      gallery: { pick: async () => photo("file:///cache/second.jpg") },
+      location: {
+        permission: { get: async () => granted, request: async () => granted },
+        source: location,
+      },
+      appConfig: limits,
+      now: () => new Date(NOW_MS),
+    },
+    (shown) => {
+      view = shown;
+    },
+  );
+  return { flow, location, added, positions, state, openLog, last: () => view };
+}
+
+/** Lets the promises queued so far run. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 20; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+afterEach(() => {
+  jest.useRealTimers();
+});
+
+describe("NewFindFlow: the position of a camera find", () => {
+  it("passes both position limits from the config to the tracker", async () => {
+    jest.useFakeTimers();
+    const { flow, location, added, positions, openLog } = setUpWithLocation({
+      lastKnownPositionMaxAgeMs: 45_000,
+      positionFixWaitMs: 7_000,
+    });
+    location.lastKnownReply = {
+      coords: { latitude: 59.5, longitude: 17.5, accuracy: 40 },
+      timestamp: NOW_MS - 45_001,
+    };
+    openLog();
+    await flow.start();
+    expect(location.lastKnownAsked).toEqual([45_000]);
+    expect(added[0]?.position).toBeNull();
+    jest.advanceTimersByTime(6_999);
+    expect(location.stops).toBe(0);
+    jest.advanceTimersByTime(1);
+    expect(location.stops).toBe(1);
+    location.send(59.66, 17.1, 9);
+    await settle();
+    expect(positions).toEqual([]);
+  });
+
+  it("still gets its later fix when the screen closes while it is being saved", async () => {
+    const { flow, location, positions, state, openLog } = setUpWithLocation({
+      lastKnownPositionMaxAgeMs: 120_000,
+      positionFixWaitMs: 30_000,
+    });
+    const started = flow.start();
+    await settle();
+    expect(state.logAsked).toBe(true);
+    flow.close();
+    expect(location.stops).toBe(0);
+    openLog();
+    await started;
+    expect(location.stops).toBe(0);
+    location.send(59.66, 17.1, 9);
+    await settle();
+    expect(positions).toEqual([
+      [1, { latitude: 59.66, longitude: 17.1, accuracyM: 9, source: "fix" }],
+    ]);
+    expect(location.stops).toBe(1);
+  });
+
+  it("stops asking for the position when the screen closes while a save runs that then fails", async () => {
+    const { flow, location, added, state, openLog } = setUpWithLocation({
+      lastKnownPositionMaxAgeMs: 120_000,
+      positionFixWaitMs: 30_000,
+    });
+    state.addFails = true;
+    const started = flow.start();
+    await settle();
+    flow.close();
+    openLog();
+    await started;
+    expect(added).toEqual([]);
+    expect(location.stops).toBe(1);
+  });
+
+  it("keeps asking for the position when a save fails while the screen is open, for Save again", async () => {
+    const { flow, location, added, state, openLog } = setUpWithLocation({
+      lastKnownPositionMaxAgeMs: 120_000,
+      positionFixWaitMs: 30_000,
+    });
+    state.addFails = true;
+    openLog();
+    await flow.start();
+    expect(location.stops).toBe(0);
+    location.send(59.66, 17.1, 9);
+    state.addFails = false;
+    await flow.retrySave();
+    expect(added[0]?.position).toEqual({
+      latitude: 59.66,
+      longitude: 17.1,
+      accuracyM: 9,
+      source: "fix",
+    });
+    expect(location.stops).toBe(1);
+  });
+
+  it("still gets its later fix when the screen is left during the save, as the leave waits for it (PBI-1.20)", async () => {
+    const { flow, location, positions, openLog, last } = setUpWithLocation({
+      lastKnownPositionMaxAgeMs: 120_000,
+      positionFixWaitMs: 30_000,
+    });
+    const started = flow.start();
+    await settle();
+    expect(last()).toMatchObject({ phase: "saving" });
+    expect(flow.askToLeave()).toBe(true);
+    openLog();
+    await started;
+    expect(last()).toMatchObject({ phase: "saved", confirming: null });
+    // The held leave goes ahead once the save has succeeded, and the screen closes.
+    flow.close();
+    expect(location.stops).toBe(0);
+    location.send(59.66, 17.1, 9);
+    await settle();
+    expect(positions).toEqual([
+      [1, { latitude: 59.66, longitude: 17.1, accuracyM: 9, source: "fix" }],
+    ]);
+    expect(location.stops).toBe(1);
+  });
+
+  it("stops asking for the position when a leave held during a failed save is confirmed (PBI-1.20)", async () => {
+    const { flow, location, added, state, openLog, last } = setUpWithLocation({
+      lastKnownPositionMaxAgeMs: 120_000,
+      positionFixWaitMs: 30_000,
+    });
+    state.addFails = true;
+    const started = flow.start();
+    await settle();
+    expect(flow.askToLeave()).toBe(true);
+    openLog();
+    await started;
+    expect(last()).toMatchObject({ canRetrySave: true, confirming: "leave" });
+    expect(location.stops).toBe(0);
+    expect(flow.discardPending()).toBe(true);
+    flow.close();
+    expect(added).toEqual([]);
+    expect(location.stops).toBe(1);
   });
 });
 

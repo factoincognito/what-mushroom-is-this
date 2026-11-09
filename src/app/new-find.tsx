@@ -2,10 +2,12 @@ import { router, useNavigation } from "expo-router";
 import { type NavigationAction, usePreventRemove } from "expo-router/react-navigation";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { config } from "../config/config";
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Strings } from "../i18n/strings";
 import { cameraPermission, pickFromGallery, takePhoto } from "../newFind/devicePicker";
 import { INITIAL_VIEW, NewFindFlow, type NewFindView } from "../newFind/newFindFlow";
+import { deviceLocationSource, locationPermission } from "../position/deviceLocation";
 import { useFindLog } from "../store/FindLogContext";
 
 /**
@@ -30,6 +32,8 @@ export default function NewFindScreen() {
           findLog,
           camera: { permission: cameraPermission, take: takePhoto },
           gallery: { pick: pickFromGallery },
+          location: { permission: locationPermission, source: deviceLocationSource },
+          appConfig: config,
           now: () => new Date(),
         },
         setView,
@@ -41,6 +45,7 @@ export default function NewFindScreen() {
     return () => flow.close();
   }, [flow]);
 
+  const locationRefused = view.location === "denied" || view.location === "blocked";
   const navigation = useNavigation();
   /**
    * The leaving that waits, for the answer to "leave" or for the end of the save under way (null
@@ -71,6 +76,7 @@ export default function NewFindScreen() {
   return (
     <View style={styles.container}>
       {view.phase === "starting" && <Text style={styles.text}>{t.asking}</Text>}
+      {locationRefused && <Text style={styles.text}>{t.locationDenied}</Text>}
       {(view.phase === "saving" || view.phase === "busy" || view.phase === "starting") && (
         <ActivityIndicator testID="new-find-busy" />
       )}
@@ -142,7 +148,7 @@ export default function NewFindScreen() {
           </Pressable>
         </>
       )}
-      {view.message === "cameraBlocked" && (
+      {(locationRefused || view.message === "cameraBlocked") && (
         <Pressable accessibilityRole="button" onPress={openSettings} style={styles.button}>
           <Text style={styles.buttonText}>{t.openSettings}</Text>
         </Pressable>

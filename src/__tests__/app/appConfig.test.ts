@@ -37,22 +37,23 @@ function pluginEntry(name: string): [string, Record<string, unknown>] | undefine
 }
 
 /**
- * The iOS Info.plist and the Android manifest after the real expo-secure-store plugin has run over
+ * The iOS Info.plist and the Android manifest after a library's real config plugin has run over
  * app.json with the options app.json gives it, and its mods have been run without writing files.
  */
-async function afterSecureStorePlugin(): Promise<{
+async function afterPlugin(
+  name: "expo-secure-store" | "expo-location",
+  plugin: { default: (config: ExpoConfig, props: unknown) => ExpoConfig },
+): Promise<{
   infoPlist: Record<string, unknown>;
   application: Record<string, string>;
 }> {
-  const entry = pluginEntry("expo-secure-store");
+  const entry = pluginEntry(name);
   if (entry === undefined) {
-    throw new Error("app.json registers no expo-secure-store plugin");
+    throw new Error(`app.json registers no ${name} plugin`);
   }
-  const withSecureStore: { default: (config: ExpoConfig, props: unknown) => ExpoConfig } =
-    jest.requireActual("expo-secure-store/app.plugin");
   // Through `expo`, a direct dependency, not an internal path of @expo/config-plugins (PBI-1.26).
   const { compileModsAsync } = jest.requireActual("expo/config-plugins");
-  const config = withSecureStore.default(structuredClone(appJson.expo), entry[1]);
+  const config = plugin.default(structuredClone(appJson.expo), entry[1]);
   await compileModsAsync(config, {
     projectRoot: PROJECT_ROOT,
     introspect: true,
@@ -69,10 +70,13 @@ async function afterSecureStorePlugin(): Promise<{
 }
 
 describe("the expo-secure-store config plugin in app.json", () => {
-  let after: Awaited<ReturnType<typeof afterSecureStorePlugin>>;
+  let after: Awaited<ReturnType<typeof afterPlugin>>;
 
   beforeAll(async () => {
-    after = await afterSecureStorePlugin();
+    after = await afterPlugin(
+      "expo-secure-store",
+      jest.requireActual("expo-secure-store/app.plugin"),
+    );
   }, 120_000);
 
   it("is registered", () => {
@@ -120,8 +124,15 @@ describe("the expo-image-picker config plugin in app.json (PBI-1.6)", () => {
   });
 });
 
-/** The keys of the texts iOS shows when the app asks for the camera and the photo library. */
-const PERMISSION_KEYS = ["NSCameraUsageDescription", "NSPhotoLibraryUsageDescription"];
+/**
+ * The keys of the texts iOS shows when the app asks for the camera, the location while the app is
+ * in use (PBI-1.19) and the photo library, in sorted order.
+ */
+const PERMISSION_KEYS = [
+  "NSCameraUsageDescription",
+  "NSLocationWhenInUseUsageDescription",
+  "NSPhotoLibraryUsageDescription",
+];
 
 type ResolvedLocales = { localesMap: Record<string, Record<string, unknown>> };
 
@@ -149,7 +160,16 @@ describe("the iOS permission texts in the app's three languages (PBI-1.20)", () 
     expect(appJson.expo.ios?.infoPlist?.CFBundleAllowMixedLocalizations).toBe(true);
   });
 
-  it("are given in Swedish, English and Italian, each with the camera and photo library texts only", () => {
+  it.each(["sv", "en", "it"])(
+    "give in %s the text iOS shows when it asks for the location (PBI-1.19)",
+    (language) => {
+      expect(isPurposeText(ios.localesMap[language]?.NSLocationWhenInUseUsageDescription)).toBe(
+        true,
+      );
+    },
+  );
+
+  it("are given in Swedish, English and Italian, each with the camera, location and photo library texts only", () => {
     expect(Object.keys(ios.localesMap).sort()).toEqual(["en", "it", "sv"]);
     for (const texts of Object.values(ios.localesMap)) {
       expect(Object.keys(texts).sort()).toEqual(PERMISSION_KEYS);
@@ -159,10 +179,12 @@ describe("the iOS permission texts in the app's three languages (PBI-1.20)", () 
     }
   });
 
-  it("are in English those the image picker's plugin writes into the Info.plist itself", () => {
+  it("are in English those the image picker's and the location's plugins write into the Info.plist itself", () => {
     const options = pluginEntry("expo-image-picker")?.[1];
     expect(ios.localesMap.en).toEqual({
       NSCameraUsageDescription: options?.cameraPermission,
+      NSLocationWhenInUseUsageDescription:
+        pluginEntry("expo-location")?.[1].locationWhenInUsePermission,
       NSPhotoLibraryUsageDescription: options?.photosPermission,
     });
   });
@@ -189,8 +211,33 @@ describe("the iOS permission texts in the app's three languages (PBI-1.20)", () 
   });
 });
 
-describe("the phone's location (PBI-1.6)", () => {
-  it("is not configured: expo-location waits for its escalation (the parked PR on feat/pbi-1.6-position)", () => {
-    expect(pluginEntry("expo-location")).toBeUndefined();
+describe("the expo-location config plugin in app.json (PBI-1.6)", () => {
+  it("is registered", () => {
+    expect(pluginEntry("expo-location")).toBeDefined();
   });
+
+  it("gives the message iOS shows when it asks for the location while the app is in use", () => {
+    expect(isPurposeText(pluginEntry("expo-location")?.[1].locationWhenInUsePermission)).toBe(true);
+  });
+
+  it("asks for no location in the background (SPEC 3.4: nothing runs while the app is closed)", () => {
+    const options = pluginEntry("expo-location")?.[1];
+    expect(options?.isAndroidBackgroundLocationEnabled ?? false).toBe(false);
+    expect(options?.isAndroidForegroundServiceEnabled ?? false).toBe(false);
+    expect(options?.isIosBackgroundLocationEnabled ?? false).toBe(false);
+  });
+
+  it("writes only the while-in-use location text on iOS: no Always and no motion text (the real plugin)", async () => {
+    const { infoPlist } = await afterPlugin(
+      "expo-location",
+      jest.requireActual("expo-location/app.plugin"),
+    );
+    expect(infoPlist.NSLocationWhenInUseUsageDescription).toBe(
+      pluginEntry("expo-location")?.[1].locationWhenInUsePermission,
+    );
+    expect(infoPlist).not.toHaveProperty("NSLocationAlwaysAndWhenInUseUsageDescription");
+    expect(infoPlist).not.toHaveProperty("NSLocationAlwaysUsageDescription");
+    expect(infoPlist).not.toHaveProperty("NSMotionUsageDescription");
+    expect(infoPlist.UIBackgroundModes ?? []).not.toContain("location");
+  }, 120_000);
 });
