@@ -112,8 +112,10 @@ export default function NewFindScreen() {
           <Pressable
             accessibilityRole="button"
             disabled={!canChoose}
-            // The save's promise is not given back: a press does nothing with it, and the screen
-            // follows the save through the view it is shown.
+            // The save's promise is not given back. In the app, a press does nothing with it, and
+            // the screen follows the save through the view it is shown. In the tests, React Native
+            // Testing Library's `fireEvent.press` awaits what the handler gives back, so a test
+            // that holds the save open could not get past the press (Clead's fix 1 on #32).
             onPress={() => void flow.retrySave()}
             style={[styles.button, !canChoose && styles.disabled]}
           >
