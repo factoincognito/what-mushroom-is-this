@@ -104,7 +104,7 @@ the role that did not write it.
 - **[DONE] PBI-2.1** (done 2026-11-09: findings in the product office, `library/designs/what-mushroom-is-this/phase-2-checks.md`; the map and Wikimedia escalations decided by Adam at 21:27; Known unknowns 11 to 13 and 15 updated in #50; what is left of them is checked at the build of PBI-2.6, PBI-2.8 and PBI-2.9) (the checks Known unknowns 11, 12, 13 and 15 name before the build; the uses go to the product office as escalations under the third-party code and IP policy) — The map provider and library, the Claude API's image limits, the file picker, and Wikidata and Commons: their terms, licences, fees, keys, attribution and caching, checked and written up, with a recommendation for the map provider. Spec 3.9, Known unknowns 11, 12, 13, 15.
 - **[DONE] PBI-2.2** (done 2026-11-09 in #49, `bc735f9`, Clead-role review approved round 2; the photos are a JSON array in the find's row, so each write is one statement; answers are stored against the photos their analysis sent; the migration was also run on expo's vendored SQLite 3.50.3 by the reviewer; the Phase 2 methods are in `LookupStore`, beside the unchanged `FindStore`) — The store, schema version 2. The fields of 3.9's "The store", and a migration from version 1 that keeps every Phase 1 find, its photo as its first photo and its answer as it was. Spec 3.9.
 - **[DONE] PBI-2.3** (done 2026-11-09 in #52, `d58afa1`, Clead-role review approved round 1; a new answer with a Phase 1 level fails the shape check, stored Phase 1 answers keep their level; the number shown as "90 of 100"; the Italian "su 100" awaits Jakob's check; the reviewer's notes are PBI-2.12) — The answer's confidence from 1 to 100, a whole number, shown with 3.1's note. The edibility is "unknown" below 70, as configuration. Phase 1 finds keep their level and 3.3's rule. Spec 3.9.
-- **[NOW] PBI-2.4** (in the night shift of 2026-11-09, Clead's decision: it moves the queue's pick and the Log list itself, without waiting for PBI-2.7) (it moves the queue's pick and the Log list to the store's `getStored`, so that a text find is not shown as "could not be read" and is analysed; or it ships with PBI-2.7: the Clead-role review of #49, note 3) — Text lookups and the save setting:
+- **[DONE] PBI-2.4** (done 2026-11-10 in #54, `2acfd8f`, Clead-role review approved round 2; the queue's pick and the Log list moved to `getStored` in it, Clead's decision; 3.9's "unknown until the check agrees" built in it for every answer from text alone, Clead's decision after Crog flagged it; the photo lookup's Save switch moved to PBI-2.13, Clead's decision; a text find in the Log has no mark yet, PBI-2.7; the Italian awaits Jakob's check; the reviews' notes are PBI-2.14) (in the night shift of 2026-11-09, Clead's decision: it moves the queue's pick and the Log list itself, without waiting for PBI-2.7) (it moves the queue's pick and the Log list to the store's `getStored`, so that a text find is not shown as "could not be read" and is analysed; or it ships with PBI-2.7: the Clead-role review of #49, note 3) — Text lookups and the save setting:
   - the text screen, up to 2,000 characters;
   - the "Save" switch with its starting values in Settings;
   - when a text find is saved, and its position;
@@ -112,13 +112,19 @@ the role that did not write it.
   - "no mushroom" and "cannot tell" for text;
   - the disclaimer for a lookup without photos. Its new sentence replaces only 3.5's second sentence, the one about the photo, and keeps the first; Clead's reading of his own proposal, which Adam approved. The Italian is checked by Jakob.
   Spec 3.9.
-- **[NEXT] PBI-2.5** (it sends all of a find's photos and passes all their URIs as `sent` to `setAnswer` and `replaceAnswer`; from the review of #49 round 2, also: read the self-check result by name, not `columns[3]`, and move `outcomeOf`'s doc comment back above it in `queue.ts`) — Several photos per find:
+- **[NOW] PBI-2.5** (in the night shift; it also sends the find's text with its photos, which #54 does not yet: the Clead-role review of #54, note 3) (it sends all of a find's photos and passes all their URIs as `sent` to `setAnswer` and `replaceAnswer`; from the review of #49 round 2, also: read the self-check result by name, not `columns[3]`, and move `outcomeOf`'s doc comment back above it in `queue.ts`) — Several photos per find:
   - batches, and when they complete;
   - completing a batch as a queue trigger;
   - all of a find's photos in one request, labelled;
   - the per-photo failure rule and the PBI-1.25 count;
   - a new batch on an analysed find, with its three states;
   - removing a photo.
+  Spec 3.9.
+- **[NEXT] PBI-2.13** (moved out of PBI-2.4 by Clead, 2026-11-10: it depends on PBI-2.5's batches, and with it #54 was too large to review) — The photo lookup's "Save" switch:
+  - the switch on a new photo lookup, on by default;
+  - its starting value in Settings, beside the text lookup's;
+  - unsaved photo lookups: held on the screen, analysed on "Analyse", their copies removed when the screen is left, with the three error groups as for an unsaved text lookup;
+  - a lookup saved after its first photo was taken keeps that photo's time and position.
   Spec 3.9.
 - **[NEXT] PBI-2.6** (the picker as Known unknown 13 has it, after PBI-2.1) — Photos from the phone's files, images only, without position or time of their own. Spec 3.9, Known unknown 13.
 - **[NEXT] PBI-2.7** — The Library's list, replacing the Log:
@@ -156,6 +162,15 @@ the role that did not write it.
   - the Log reads the confidence from the row's columns, the Find screen from the answer's JSON; nothing finds a damaged file where the two differ, as before #52 for the level (note 3);
   - SPEC 3.3's list still says "a confidence: low, medium or high"; 3.9 holds for Phase 2, but 3.3 read alone misleads.
   Spec 3.3, 3.9.
+- **[LATER] PBI-2.14** (the Clead-role reviewer's non-blocking notes on #54, rounds 1 and 2, and Crog's loose ends on #54) — Follow-ups that need no phone:
+  - a stored text over 2,000 characters, reachable only through a damaged file, is read as readable; the queue picks it, the request builder throws, and every run stops with an internal error (note 1);
+  - the text field's `maxLength` counts UTF-16 units, while the counter, the flow and the store count code points (note 2);
+  - a text find whose match has no self-check, reachable only through a damaged file, shows the answer's edibility; the rule relies only on the stored self-check (note 4);
+  - after an unsaved lookup's answer of the wrong shape, the Log shows the queue's stop message "That find is marked failed", though no find was (Crog);
+  - `FindStore.get`, the Phase 1 view, has no caller left in app code (Crog);
+  - lines the tests do not reach: `settings.tsx` 96, 175 and 266, `text-lookup.tsx` 214 (the link to Settings), and the flow's close while the location is being asked (Crog).
+  Not taken up: the look-alikes' edibilities and the general information stay shown while a text answer's check waits (note 5). 3.9's "unknown" is the matched species' edibility; the look-alikes carry their own, and the poisonous ones are a warning (Clead, 2026-11-10).
+  Spec 3.9.
 
 ---
 
