@@ -67,11 +67,19 @@ describe("watchNetworkBack", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it("does not call back for the first state it learns, online or not", async () => {
+  it("does not call back when the first read gives online and a change then says online", async () => {
     const network = fakeNetwork(Promise.resolve(ONLINE));
     const onBack = jest.fn();
     watchNetworkBack(onBack, network.source);
     await Promise.resolve();
+    network.emit(ONLINE);
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("does not call back for an online first state learnt from a change while the read is pending", async () => {
+    const network = fakeNetwork(new Promise(() => undefined));
+    const onBack = jest.fn();
+    watchNetworkBack(onBack, network.source);
     network.emit(ONLINE);
     expect(onBack).not.toHaveBeenCalled();
   });

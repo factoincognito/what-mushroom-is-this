@@ -11,6 +11,7 @@ import { AppState } from "react-native";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { STRINGS } from "../../i18n/strings";
+import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { formatTimeIn } from "../../queue/messages";
 import type { Find } from "../../store/find";
@@ -61,6 +62,12 @@ const mockLog = {
     const find = mockFinds.get(id);
     if (find !== undefined) {
       mockFinds.set(id, { ...find, analysis: { state: "done", ...analysed } as Find["analysis"] });
+    }
+  },
+  markFailed: async (id: number, failure: { cause: string; detail: string }) => {
+    const find = mockFinds.get(id);
+    if (find !== undefined) {
+      mockFinds.set(id, { ...find, analysis: { state: "failed", failure } as Find["analysis"] });
     }
   },
 };
@@ -241,6 +248,39 @@ describe("the Log screen after an internal error (Clead's decision on #17)", () 
       expect(screen.queryByText(t.stopped.internalError)).not.toBeOnTheScreen();
     },
   );
+
+  it("full storage while the photo is prepared: the internal error, and the find stays waiting (PBI-1.21)", async () => {
+    jest
+      .mocked(preparePhotoForAnalysis)
+      .mockRejectedValueOnce(new Error("ENOSPC: no space left on device"));
+    await startApp();
+    expect(await screen.findByText(en.stopped.internalError)).toBeOnTheScreen();
+    expect(screen.queryByText(/ENOSPC/)).not.toBeOnTheScreen();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockFinds.get(1)?.analysis).toEqual({ state: "waiting" });
+  });
+});
+
+describe("a refused answer (PBI-1.21)", () => {
+  it("marks the find failed with the cause refused, and the queue goes on", async () => {
+    mockFinds.set(2, waitingFind(2));
+    fetchMock
+      .mockResolvedValueOnce(
+        answer(
+          200,
+          JSON.stringify({ type: "message", content: [], stop_reason: "refusal" }),
+        ),
+      )
+      .mockResolvedValueOnce(ANSWERED);
+    await startApp();
+    await act(async () => undefined);
+    expect(mockFinds.get(1)?.analysis).toEqual({
+      state: "failed",
+      failure: { cause: "refused", detail: "the answer was refused (stop_reason refusal)" },
+    });
+    expect(mockFinds.get(2)?.analysis.state).toBe("done");
+    expect(screen.queryByRole("button", { name: en.analyseNow })).not.toBeOnTheScreen();
+  });
 });
 
 describe("the Log screen when the finds wait for a network", () => {

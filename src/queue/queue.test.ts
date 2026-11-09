@@ -443,11 +443,29 @@ describe("the error classes of SPEC 3.3 in a run", () => {
   });
 
   it.each([
-    ["401, 403", { kind: "key-refused", status: 401 }, { reason: "key-refused" }],
-    ["a key that cannot be sent", { kind: "key-refused", status: null }, { reason: "key-refused" }],
+    [
+      "401, 403",
+      { kind: "key-refused", status: 401, cause: "refused" },
+      { reason: "key-refused" },
+    ],
+    [
+      "a key that cannot be sent",
+      { kind: "key-refused", status: null, cause: "refused" },
+      { reason: "key-refused" },
+    ],
     [
       "the 400 of a key not scoped to a workspace (PBI-1.13)",
-      { kind: "key-refused", status: 400 },
+      { kind: "key-refused", status: 400, cause: "not-scoped" },
+      { reason: "key-not-scoped" },
+    ],
+    [
+      "another 400 classed as a refused key (PBI-1.21: by the class's own field, not its status)",
+      { kind: "key-refused", status: 400, cause: "refused" },
+      { reason: "key-refused" },
+    ],
+    [
+      "a not-scoped key whatever its status (PBI-1.21)",
+      { kind: "key-refused", status: 401, cause: "not-scoped" },
       { reason: "key-not-scoped" },
     ],
     ["402 or a billing error", { kind: "no-credit", status: 402 }, { reason: "no-credit" }],
@@ -508,6 +526,27 @@ describe("the error classes of SPEC 3.3 in a run", () => {
     },
   );
 
+  it("a refused answer: that find is marked failed with the cause refused, and the queue goes on (PBI-1.21)", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.log.addFind(2);
+    t.replies.push(
+      fail({
+        kind: "find-failed",
+        reason: "refused",
+        detail: "the answer was refused (stop_reason refusal)",
+        status: 200,
+        queue: "goes-on",
+      }),
+    );
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual([
+      "markFailed 1 refused: the answer was refused (stop_reason refusal)",
+      "setAnswer 2",
+    ]);
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
   it("a failed find is not tried again by the queue", async () => {
     const t = setup();
     t.log.addFind(1);
@@ -563,61 +602,55 @@ describe("the photo for analysis (SPEC 3.3)", () => {
     ]);
   });
 
-  it("a photo the encoder cannot read: the find is marked failed (photo, with the reason) and the queue goes on", async () => {
+  it("a photo that cannot be loaded, decoded or sized: the find is marked failed (photo) and the queue goes on", async () => {
     const t = setup();
     t.log.addFind(1);
     t.log.addFind(2);
-    t.setPreparation(async (uri) => {
-      if (uri.endsWith("/1.jpg")) {
-        throw new Error("the image could not be loaded");
-      }
-      return { ok: true, imageBase64: "BBBB", width: 1, height: 1 };
-    });
+    t.setPreparation(async (uri) =>
+      uri.endsWith("/1.jpg")
+        ? { ok: false, failure: { cause: "photo", detail: "load-failed: unsupported image format" } }
+        : { ok: true, imageBase64: "BBBB", width: 1, height: 1 },
+    );
     await t.queue.trigger();
     expect(t.calls.map((call) => call.imageBase64)).toEqual(["BBBB"]);
     expect(t.log.changes).toEqual([
-      "markFailed 1 photo: the image could not be loaded",
+      "markFailed 1 photo: load-failed: unsupported image format",
       "setAnswer 2",
     ]);
     expect(t.queue.getState().stop).toBeNull();
   });
 
-  it("a decoder that gives no usable size: the find is marked failed (photo), naming the size", async () => {
-    const t = setup();
-    t.log.addFind(1);
-    t.setPreparation(async () => {
-      throw new PhotoPreparationError("invalid-size", "the photo of 0 x 0 px cannot be sized");
-    });
-    await t.queue.trigger();
-    expect(t.log.changes).toEqual([
-      "markFailed 1 photo: invalid-size: the photo of 0 x 0 px cannot be sized",
-    ]);
-    expect(t.queue.getState().stop).toBeNull();
-  });
-
-  it.each([
-    ["an Error with no message", new Error("")],
-    ["something that is not an Error", "busy"],
-  ])("an encoder failure with %s still gives the find a reason", async (_name, thrown) => {
-    const t = setup();
-    t.log.addFind(1);
-    t.setPreparation(async () => {
-      throw thrown;
-    });
-    await t.queue.trigger();
-    expect(t.log.changes).toEqual(["markFailed 1 photo: the photo could not be read"]);
-  });
-
   it("an unreadable photo is not tried again by the queue", async () => {
     const t = setup();
     t.log.addFind(1);
-    t.setPreparation(async () => {
-      throw new Error("gone");
-    });
+    t.setPreparation(async () => ({ ok: false, failure: { cause: "photo", detail: "gone" } }));
     await t.queue.trigger();
     await t.queue.trigger();
     expect(t.log.changes).toEqual(["markFailed 1 photo: gone"]);
   });
+
+  it.each([
+    ["full storage", new Error("ENOSPC: no space left on device, write")],
+    ["a failed read of the encoded bytes", new Error("File could not be read")],
+    ["a programming error", new TypeError("Cannot read properties of undefined (reading 'uri')")],
+    ["something that is not an Error", "busy"],
+  ])(
+    "an error while preparing the photo that is not the photo's (%s) passes through: the run rejects and the find stays waiting (PBI-1.21)",
+    async (_name, thrown) => {
+      const t = setup();
+      t.log.addFind(1);
+      t.log.addFind(2);
+      t.setPreparation(async () => {
+        throw thrown;
+      });
+      await expect(t.queue.trigger()).rejects.toBe(thrown);
+      expect(t.calls).toEqual([]);
+      expect(t.log.changes).toEqual([]);
+      expect(t.log.state(1)).toEqual({ state: "waiting" });
+      expect(t.log.state(2)).toEqual({ state: "waiting" });
+      expect(t.queue.getState().running).toBe(false);
+    },
+  );
 
   it.each(["invalid-limits", "invalid-quality"] as const)(
     "a configuration error (%s) passes through, and the find stays waiting",
@@ -741,8 +774,8 @@ describe("restarts (SPEC 3.3)", () => {
   });
 
   it.each([
-    ["key", { kind: "key-refused", status: 403 }],
-    ["key", { kind: "key-refused", status: 400 }],
+    ["key", { kind: "key-refused", status: 403, cause: "refused" }],
+    ["key", { kind: "key-refused", status: 400, cause: "not-scoped" }],
     ["model", { kind: "model-unknown" }],
   ] as const)(
     "a change of the %s setting starts the queue stopped for it again",
@@ -767,8 +800,12 @@ describe("restarts (SPEC 3.3)", () => {
   });
 
   it.each([
-    ["model", { kind: "key-refused", status: 401 }, { reason: "key-refused" }],
-    ["model", { kind: "key-refused", status: 400 }, { reason: "key-not-scoped" }],
+    ["model", { kind: "key-refused", status: 401, cause: "refused" }, { reason: "key-refused" }],
+    [
+      "model",
+      { kind: "key-refused", status: 400, cause: "not-scoped" },
+      { reason: "key-not-scoped" },
+    ],
     ["key", { kind: "model-unknown" }, { reason: "model-unknown" }],
     ["key", { kind: "no-credit", status: 402 }, { reason: "no-credit" }],
   ] as const)(
@@ -881,7 +918,7 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
   it("puts a failed find back to waiting when the queue stops for it", async () => {
     const t = setup();
     t.log.addFind(1, { state: "failed", failure: { cause: "request", detail: "x" } });
-    t.replies.push(fail({ kind: "key-refused", status: 401 }));
+    t.replies.push(fail({ kind: "key-refused", status: 401, cause: "refused" }));
     await expect(t.queue.analyseFind(1)).resolves.toEqual({
       ok: false,
       notice: { kind: "stopped", stop: { reason: "key-refused" } },
@@ -937,7 +974,7 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
       ],
       [
         "401",
-        fail({ kind: "key-refused", status: 401 }),
+        fail({ kind: "key-refused", status: 401, cause: "refused" }),
         { kind: "stopped", stop: { reason: "key-refused" } },
         { reason: "key-refused" },
       ],
@@ -985,12 +1022,10 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
       },
     );
 
-    it("a photo the encoder cannot read: the answer is kept", async () => {
+    it("a photo that cannot be loaded: the answer is kept", async () => {
       const t = setup();
       t.log.addFind(1, analysed);
-      t.setPreparation(async () => {
-        throw new Error("gone");
-      });
+      t.setPreparation(async () => ({ ok: false, failure: { cause: "photo", detail: "gone" } }));
       await expect(t.queue.analyseFind(1)).resolves.toEqual({
         ok: false,
         notice: { kind: "find-failed", failure: { cause: "photo", detail: "gone" } },
@@ -998,6 +1033,17 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
       });
       expect(t.log.changes).toEqual([]);
       expect(t.queue.getState().stop).toBeNull();
+    });
+
+    it("full storage while preparing the photo: rejects, and the answer is kept (PBI-1.21)", async () => {
+      const t = setup();
+      t.log.addFind(1, analysed);
+      t.setPreparation(async () => {
+        throw new Error("ENOSPC: no space left on device");
+      });
+      await expect(t.queue.analyseFind(1)).rejects.toThrow("ENOSPC");
+      expect(t.log.changes).toEqual([]);
+      expect(t.log.state(1)).toEqual(analysed);
     });
 
     it("a photo that fails the segment check: the answer is kept", async () => {

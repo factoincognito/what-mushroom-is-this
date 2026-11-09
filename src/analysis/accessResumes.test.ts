@@ -29,7 +29,19 @@ describe("accessResumesAt", () => {
     ],
     [
       "a time in another form",
-      errorBody("rate_limit_error", "You will regain access on 1 September 2026."),
+      errorBody("rate_limit_error", "You will regain access on 2026-09-01."),
+    ],
+    [
+      "a time in another zone than UTC (PBI-1.21)",
+      errorBody("rate_limit_error", "You will regain access on 2026-09-01 at 00:00 PST."),
+    ],
+    [
+      "a time with no zone (PBI-1.21)",
+      errorBody("rate_limit_error", "You will regain access on 2026-09-01 at 00:00."),
+    ],
+    [
+      "a zone that only starts with UTC (PBI-1.21)",
+      errorBody("rate_limit_error", "You will regain access on 2026-09-01 at 00:00 UTC+2."),
     ],
     [
       "a date that does not exist",

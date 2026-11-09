@@ -115,24 +115,24 @@ describe("classifyOutcome, the queue stops for a setting", () => {
   it.each([401, 403])("asks for a key on %i", (status) => {
     expect(classifyOutcome(http(status, apiError("authentication_error")), receivedAt)).toEqual({
       ok: false,
-      error: { kind: "key-refused", status },
+      error: { kind: "key-refused", status, cause: "refused" },
     });
   });
 
-  it("asks for a key on a 400 that says the key is not scoped to a workspace", () => {
+  it("asks for a key on a 400 that says the key is not scoped to a workspace, and says so", () => {
     // The message as the API's "Authentication" page gives it.
     const message =
       "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use. Add the header, or use an API key that is scoped to a workspace.";
     expect(
       classifyOutcome(http(400, apiError("invalid_request_error", message)), receivedAt),
-    ).toEqual({ ok: false, error: { kind: "key-refused", status: 400 } });
+    ).toEqual({ ok: false, error: { kind: "key-refused", status: 400, cause: "not-scoped" } });
   });
 
   it("asks for a key on a 400 whose message only starts with the workspace text", () => {
     const body = apiError("invalid_request_error", "This API key is not scoped to a workspace");
     expect(classifyOutcome(http(400, body), receivedAt)).toEqual({
       ok: false,
-      error: { kind: "key-refused", status: 400 },
+      error: { kind: "key-refused", status: 400, cause: "not-scoped" },
     });
   });
 
