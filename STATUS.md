@@ -10,10 +10,10 @@ Last update: 2026-11-09
 Build: Phase 1, the first version ([`docs/BACKLOG.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/BACKLOG.md)); the specification's intent is approved ([`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/main/docs/SPEC.md)).
 
 ## Current focus
-The app's Phase 1 code is in. Next is the EAS build, [PBI-1.10](https://github.com/factoincognito/what-mushroom-is-this/blob/84e0d814b54faef62a8480dbc149367b25fd1751/docs/BACKLOG.md?plain=1#L49), once Adam has run `eas init`; then Adam's test session, [PBI-1.11](https://github.com/factoincognito/what-mushroom-is-this/blob/84e0d814b54faef62a8480dbc149367b25fd1751/docs/BACKLOG.md?plain=1#L50). Follow-ups that need no phone: the flaky first New find test and a code comment, PBI-1.28 (added in [#37](https://github.com/factoincognito/what-mushroom-is-this/pull/37)).
+The first Android build, [PBI-1.10](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/BACKLOG.md?plain=1#L49): the app is linked to its Expo project and has its build profile ([#39](https://github.com/factoincognito/what-mushroom-is-this/pull/39), [#40](https://github.com/factoincognito/what-mushroom-is-this/pull/40), [#42](https://github.com/factoincognito/what-mushroom-is-this/pull/42)), and Adam started the build on 2026-11-09 16:18. The app is named Washroom ([#41](https://github.com/factoincognito/what-mushroom-is-this/pull/41)).
 
 ## Next step
-Adam: `eas init` signed in to his Expo account; then Clead and Crog: the EAS build ([PO-159](https://github.com/factoincognito/product-office/blob/927e90b868c3fed09fa7b519ff0e61d586a31ffd/BACKLOG.md?plain=1#L394) step 4 in the product office).
+Adam: install the build on his phone, then his test session, [PBI-1.11](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/BACKLOG.md?plain=1#L50). Clead: what the build log shows of the lint check and the merged manifest, and Known unknowns 3 and 5 in [`docs/SPEC.md`](https://github.com/factoincognito/what-mushroom-is-this/blob/af1161dc6181af7dba0627adb1fd881e9717a7ab/docs/SPEC.md?plain=1#L317).
 
 ## Blockers
-- Adam: `eas init` signed in to his Expo account, for the EAS build, [PBI-1.10](https://github.com/factoincognito/what-mushroom-is-this/blob/164660eadd6e37875801a6e7a37f746e7d91abf3/docs/BACKLOG.md?plain=1#L49).
+None.

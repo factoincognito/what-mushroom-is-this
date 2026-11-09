@@ -24,6 +24,10 @@ All notable changes to What mushroom is this? are documented here.
 - The Log and Find screens: names, edibility with the disclaimer,
   look-alikes, position and time, the map link, analyse again and delete
   (#24).
+- EAS Build for Android: the link to the Expo project, and the `preview`
+  profile for an installable APK, with the backup excludes marked for
+  lint and the unused Wi-Fi state and overlay permissions blocked (#39,
+  #40, #42).
 
 ### Changed
 
@@ -51,6 +55,9 @@ All notable changes to What mushroom is this? are documented here.
 - The last follow-ups: a delete removes the photo only when the find went,
   a new find gets a readable ID after a damaged one, and the development
   tools' notices are tested (#36).
+- The first New find, Find and Log tests no longer time out under load:
+  the router's first load is paid before them (#38).
+- The app is named Washroom on the phone (#41).
 
 ## Project created
 
