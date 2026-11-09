@@ -8,7 +8,11 @@
 import type { FindDatabase } from "./database";
 import { corrupt, StoreError } from "./find";
 
-/** Version 1: one row per find, its answer as JSON and, beside it, what the Log list shows. */
+/**
+ * Version 1: one row per find, its answer as JSON and, beside it, what the Log list shows. Not yet
+ * released, so it is still changed in place: the failure cause `photo` was added in PBI-1.7
+ * without a migration (Clead's decision on #17).
+ */
 const VERSION_1 = `
 CREATE TABLE finds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,7 +25,7 @@ CREATE TABLE finds (
   position_source TEXT CHECK (position_source IN ('fix', 'last-known', 'photo')),
   photo_file TEXT NOT NULL UNIQUE,
   state TEXT NOT NULL CHECK (state IN ('waiting', 'done', 'failed')),
-  failure_cause TEXT CHECK (failure_cause IN ('segment-check', 'request', 'answer')),
+  failure_cause TEXT CHECK (failure_cause IN ('segment-check', 'request', 'answer', 'photo')),
   failure_detail TEXT,
   answer_json TEXT,
   model TEXT,

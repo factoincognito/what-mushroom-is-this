@@ -83,6 +83,50 @@ export type Strings = {
     readonly cameraBlocked: string;
     readonly openSettings: string;
   };
+  /**
+   * The analysis queue (docs/SPEC.md 3.3, 3.4): a message for each error class and stop. `{time}`,
+   * `{status}` and `{detail}` are filled in by `src/queue/messages.ts`.
+   */
+  readonly queue: {
+    readonly analyseNow: string;
+    /** The link to Settings when the queue stopped for a setting. */
+    readonly openSettings: string;
+    readonly running: string;
+    /** A run ended with the finds still waiting. */
+    readonly paused: {
+      readonly network: string;
+      readonly timeOut: string;
+      readonly server: string;
+    };
+    readonly stopped: {
+      /** A 429 with `retry-after`: the queue starts again by itself at `{time}`. */
+      readonly rateLimitedUntil: string;
+      /** A spend limit whose message states when access resumes, `{time}`. */
+      readonly spendLimitUntil: string;
+      readonly rateLimited: string;
+      readonly noKey: string;
+      readonly keyRefused: string;
+      /** The key belongs to no workspace; the user must replace it with one that does. */
+      readonly keyNotScoped: string;
+      readonly noCredit: string;
+      readonly modelUnknown: string;
+      readonly answer: string;
+      /** A run failed inside the app; the error itself is not shown. */
+      readonly internalError: string;
+      /** `{status}`: the answer's HTTP status. */
+      readonly other: string;
+    };
+    /** Why a find failed; `{detail}` names the refused marker, the status or the answer's fault. */
+    readonly failed: {
+      readonly segmentCheck: string;
+      readonly request: string;
+      readonly answer: string;
+      /** The photo could not be read for analysis. */
+      readonly photo: string;
+    };
+    /** A failed new analysis of a find that has an answer. */
+    readonly answerKept: string;
+  };
   /** The About view (docs/SPEC.md 3.1): the licences and the disclaimer. */
   readonly about: {
     /** The view's title, which is also the text of its link in Settings. */
@@ -121,6 +165,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "settings.model",
     "notFound",
     "newFind",
+    "queue",
     "about",
   ],
   it: [
@@ -133,6 +178,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "settings.model",
     "notFound",
     "newFind",
+    "queue",
     "about",
   ],
 };
@@ -207,6 +253,48 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       cameraBlocked:
         "Appen får inte använda kameran. Du kan tillåta det i telefonens inställningar eller välja ett foto i galleriet.",
       openSettings: "Öppna telefonens inställningar",
+    },
+    queue: {
+      analyseNow: "Analysera nu",
+      openSettings: "Öppna Inställningar",
+      running: "Analyserar fynd …",
+      paused: {
+        network: "Inget nätverk. Fynden väntar och analyseras när nätverket är tillbaka.",
+        timeOut:
+          "Claude-API:t svarade inte i tid. Fynden väntar och prövas igen vid nästa körning.",
+        server:
+          "Claude-API:t hade ett fel hos Anthropic. Fynden väntar och prövas igen vid nästa körning.",
+      },
+      stopped: {
+        rateLimitedUntil:
+          "Claude-API:ts hastighetsgräns är nådd. Analysen startar igen av sig själv: {time}.",
+        spendLimitUntil:
+          "En kostnadsgräns för nyckelns konto är nådd. Enligt API:t går det att fortsätta: {time}. Tryck då på Analysera nu.",
+        rateLimited:
+          "En hastighets- eller kostnadsgräns för nyckelns konto är nådd. Tryck på Analysera nu för att försöka igen.",
+        noKey: "Analysen behöver din Claude-API-nyckel. Lägg till den i Inställningar.",
+        keyRefused:
+          "Claude-API:t godtog inte nyckeln, eller så saknar den behörighet. Ange en giltig nyckel i Inställningar.",
+        keyNotScoped:
+          "Nyckeln hör inte till någon arbetsyta, och appen kan inte ange en arbetsyta. Ersätt den i Inställningar med en nyckel som hör till en arbetsyta.",
+        noCredit:
+          "Nyckelns konto har ingen kredit kvar. Fyll på krediten och tryck sedan på Analysera nu.",
+        modelUnknown: "Claude-API:t känner inte till modellen. Välj en annan i Inställningar.",
+        answer:
+          "Ett svar hade inte den väntade formen, eller kom inte från Claude-API:t (till exempel en inloggningssida för wifi). Det fyndet är markerat som misslyckat. Tryck på Analysera nu för att fortsätta.",
+        internalError:
+          "Något gick fel i appen under analysen. Fynden finns kvar. Tryck på Analysera nu för att försöka igen.",
+        other:
+          "Claude-API:t svarade med status {status}. Tryck på Analysera nu för att försöka igen.",
+      },
+      failed: {
+        segmentCheck:
+          "Fotot innehåller data som inte skickas ({detail}), så det analyserades inte.",
+        request: "Claude-API:t avvisade förfrågan ({detail}).",
+        answer: "Svaret hade inte den väntade formen ({detail}).",
+        photo: "Fotot gick inte att läsa för analys ({detail}).",
+      },
+      answerKept: "Den nya analysen misslyckades. Det tidigare svaret finns kvar.",
     },
     about: {
       title: "Om appen",
@@ -287,6 +375,45 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       cameraBlocked:
         "The app may not use the camera. You can allow it in the phone's settings, or pick a photo from the gallery.",
       openSettings: "Open the phone's settings",
+    },
+    queue: {
+      analyseNow: "Analyse now",
+      openSettings: "Open Settings",
+      running: "Analysing finds…",
+      paused: {
+        network: "No network. The finds wait and are analysed when the network is back.",
+        timeOut:
+          "The Claude API did not answer in time. The finds wait and are tried again at the next run.",
+        server:
+          "The Claude API had a fault on Anthropic's side. The finds wait and are tried again at the next run.",
+      },
+      stopped: {
+        rateLimitedUntil:
+          "The Claude API's rate limit is reached. Analysis starts again by itself: {time}.",
+        spendLimitUntil:
+          "A spend limit on the key's account is reached. Access resumes, the API says: {time}. Then tap Analyse now.",
+        rateLimited:
+          "A rate or spend limit on the key's account is reached. Tap Analyse now to try again.",
+        noKey: "Analysis needs your Claude API key. Add it in Settings.",
+        keyRefused:
+          "The Claude API refused the key, or the key lacks permission. Enter a valid key in Settings.",
+        keyNotScoped:
+          "The key belongs to no workspace, and the app cannot name one. Replace it in Settings with a key that belongs to a workspace.",
+        noCredit: "The key's account has no credit left. Add credit, then tap Analyse now.",
+        modelUnknown: "The Claude API does not know the model. Choose another in Settings.",
+        answer:
+          "An answer did not have the expected form, or did not come from the Claude API (for example a Wi-Fi sign-in page). That find is marked failed. Tap Analyse now to go on.",
+        internalError:
+          "Something went wrong inside the app during the analysis. The finds are kept. Tap Analyse now to try again.",
+        other: "The Claude API answered with status {status}. Tap Analyse now to try again.",
+      },
+      failed: {
+        segmentCheck: "The photo holds data that is not sent ({detail}), so it was not analysed.",
+        request: "The Claude API refused the request ({detail}).",
+        answer: "The answer did not have the expected form ({detail}).",
+        photo: "The photo could not be read for analysis ({detail}).",
+      },
+      answerKept: "The new analysis failed. The earlier answer is kept.",
     },
     about: {
       title: "About",
@@ -369,6 +496,49 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       cameraBlocked:
         "L'app non può usare la fotocamera. Puoi consentirlo nelle impostazioni del telefono, oppure scegliere una foto dalla galleria.",
       openSettings: "Apri le impostazioni del telefono",
+    },
+    queue: {
+      analyseNow: "Analizza ora",
+      openSettings: "Apri Impostazioni",
+      running: "Analisi dei ritrovamenti in corso…",
+      paused: {
+        network:
+          "Nessuna rete. I ritrovamenti restano in attesa e vengono analizzati quando la rete torna.",
+        timeOut:
+          "L'API di Claude non ha risposto in tempo. I ritrovamenti restano in attesa e vengono riprovati alla prossima esecuzione.",
+        server:
+          "L'API di Claude ha avuto un guasto da parte di Anthropic. I ritrovamenti restano in attesa e vengono riprovati alla prossima esecuzione.",
+      },
+      stopped: {
+        rateLimitedUntil:
+          "È stato raggiunto il limite di frequenza dell'API di Claude. L'analisi riparte da sola: {time}.",
+        spendLimitUntil:
+          "È stato raggiunto un limite di spesa sull'account della chiave. Secondo l'API, l'accesso riprende: {time}. Tocca allora Analizza ora.",
+        rateLimited:
+          "È stato raggiunto un limite di frequenza o di spesa sull'account della chiave. Tocca Analizza ora per riprovare.",
+        noKey: "L'analisi richiede la tua chiave API di Claude. Aggiungila in Impostazioni.",
+        keyRefused:
+          "L'API di Claude ha rifiutato la chiave, oppure la chiave non ha l'autorizzazione. Inserisci una chiave valida in Impostazioni.",
+        keyNotScoped:
+          "La chiave non appartiene a nessuno spazio di lavoro e l'app non può indicarne uno. Sostituiscila in Impostazioni con una chiave che appartiene a uno spazio di lavoro.",
+        noCredit:
+          "L'account della chiave non ha più credito. Aggiungi credito, poi tocca Analizza ora.",
+        modelUnknown: "L'API di Claude non conosce il modello. Scegline un altro in Impostazioni.",
+        answer:
+          "Una risposta non aveva la forma prevista, oppure non veniva dall'API di Claude (ad esempio una pagina di accesso al Wi-Fi). Quel ritrovamento è segnato come non riuscito. Tocca Analizza ora per continuare.",
+        internalError:
+          "Qualcosa è andato storto nell'app durante l'analisi. I ritrovamenti sono conservati. Tocca Analizza ora per riprovare.",
+        other:
+          "L'API di Claude ha risposto con lo stato {status}. Tocca Analizza ora per riprovare.",
+      },
+      failed: {
+        segmentCheck:
+          "La foto contiene dati che non vengono inviati ({detail}), quindi non è stata analizzata.",
+        request: "L'API di Claude ha rifiutato la richiesta ({detail}).",
+        answer: "La risposta non aveva la forma prevista ({detail}).",
+        photo: "Non è stato possibile leggere la foto per l'analisi ({detail}).",
+      },
+      answerKept: "La nuova analisi non è riuscita. La risposta precedente è mantenuta.",
     },
     about: {
       title: "Informazioni",

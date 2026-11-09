@@ -12,6 +12,7 @@ import {
 import type { KeyValueStore } from "../storage/keyValueStore";
 import {
   clearKeyOnFirstStartAfterInstall,
+  type ReadKeyResult,
   readKey,
   removeKey,
   type SaveKeyResult,
@@ -27,7 +28,21 @@ export type KeyState = {
   /** Saves a key (trimmed; an empty or unsendable key is not saved). */
   readonly save: (raw: string) => Promise<SaveKeyResult>;
   readonly remove: () => Promise<{ readonly ok: boolean }>;
+  /**
+   * The key, for the analysis queue only: read once the first-start clearing has run, so a key
+   * left from an earlier install is never sent (docs/SPEC.md 3.2).
+   */
+  readonly readForAnalysis: () => Promise<ReadKeyResult>;
 };
+
+/** A promise and the function that resolves it. */
+function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 const KeyContext = createContext<KeyState | null>(null);
 
@@ -46,11 +61,15 @@ export function KeyProvider({ secrets, store, children }: KeyProviderProps) {
   const [status, setStatus] = useState<KeyStatus>("loading");
   const mounted = useRef(true);
   const started = useRef<Promise<unknown> | null>(null);
+  // Made at the first render, before any effect runs: a child's mount effect runs before this
+  // provider's, so a promise made in the effect would not yet be there for it to wait on.
+  const [cleared] = useState(deferred);
 
   useEffect(() => {
     mounted.current = true;
     // The read is part of the startup, so a save or remove that waits for it reports last.
     started.current = clearKeyOnFirstStartAfterInstall(secrets, store)
+      .then(() => cleared.resolve())
       .then(() => readKey(secrets))
       .then((result) => {
         if (mounted.current) {
@@ -60,7 +79,12 @@ export function KeyProvider({ secrets, store, children }: KeyProviderProps) {
     return () => {
       mounted.current = false;
     };
-  }, [secrets, store]);
+  }, [secrets, store, cleared]);
+
+  const readForAnalysis = useCallback(async (): Promise<ReadKeyResult> => {
+    await cleared.promise;
+    return readKey(secrets);
+  }, [secrets, cleared]);
 
   const save = useCallback(
     async (raw: string): Promise<SaveKeyResult> => {
@@ -83,7 +107,10 @@ export function KeyProvider({ secrets, store, children }: KeyProviderProps) {
     return result;
   }, [secrets]);
 
-  const state = useMemo<KeyState>(() => ({ status, save, remove }), [status, save, remove]);
+  const state = useMemo<KeyState>(
+    () => ({ status, save, remove, readForAnalysis }),
+    [status, save, remove, readForAnalysis],
+  );
   return <KeyContext.Provider value={state}>{children}</KeyContext.Provider>;
 }
 

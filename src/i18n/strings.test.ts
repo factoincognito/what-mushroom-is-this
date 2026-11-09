@@ -65,10 +65,11 @@ describe("NOT_CHECKED_BY_A_SPEAKER", () => {
     "settings.model",
     "notFound",
     "newFind",
+    "queue",
     "about",
   ];
 
-  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6 and PBI-1.9", () => {
+  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7 and PBI-1.9", () => {
     expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
   });
 
@@ -142,6 +143,35 @@ describe("the strings of the new find", () => {
       "newFind.saving",
       "newFind.takePhoto",
       "newFind.title",
+    ]);
+  });
+});
+
+describe("the strings of the queue (PBI-1.7)", () => {
+  it.each(LANGUAGES)("are all there in %s", (language) => {
+    expect(keyPaths(STRINGS[language]).filter((path) => path.startsWith("queue."))).toEqual([
+      "queue.analyseNow",
+      "queue.answerKept",
+      "queue.failed.answer",
+      "queue.failed.photo",
+      "queue.failed.request",
+      "queue.failed.segmentCheck",
+      "queue.openSettings",
+      "queue.paused.network",
+      "queue.paused.server",
+      "queue.paused.timeOut",
+      "queue.running",
+      "queue.stopped.answer",
+      "queue.stopped.internalError",
+      "queue.stopped.keyNotScoped",
+      "queue.stopped.keyRefused",
+      "queue.stopped.modelUnknown",
+      "queue.stopped.noCredit",
+      "queue.stopped.noKey",
+      "queue.stopped.other",
+      "queue.stopped.rateLimited",
+      "queue.stopped.rateLimitedUntil",
+      "queue.stopped.spendLimitUntil",
     ]);
   });
 });

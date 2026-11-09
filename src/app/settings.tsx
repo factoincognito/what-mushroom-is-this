@@ -16,6 +16,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import { LANGUAGES } from "../i18n/languages";
 import { STRINGS, type Strings } from "../i18n/strings";
 import { useApiKey } from "../key/KeyContext";
+import { useQueue } from "../queue/QueueContext";
 import { deviceStore } from "../storage/keyValueStore";
 
 type KeyMessage = keyof Pick<
@@ -77,12 +78,16 @@ function KeySection() {
   const { strings } = useLanguage();
   const t = strings.settings.key;
   const { status, save, remove } = useApiKey();
+  const { settingChanged } = useQueue();
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState<KeyMessage | null>(null);
   const mounted = useMounted();
 
   const onSave = async () => {
     const result = await save(draft);
+    if (result.ok) {
+      settingChanged("key");
+    }
     if (!mounted.current) {
       return;
     }
@@ -142,6 +147,7 @@ function KeySection() {
 function ModelSection() {
   const { strings } = useLanguage();
   const t = strings.settings.model;
+  const { settingChanged } = useQueue();
   const [modelId, setModelId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState<ModelMessage | null>(null);
@@ -157,6 +163,9 @@ function ModelSection() {
 
   const choose = async (raw: string, fromField: boolean) => {
     const result = await saveModelId(deviceStore, raw);
+    if (result.ok) {
+      settingChanged("model");
+    }
     if (!mounted.current) {
       return;
     }
