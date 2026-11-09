@@ -1,3 +1,4 @@
+import { Link } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -41,7 +42,7 @@ const MODEL_REFUSALS: { readonly [R in "empty" | "invalid" | "store-failed"]: Mo
 
 /**
  * The Settings screen (docs/SPEC.md 3.1): the API key (entered, replaced or removed, and never
- * shown once saved), the model, and the app's language. "About" comes in PBI-1.9.
+ * shown once saved), the model, the app's language, and the link to About.
  */
 export default function SettingsScreen() {
   const { language, strings, chooseLanguage } = useLanguage();
@@ -65,6 +66,9 @@ export default function SettingsScreen() {
           </Pressable>
         ))}
       </View>
+      <Link href="/about" accessibilityRole="link" style={styles.text}>
+        {strings.about.title}
+      </Link>
     </ScrollView>
   );
 }

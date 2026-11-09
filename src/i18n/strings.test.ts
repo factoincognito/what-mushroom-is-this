@@ -65,9 +65,10 @@ describe("NOT_CHECKED_BY_A_SPEAKER", () => {
     "settings.model",
     "notFound",
     "newFind",
+    "about",
   ];
 
-  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2 and PBI-1.6", () => {
+  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6 and PBI-1.9", () => {
     expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
   });
 
@@ -141,6 +142,22 @@ describe("the strings of the new find", () => {
       "newFind.saving",
       "newFind.takePhoto",
       "newFind.title",
+    ]);
+  });
+});
+
+describe("the strings of the About view", () => {
+  it.each(LANGUAGES)("are all there in %s", (language) => {
+    expect(keyPaths(STRINGS[language]).filter((path) => path.startsWith("about."))).toEqual([
+      "about.appHeading",
+      "about.disclaimerHeading",
+      "about.hideText",
+      "about.librariesHeading",
+      "about.librariesIntro",
+      "about.showText",
+      "about.textMissing",
+      "about.title",
+      "about.versionNotPinned",
     ]);
   });
 });

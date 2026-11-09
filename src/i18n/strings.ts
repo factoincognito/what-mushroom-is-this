@@ -83,6 +83,21 @@ export type Strings = {
     readonly cameraBlocked: string;
     readonly openSettings: string;
   };
+  /** The About view (docs/SPEC.md 3.1): the licences and the disclaimer. */
+  readonly about: {
+    /** The view's title, which is also the text of its link in Settings. */
+    readonly title: string;
+    readonly appHeading: string;
+    readonly librariesHeading: string;
+    readonly librariesIntro: string;
+    /** In place of the version of a library whose version the build chooses. */
+    readonly versionNotPinned: string;
+    readonly showText: string;
+    readonly hideText: string;
+    /** For a library whose licence text is not in the app yet. */
+    readonly textMissing: string;
+    readonly disclaimerHeading: string;
+  };
 };
 
 /**
@@ -106,6 +121,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "settings.model",
     "notFound",
     "newFind",
+    "about",
   ],
   it: [
     "languageName",
@@ -117,6 +133,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "settings.model",
     "notFound",
     "newFind",
+    "about",
   ],
 };
 
@@ -191,6 +208,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "Appen får inte använda kameran. Du kan tillåta det i telefonens inställningar eller välja ett foto i galleriet.",
       openSettings: "Öppna telefonens inställningar",
     },
+    about: {
+      title: "Om appen",
+      appHeading: "Appens licens",
+      librariesHeading: "Bibliotek",
+      librariesIntro: "Appen innehåller dessa bibliotek, under deras egna licenser.",
+      versionNotPinned: "väljs när appen byggs",
+      showText: "Visa licenstexten",
+      hideText: "Dölj licenstexten",
+      textMissing: "Licenstexten finns inte i appen ännu.",
+      disclaimerHeading: "Ätlighet",
+    },
   },
   en: {
     languageName: "English",
@@ -259,6 +287,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       cameraBlocked:
         "The app may not use the camera. You can allow it in the phone's settings, or pick a photo from the gallery.",
       openSettings: "Open the phone's settings",
+    },
+    about: {
+      title: "About",
+      appHeading: "The app's licence",
+      librariesHeading: "Libraries",
+      librariesIntro: "The app contains these libraries, under their own licences.",
+      versionNotPinned: "chosen when the app is built",
+      showText: "Show the licence text",
+      hideText: "Hide the licence text",
+      textMissing: "The licence text is not in the app yet.",
+      disclaimerHeading: "Edibility",
     },
   },
   // Not checked by an Italian speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
@@ -330,6 +369,17 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       cameraBlocked:
         "L'app non può usare la fotocamera. Puoi consentirlo nelle impostazioni del telefono, oppure scegliere una foto dalla galleria.",
       openSettings: "Apri le impostazioni del telefono",
+    },
+    about: {
+      title: "Informazioni",
+      appHeading: "La licenza dell'app",
+      librariesHeading: "Librerie",
+      librariesIntro: "L'app contiene queste librerie, con le loro licenze.",
+      versionNotPinned: "scelta quando l'app viene compilata",
+      showText: "Mostra il testo della licenza",
+      hideText: "Nascondi il testo della licenza",
+      textMissing: "Il testo della licenza non è ancora nell'app.",
+      disclaimerHeading: "Commestibilità",
     },
   },
 };
