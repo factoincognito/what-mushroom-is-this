@@ -410,6 +410,7 @@ describe("a waiting or failed find", () => {
     [{ cause: "request", detail: "the request is wrong (status 400)" }],
     [{ cause: "answer", detail: "confidence is not one of low, medium, high" }],
     [{ cause: "photo", detail: "the photo could not be read" }],
+    [{ cause: "refused", detail: "the answer was refused (stop_reason refusal)" }],
   ] as const)("names the cause of %o in plain words", async (failure) => {
     mockLog.finds.set(1, aFind({ state: "failed", failure }));
     await startApp();
