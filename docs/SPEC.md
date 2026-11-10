@@ -474,10 +474,12 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   alone, also after the find has got photos, and 3.5's when it is an
   answer from photos, also after photos were removed (**[Clead]**,
   2026-11-10, #57: Clead's reading of his own proposal, that the
-  disclaimer follows the analysis that gave the answer). For "no mushroom"
-  and "cannot tell" the store does not yet hold what the answer was
-  based on, so their wording follows whether the find has photos
-  (PBI-2.15).
+  disclaimer follows the analysis that gave the answer). "No mushroom"
+  and "cannot tell" follow the same rule: they speak of the description
+  for an answer from the text alone and of the photo for an answer from
+  photos, whatever photos the find has gained or lost since. An answer
+  whose basis the store does not hold (The store, below) follows whether
+  the find has photos (**[Clead]**, 2026-11-10, PBI-2.15).
 
 **A representative picture for text lookups** (Adam, 19:01; the source,
 Wikimedia Commons, is his answer to Clead's question, by 19:03).
@@ -616,10 +618,22 @@ answers to Clead's questions, 19:05).
     or none, licence and page, or none (the `Attribution` text from
     PBI-2.16; **[Clead]**, 2026-11-10);
   - its self-check: waiting, agreed, disagreed with the species the check
-    named, could not name a species, failed, or no picture.
+    named, could not name a species, failed, or no picture;
+  - on a find with an answer, what the answer was based on: the text
+    alone, or photos (with the text when the find has one); or none, for
+    an answer stored before schema version 3 whose basis the stored data
+    does not prove (PBI-2.15).
 - The database moves to schema version 2 by a migration that keeps every
   Phase 1 find, its photo as its first photo and its answer as it was.
   Adam's test-session finds are kept.
+- It then moves to schema version 3 by a migration that keeps every find
+  and each of its columns as they were, and gives an answer what it was
+  based on only where the stored data proves it: photos for a find
+  without text; the text alone for an answer with a self-check; photos
+  for an answer naming a species without one; the text alone for a text
+  find that never had a photo. Any other answer is left without one. A
+  Phase 1 find goes through both migrations, and its answer is from its
+  photo (**[Clead]**, 2026-11-10, PBI-2.15).
 
 **The Library** (replaces the Log as the start screen; Adam).
 
