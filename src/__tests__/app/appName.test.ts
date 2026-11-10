@@ -8,6 +8,8 @@
  * name are read as `npx expo config --type introspect` gives them, by running the real config over
  * this project's app.json, as easBuild.test.ts does.
  */
+import type * as TypeScript from "typescript";
+
 import notices from "../../about/notices.json";
 import { LANGUAGES } from "../../i18n/languages";
 import { STRINGS } from "../../i18n/strings";
@@ -15,6 +17,8 @@ import { APPLICATION_ID } from "../../testing/appIdentity";
 import { appSourceFiles, fs, PROJECT_ROOT } from "../../testing/projectFiles";
 
 const { readFileSync } = fs;
+/** TypeScript's own parser, the project's development dependency. */
+const ts: typeof TypeScript = jest.requireActual("typescript");
 
 /** The app's public name, in every language. */
 const APP_NAME = "Washroom";
@@ -50,6 +54,36 @@ const appJson: { expo: ExpoConfig } = jest.requireActual("../../../app.json");
  */
 function namesOfTheApp(text: string): string[] {
   return [...text.matchAll(OLD_NAME), ...text.matchAll(/washroom/gi)].map((match) => match[0]);
+}
+
+/**
+ * The texts written straight into a source file, as TypeScript's own parser reads it (PBI-1.29,
+ * note 1 on #41): its string literals (a JSX attribute's among them), the fixed parts of its
+ * template literals, and its JSX text, with each run of white space as one space, as a screen
+ * shows it. Names and comments are not texts. A text built by joining parts at run time is not
+ * seen whole: the scan reads each part.
+ */
+function literalTexts(source: string): string[] {
+  const file = ts.createSourceFile(
+    "source.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.TSX,
+  );
+  const texts: string[] = [];
+  const visit = (node: TypeScript.Node): void => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      texts.push(node.text);
+    } else if (ts.isTemplateExpression(node)) {
+      texts.push(node.head.text, ...node.templateSpans.map((span) => span.literal.text));
+    } else if (ts.isJsxText(node)) {
+      texts.push(node.text.replace(/\s+/g, " "));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return texts;
 }
 
 /** Every leaf string of a nested object of texts. */
