@@ -840,6 +840,20 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
         insertPastChecks("UPDATE finds SET analysed_at_ms = ? WHERE id = ?", PAST_SAFE, id);
       },
     ],
+    [
+      "a confidence column whose number differs from its answer's (PBI-2.12)",
+      (id) => {
+        sqlite.prepare("UPDATE finds SET confidence_score = 85 WHERE id = ?").run(id);
+      },
+    ],
+    [
+      "a confidence column that holds a level where its answer holds a number (PBI-2.12)",
+      (id) => {
+        sqlite
+          .prepare("UPDATE finds SET confidence = 'high', confidence_score = NULL WHERE id = ?")
+          .run(id);
+      },
+    ],
   ];
 
   it.each(unreadableDone)(

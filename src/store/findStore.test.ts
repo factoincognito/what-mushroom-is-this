@@ -162,10 +162,10 @@ const SAFE_OFFSET =
   "CASE WHEN utc_offset_min BETWEEN -1080 AND 1080 THEN utc_offset_min END AS utc_offset_min";
 /** The ID, given back only as a positive safe integer, else as NULL (PBI-1.26). */
 const SAFE_ID = "CASE WHEN id BETWEEN 1 AND 9007199254740991 THEN id END AS id";
-const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES}, ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}, added_photos, picture_file, picture_author, picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it`;
+const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES}, ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}, added_photos, picture_file, picture_author, picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it, confidence, confidence_score`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
 const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE (state = 'waiting' OR (state = 'done' AND (added_photos = 'waiting' OR (self_check = 'waiting' AND (picture_file IS NULL OR ${PHOTO_COUNT} = 0))))) AND batch_open = 0 AND finds.id > ? AND finds.id <= 9007199254740991 ORDER BY finds.id ASC LIMIT 1`;
-const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv, name_en, name_it, edibility, confidence, confidence_score FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
+const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv, name_en, name_it, edibility FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /** Only among the IDs the store cannot read: a readable find is deleted by `delete` alone. */
 const UNREADABLE_ID = "(id < 1 OR id > 9007199254740991)";
 const FILES_OF_STORED = `SELECT photos, picture_file FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
@@ -262,11 +262,16 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     check_name_en: null,
     check_name_la: null,
     check_name_it: null,
+    confidence: null,
+    confidence_score: null,
     ...overrides,
   };
 }
 
-/** A done row whose answer is the match, as the store writes it. */
+/**
+ * A done row whose answer is the match, as the store writes it: its confidence also in its column
+ * (PBI-2.12).
+ */
 function doneRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return row({
     state: "done",
@@ -274,6 +279,7 @@ function doneRow(overrides: Record<string, unknown> = {}): Record<string, unknow
     model: "claude-model-x",
     analysed_at_ms: 1_762_600_000_000,
     added_photos: "analysed",
+    confidence_score: 90,
     ...overrides,
   });
 }
@@ -1201,7 +1207,15 @@ describe("get", () => {
   });
 
   it("reads a Phase 1 answer with its confidence as the level it was given (SPEC 3.9)", async () => {
-    db.reply("first", GET, doneRow({ answer_json: answerToJson(phaseOneMatch) }));
+    db.reply(
+      "first",
+      GET,
+      doneRow({
+        answer_json: answerToJson(phaseOneMatch),
+        confidence: "low",
+        confidence_score: null,
+      }),
+    );
     await expect(store.get(7)).resolves.toMatchObject({
       analysis: { state: "done", answer: { confidence: "low" } },
     });
@@ -1211,11 +1225,47 @@ describe("get", () => {
   });
 
   it("reads an answer with its confidence as a whole number from 1 to 100 (SPEC 3.9)", async () => {
-    db.reply("first", GET, doneRow({ answer_json: answerToJson({ ...match, confidence: 1 }) }));
+    db.reply(
+      "first",
+      GET,
+      doneRow({ answer_json: answerToJson({ ...match, confidence: 1 }), confidence_score: 1 }),
+    );
     await expect(store.get(7)).resolves.toMatchObject({
       analysis: { state: "done", answer: { confidence: 1 } },
     });
   });
+
+  /** A Phase 1 answer's JSON, its confidence the level "low" (SPEC 3.9). */
+  const PHASE_ONE_JSON = answerToJson(phaseOneMatch);
+
+  it.each<[string, Record<string, unknown>]>([
+    ["a number other than its answer's", doneRow({ confidence_score: 85 })],
+    [
+      "a level where its answer holds a number",
+      doneRow({ confidence: "high", confidence_score: null }),
+    ],
+    ["nothing where its answer holds a number", doneRow({ confidence_score: null })],
+    [
+      "a number where its Phase 1 answer holds a level",
+      doneRow({ answer_json: PHASE_ONE_JSON, confidence_score: 90 }),
+    ],
+    [
+      "a level other than its Phase 1 answer's",
+      doneRow({ answer_json: PHASE_ONE_JSON, confidence: "high", confidence_score: null }),
+    ],
+    [
+      "a confidence beside an answer that names no species",
+      doneRow({ answer_json: answerToJson({ result: "no_mushroom" }), confidence_score: 90 }),
+    ],
+    ["a confidence on a find without an answer", row({ confidence_score: 90 })],
+  ])(
+    "refuses as corrupt a find whose confidence column holds %s, as get and getStored both read it (PBI-2.12)",
+    async (_, stored) => {
+      db.reply("first", GET, stored);
+      await expect(store.get(7)).rejects.toMatchObject({ code: "corrupt" });
+      await expect(store.getStored(7)).rejects.toMatchObject({ code: "corrupt" });
+    },
+  );
 
   it.each<[string, string]>([
     ["0", '"confidence":0'],
@@ -1571,6 +1621,22 @@ describe("list", () => {
     ["a match with a confidence of 101 (SPEC 3.9)", doneMatchRow({ confidence_score: 101 })],
     ["a match with a confidence that is a fraction", doneMatchRow({ confidence_score: 50.5 })],
     ["a match with a confidence stored as text", doneMatchRow({ confidence_score: "90" })],
+    [
+      "a match whose confidence column holds a number other than its answer's (PBI-2.12)",
+      doneMatchRow({ confidence_score: 85 }),
+    ],
+    [
+      "a match whose confidence column holds a level where its answer holds a number (PBI-2.12)",
+      doneMatchRow({ confidence: "high", confidence_score: null }),
+    ],
+    [
+      "a Phase 1 match whose level column differs from its answer's level (PBI-2.12)",
+      phaseOneMatchRow({ confidence: "high" }),
+    ],
+    [
+      "a Phase 1 match whose column holds a number where its answer holds a level (PBI-2.12)",
+      phaseOneMatchRow({ confidence: null, confidence_score: 90 }),
+    ],
     ["a done find with an unknown result", doneMatchRow({ result: "maybe" })],
     [
       "a done find whose stored answer is not of the shape (Clead's review of #26, decision 2)",
@@ -1687,6 +1753,8 @@ describe("list", () => {
       summaryRow({ position_source: "gps" }),
       doneMatchRow({ answer_json: "{" }),
       summaryRow({ taken_at_ms: null }),
+      // The Library reads the confidence from the column, the Find screen from the answer (PBI-2.12).
+      doneMatchRow({ confidence_score: 85 }),
     ];
     for (const stored of damaged) {
       db.reply("first", GET, stored);
@@ -1740,6 +1808,16 @@ describe("oldestWaiting (PBI-1.7, PBI-1.16)", () => {
       { method: "first", sql: NEXT_WAITING, params: [2] },
     ]);
     expect(events.filter((event) => "method" in event && event.method === "run")).toEqual([]);
+  });
+
+  it("passes over an analysed find whose added photos wait and whose confidence column differs from its answer's, as one it cannot read (PBI-2.12)", async () => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) => {
+      if (params[0] === 0) {
+        return doneRow({ id: 2, added_photos: "waiting", confidence_score: 85 });
+      }
+      return params[0] === 2 ? doneRow({ id: 5, added_photos: "waiting" }) : null;
+    });
+    await expect(store.oldestWaiting()).resolves.toBe(5);
   });
 
   it("gives null when every waiting find is one it cannot read", async () => {
@@ -1854,6 +1932,9 @@ describe("setAnswer", () => {
 
   it("refuses a new answer whose confidence is a Phase 1 level, sending nothing (SPEC 3.9)", async () => {
     await expect(
+      // The type check refuses it too: an answer to store is one from the API (PBI-2.12); a
+      // caller without types could still pass it.
+      // @ts-expect-error
       store.setAnswer(7, { ...analysed, answer: phaseOneMatch }, SENT_P7),
     ).rejects.toMatchObject({
       code: "invalid-input",

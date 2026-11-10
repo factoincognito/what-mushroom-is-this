@@ -512,6 +512,21 @@ describe("the queue's pick of an analysed find with new photos (SPEC 3.9, Batche
     await expect(store.oldestWaiting()).resolves.toBeNull();
   });
 
+  it("passes over one whose confidence column differs from its answer's, as a find it cannot read, and lists it so (PBI-2.12)", async () => {
+    const damaged = await analysed1();
+    const next = await analysed1();
+    for (const id of [damaged, next]) {
+      await store.addPhoto(id, "file:///cache/b.jpg");
+      await store.completeBatch(id);
+    }
+    sqlite.prepare("UPDATE finds SET confidence_score = 85 WHERE id = ?").run(damaged);
+    await expect(store.oldestWaiting()).resolves.toBe(next);
+    await expect(store.getStored(damaged)).rejects.toMatchObject({ code: "corrupt" });
+    await expect(store.list()).resolves.toEqual(
+      expect.arrayContaining([{ readable: false, id: damaged }]),
+    );
+  });
+
   it("takes the finds oldest first by ID, waiting ones and analysed ones with new photos alike", async () => {
     const first = await analysed1();
     const second = await store.add(photoFind());

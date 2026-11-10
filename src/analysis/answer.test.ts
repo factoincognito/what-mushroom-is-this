@@ -1,4 +1,5 @@
 import { config } from "../config/config";
+import * as answerModule from "./answer";
 import {
   type Match,
   parseAnswerText,
@@ -176,6 +177,35 @@ describe("parseAnswerText, accepted answers", () => {
       ok: true,
       answer: expectedMatch,
     });
+  });
+});
+
+describe("an answer from the API, by its type (PBI-2.12, note 1 on #52)", () => {
+  /**
+   * The match of an answer read as one from the API. Its confidence is typed as a number, so the
+   * type check fails here if an answer from the API could hold a Phase 1 level (SPEC 3.9).
+   */
+  function scoreOf(result: ReturnType<typeof parseAnswerText>): number {
+    if (!result.ok || result.answer.result !== "match") {
+      throw new Error("the test answer is not a match");
+    }
+    const score: number = result.answer.confidence;
+    return score;
+  }
+
+  it("gives parseAnswerText's confidence as a number", () => {
+    expect(scoreOf(parseAnswerText(JSON.stringify(matchJson())))).toBe(90);
+  });
+
+  it("gives readMessageBody's confidence as a number", () => {
+    const body = messageBody([{ type: "text", text: JSON.stringify(matchJson()) }]);
+    expect(scoreOf(readMessageBody(body))).toBe(90);
+  });
+});
+
+describe("the module's exports (PBI-2.12, note 2 on #52)", () => {
+  it("keeps the check of a Phase 1 level to itself, since only the stored answer's reader uses it", () => {
+    expect(Object.keys(answerModule)).not.toContain("isConfidenceLevel");
   });
 });
 
