@@ -20,8 +20,10 @@
  * queue's `analysePhotoLookup`, the answer or the notice shown here; a class that leaves a find
  * waiting, and a missing key, offer to turn Save on. Turning Save on saves the lookup as one find
  * with its photos, in one open batch, with the first photo's time and position. Once the lookup is
- * a find, the switch cannot change. Leaving the screen with an unsaved lookup asks first; the
- * app's copies of its photos are removed when the screen is left without a find made.
+ * a find, the switch cannot change. A photo can be removed from an unsaved lookup, the last too,
+ * after a question, which removes the app's copy only (Clead's decision on #61). Leaving the
+ * screen with an unsaved lookup asks first; the app's copies of its photos are removed when the
+ * screen is left without a find made.
  */
 
 import type { Answer } from "../analysis/answer";
@@ -79,9 +81,12 @@ export interface NewFindView {
   /**
    * The question open on the screen (docs/SPEC.md 3.1, 3.9, PBI-1.20): discard: "Discard the
    * photo" was tapped; leave: the screen is being left while photos are kept; leaveLookup: it is
-   * being left with an unsaved lookup. Null when none is.
+   * being left with an unsaved lookup; removeHeld: a photo of the unsaved lookup is to be removed
+   * (`removing`). Null when none is.
    */
-  confirming: "discard" | "leave" | "leaveLookup" | null;
+  confirming: "discard" | "leave" | "leaveLookup" | "removeHeld" | null;
+  /** The number of the unsaved lookup's photo the open question would remove, 1 for the first. */
+  removing: number | null;
   /** The photos the find holds, this batch's included; 0 before the find has one. */
   photoCount: number;
   /** Whether more photos can be added: the find is known and holds fewer than the most. */
@@ -98,6 +103,8 @@ export interface NewFindView {
   save: { on: boolean; changeable: boolean } | null;
   /** The photos an unsaved lookup holds on the screen. */
   held: number;
+  /** The addresses of the app's copies of those photos, in order, for the screen to show. */
+  heldPhotos: readonly string[];
   /** The photos whose save failed and that are kept, for Save again or Discard. */
   kept: number;
   /** What the last analysis of the unsaved lookup came to; dropped when its photos change. */
@@ -117,12 +124,14 @@ export const INITIAL_VIEW: NewFindView = {
   location: null,
   canRetrySave: false,
   confirming: null,
+  removing: null,
   photoCount: 0,
   canAddMore: false,
   batchOpen: false,
   analysed: null,
   save: null,
   held: 0,
+  heldPhotos: [],
   kept: 0,
   outcome: null,
   offerSave: false,
@@ -357,15 +366,34 @@ export class NewFindFlow {
     return false;
   }
 
-  /** The user answers the question by keeping the photos, or the lookup. */
+  /**
+   * "Remove photo n" on an unsaved lookup (Clead's decision on #61): asks first, on the screen,
+   * for a photo it holds (1 for the first), while it is ready and no other question is open.
+   */
+  askToRemove(number: number): void {
+    if (
+      !this.unsaved() ||
+      this.view.phase !== "ready" ||
+      this.view.confirming !== null ||
+      !Number.isInteger(number) ||
+      number < 1 ||
+      number > this.held.length
+    ) {
+      return;
+    }
+    this.show({ confirming: "removeHeld", removing: number });
+  }
+
+  /** The user answers the question by keeping the photos, the lookup, or the photo. */
   keepPhoto(): void {
-    this.show({ confirming: null });
+    this.show({ confirming: null, removing: null });
   }
 
   /**
    * The user confirms the question: the photos whose save failed are dropped, and a new photo can
-   * then be taken; or, leaving an unsaved lookup, the lookup is dropped and the leave goes on.
-   * Without an open question nothing is dropped. Says whether anything was.
+   * then be taken; or, leaving an unsaved lookup, the lookup is dropped and the leave goes on; or
+   * the unsaved lookup's photo asked about is removed. Without an open question nothing is
+   * dropped. Says whether anything was.
    */
   discardPending(): boolean {
     if (this.view.confirming === null) {
@@ -374,6 +402,10 @@ export class NewFindFlow {
     if (this.view.confirming === "leaveLookup") {
       this.discarded = true;
       this.show({ confirming: null });
+      return true;
+    }
+    if (this.view.confirming === "removeHeld") {
+      this.removeHeld(this.view.removing);
       return true;
     }
     this.pending = [];
@@ -452,6 +484,36 @@ export class NewFindFlow {
     this.show({
       phase: "ready",
       message: null,
+      outcome: null,
+      offerSave: false,
+      canAddMore: this.held.length < this.deps.appConfig.maxPhotosPerFind,
+    });
+  }
+
+  /**
+   * Removes the unsaved lookup's photo with the number given, and the app's copy of it, never
+   * anything else (`removeCopy`). The others keep their order. The lookup keeps its first photo's
+   * time and position while it holds photos; once it holds none, the next photo is its first. An
+   * answer shown is dropped, as it is not of the photos the lookup now holds.
+   */
+  private removeHeld(number: number | null): void {
+    const index = number === null ? -1 : number - 1;
+    const [photo] = index < 0 ? [] : this.held.splice(index, 1);
+    if (photo !== undefined) {
+      const [first] = this.held;
+      if (index === 0 && first !== undefined) {
+        first.taken = photo.taken;
+      }
+      const copy = this.unsavedCopies.indexOf(photo.uri);
+      if (copy >= 0) {
+        this.unsavedCopies.splice(copy, 1);
+      }
+      this.deps.removeCopy(photo.uri);
+      this.heldVersion += 1;
+    }
+    this.show({
+      confirming: null,
+      removing: null,
       outcome: null,
       offerSave: false,
       canAddMore: this.held.length < this.deps.appConfig.maxPhotosPerFind,
@@ -633,6 +695,7 @@ export class NewFindFlow {
   private show(change: Partial<NewFindView>): void {
     const next = { ...this.view, ...change };
     next.held = this.held.length;
+    next.heldPhotos = this.held.map((photo) => photo.uri);
     next.kept = this.pending.length;
     next.save =
       this.target.kind === "add"

@@ -3,6 +3,7 @@ import { type NavigationAction, usePreventRemove } from "expo-router/react-navig
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -48,7 +49,9 @@ import { useFindLog } from "../store/FindLogContext";
  * shown but cannot be turned off. With Save off, the photos are held on this screen only;
  * "Analyse" analyses them here and shows the answer as a find's screen would, with SPEC 3.5's
  * disclaimer and no self-check, or the notice; after a pause or without a key the screen offers to
- * turn Save on. Turning Save on saves the lookup as a find with its photos.
+ * turn Save on. Turning Save on saves the lookup as a find with its photos. The held photos are
+ * shown, each with "Remove photo n", which asks first and removes only the app's copy (Clead's
+ * decision on #61).
  *
  * Photos whose save failed are kept, and are dropped only after a question on the screen: when
  * "Discard the photo" is tapped, and when the screen is left in any way (the header's back button,
@@ -134,6 +137,8 @@ export default function NewFindScreen() {
   const canChoose = view.phase === "ready" || view.phase === "saved";
   const several = view.kept > 1;
   const unsaved = view.save?.on === false;
+  // A held photo can be removed while the screen is ready and no question is open.
+  const canRemove = view.phase === "ready" && view.confirming === null;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -171,12 +176,35 @@ export default function NewFindScreen() {
         </Text>
       )}
       {view.held > 0 ? (
-        <Text style={styles.text}>
-          {fillIn(t.heldCount, {
-            count: String(view.held),
-            max: String(config.maxPhotosPerFind),
+        <>
+          <Text style={styles.text}>
+            {fillIn(t.heldCount, {
+              count: String(view.held),
+              max: String(config.maxPhotosPerFind),
+            })}
+          </Text>
+          {view.heldPhotos.map((uri, index) => {
+            const values = { number: String(index + 1), count: String(view.held) };
+            return (
+              <View key={uri} style={styles.section}>
+                <Image
+                  source={{ uri }}
+                  accessibilityLabel={fillIn(t.heldPhoto, values)}
+                  resizeMode="contain"
+                  style={styles.photo}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canRemove}
+                  onPress={() => flow.askToRemove(index + 1)}
+                  style={[styles.button, !canRemove && styles.disabled]}
+                >
+                  <Text style={styles.buttonText}>{fillIn(strings.find.removePhoto, values)}</Text>
+                </Pressable>
+              </View>
+            );
           })}
-        </Text>
+        </>
       ) : (
         view.photoCount > 0 && (
           <Text style={styles.text}>
@@ -190,6 +218,7 @@ export default function NewFindScreen() {
       {view.confirming !== null ? (
         <Question
           question={view.confirming}
+          removing={view.removing}
           several={several}
           strings={strings}
           onYes={() => flow.discardPending()}
@@ -308,7 +337,9 @@ export default function NewFindScreen() {
 }
 
 type QuestionProps = {
-  readonly question: "discard" | "leave" | "leaveLookup";
+  readonly question: NonNullable<NewFindView["confirming"]>;
+  /** The number of the held photo a "removeHeld" question is about. */
+  readonly removing: number | null;
   /** Whether several photos are kept, so the question speaks of the photos. */
   readonly several: boolean;
   readonly strings: Strings;
@@ -316,23 +347,12 @@ type QuestionProps = {
   readonly onNo: () => void;
 };
 
-/** The question asked on the screen before kept photos, or an unsaved lookup, are dropped. */
-function Question({ question, several, strings, onYes, onNo }: QuestionProps) {
-  const t = strings.newFind;
-  const [text, yes, no] =
-    question === "discard"
-      ? several
-        ? [t.discardPhotosConfirm, t.discardYes, t.discardPhotosCancel]
-        : [t.discardConfirm, t.discardYes, t.discardCancel]
-      : [
-          question === "leaveLookup"
-            ? t.leaveLookupConfirm
-            : several
-              ? t.leavePhotosConfirm
-              : t.leaveConfirm,
-          t.leaveYes,
-          t.leaveCancel,
-        ];
+/**
+ * The question asked on the screen before kept photos, an unsaved lookup, or one of its photos
+ * (with the Find screen's answers, Clead's decision on #61) are dropped.
+ */
+function Question({ question, removing, several, strings, onYes, onNo }: QuestionProps) {
+  const [text, yes, no] = questionTexts(question, removing, several, strings);
   return (
     <>
       <Text accessibilityLiveRegion="polite" style={styles.text}>
@@ -346,6 +366,32 @@ function Question({ question, several, strings, onYes, onNo }: QuestionProps) {
       </Pressable>
     </>
   );
+}
+
+/** A question's text, and its two answers. */
+function questionTexts(
+  question: QuestionProps["question"],
+  removing: number | null,
+  several: boolean,
+  strings: Strings,
+): [string, string, string] {
+  const t = strings.newFind;
+  switch (question) {
+    case "discard":
+      return several
+        ? [t.discardPhotosConfirm, t.discardYes, t.discardPhotosCancel]
+        : [t.discardConfirm, t.discardYes, t.discardCancel];
+    case "leave":
+      return [several ? t.leavePhotosConfirm : t.leaveConfirm, t.leaveYes, t.leaveCancel];
+    case "leaveLookup":
+      return [t.leaveLookupConfirm, t.leaveYes, t.leaveCancel];
+    case "removeHeld":
+      return [
+        fillIn(t.removeHeldConfirm, { number: String(removing) }),
+        strings.find.removePhotoYes,
+        strings.find.removePhotoCancel,
+      ];
+  }
 }
 
 function openSettings(): void {
@@ -368,6 +414,10 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 16,
+  },
+  photo: {
+    width: "100%",
+    aspectRatio: 4 / 3,
   },
   note: {
     fontSize: 14,
