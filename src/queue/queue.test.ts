@@ -2070,6 +2070,204 @@ describe("an unsaved lookup, analysed from its screen (SPEC 3.9, Lookups)", () =
   });
 });
 
+const LOOKUP_PHOTOS = [
+  "file:///cache/ImagePicker/a.jpg",
+  "file:///cache/ImagePicker/b.jpg",
+  "file:///cache/ImagePicker/c.jpg",
+];
+
+describe("an unsaved photo lookup, analysed from its screen (SPEC 3.9, Lookups; PBI-2.13)", () => {
+  it("prepares its photos one at a time, in order, and sends them all in one request, at once, also while the queue is stopped, storing nothing", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.queue.stopForInternalError();
+    let preparing = 0;
+    let most = 0;
+    const byName = photosByName({});
+    t.setPreparation(async (uri) => {
+      preparing += 1;
+      most = Math.max(most, preparing);
+      await flush();
+      preparing -= 1;
+      return byName(uri);
+    });
+    await expect(t.queue.analysePhotoLookup(LOOKUP_PHOTOS)).resolves.toEqual({
+      ok: true,
+      answer: MATCH,
+      model: "claude-opus-5-5",
+    });
+    expect(t.prepared).toEqual(LOOKUP_PHOTOS.map((uri) => ({ uri, model: "claude-opus-5-5" })));
+    expect(most).toBe(1);
+    expect(t.calls).toEqual([
+      {
+        apiAddress: SETTINGS.apiAddress,
+        model: "claude-opus-5-5",
+        apiKey: "sk-ant-test",
+        imagesBase64: ["a", "b", "c"],
+        timeLimitMs: SETTINGS.timeLimitMs,
+      },
+    ]);
+    expect(t.log.changes).toEqual([]);
+    expect(t.queue.getState().stop).toEqual({ reason: "internal-error" });
+  });
+
+  it("a photo that fails the segment check: nothing is sent, the failure names the photo, and the queue goes on", async () => {
+    const t = setup();
+    t.setPreparation(photosByName({ b: refused }));
+    await expect(t.queue.analysePhotoLookup(LOOKUP_PHOTOS)).resolves.toEqual({
+      ok: false,
+      notice: {
+        kind: "find-failed",
+        failure: { cause: "segment-check", detail: "photo 2: forbidden-segment 0xFFE1" },
+      },
+    });
+    expect(t.calls).toEqual([]);
+    // From its screen, as a find analysed there: no photo after the failure is prepared.
+    expect(t.prepared.map((call) => call.uri)).toEqual(LOOKUP_PHOTOS.slice(0, 2));
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it("a single photo that cannot be loaded: the failure is the photo's own, not numbered, and the queue neither stops nor counts it", async () => {
+    const t = setup();
+    t.setPreparation(async () => loadFailed("load-failed"));
+    for (let i = 0; i < 3; i += 1) {
+      await expect(t.queue.analysePhotoLookup(["file:///cache/a.jpg"])).resolves.toEqual({
+        ok: false,
+        notice: { kind: "find-failed", failure: { cause: "photo", detail: "load-failed" } },
+      });
+    }
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it.each([
+    ["no network", "network"],
+    ["the time limit", "time-out"],
+    ["a fault on Anthropic's side", "server"],
+  ] as const)(
+    "%s: gives the pause, as for a find that stays waiting, and neither pauses nor stops the queue",
+    async (_name, cause) => {
+      const t = setup();
+      t.replies.push(fail({ kind: "stays-waiting", cause, status: null }));
+      await expect(t.queue.analysePhotoLookup(LOOKUP_PHOTOS)).resolves.toEqual({
+        ok: false,
+        notice: { kind: "paused", cause },
+      });
+      expect(t.queue.getState()).toEqual({ running: false, stop: null, pause: null });
+    },
+  );
+
+  it("a 400: gives the failure, as for a find marked failed, and does not stop the queue", async () => {
+    const t = setup();
+    t.replies.push(
+      fail({ kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }),
+    );
+    await expect(t.queue.analysePhotoLookup(LOOKUP_PHOTOS)).resolves.toEqual({
+      ok: false,
+      notice: {
+        kind: "find-failed",
+        failure: { cause: "request", detail: "request-wrong (status 400)" },
+      },
+    });
+    expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it.each([
+    [
+      "an answer not of the shape",
+      fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
+      { kind: "find-failed", failure: { cause: "answer", detail: "bad" } },
+      { reason: "answer" },
+    ],
+    [
+      "401",
+      fail({ kind: "key-refused", status: 401, cause: "refused" }),
+      { kind: "stopped", stop: { reason: "key-refused" } },
+      { reason: "key-refused" },
+    ],
+    [
+      "404",
+      fail({ kind: "model-unknown" }),
+      { kind: "stopped", stop: { reason: "model-unknown" } },
+      { reason: "model-unknown" },
+    ],
+    [
+      "429 without retry-after",
+      fail({ kind: "rate-limited", retryAt: null }),
+      {
+        kind: "stopped",
+        stop: { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
+      },
+      { reason: "rate-limited", retryAtMs: null, accessResumesAtMs: null },
+    ],
+  ] as const)(
+    "%s: stops the queue as for a find, and gives the same message",
+    async (_name, reply, notice, stop) => {
+      const t = setup();
+      t.replies.push(reply);
+      await expect(t.queue.analysePhotoLookup(LOOKUP_PHOTOS)).resolves.toEqual({
+        ok: false,
+        notice,
+      });
+      expect(t.queue.getState().stop).toEqual(stop);
+      expect(t.log.changes).toEqual([]);
+    },
+  );
+
+  it("without a key: stops the queue for a key and says so, preparing and sending nothing", async () => {
+    const t = setup();
+    t.setKey({ ok: true, key: null });
+    await expect(t.queue.analysePhotoLookup(LOOKUP_PHOTOS)).resolves.toEqual({
+      ok: false,
+      notice: { kind: "stopped", stop: { reason: "no-key" } },
+    });
+    expect(t.prepared).toEqual([]);
+    expect(t.calls).toEqual([]);
+    expect(t.queue.getState().stop).toEqual({ reason: "no-key" });
+  });
+
+  it("passes on an error while preparing a photo that is not the photo's own, storing nothing", async () => {
+    const t = setup();
+    t.setPreparation(async () => {
+      throw new Error("ENOSPC: no space left on device");
+    });
+    await expect(t.queue.analysePhotoLookup(LOOKUP_PHOTOS)).rejects.toThrow("ENOSPC");
+    expect(t.calls).toEqual([]);
+    expect(t.log.changes).toEqual([]);
+  });
+
+  it.each([
+    ["no photo", []],
+    ["more photos than a find holds", ["1", "2", "3", "4", "5", "6"].map((n) => `file:///${n}`)],
+  ])("refuses %s as a programming error, sending nothing", async (_name, uris) => {
+    const t = setup();
+    await expect(t.queue.analysePhotoLookup(uris)).rejects.toThrow(RangeError);
+    expect(t.prepared).toEqual([]);
+    expect(t.calls).toEqual([]);
+  });
+
+  it("does not send while a run's request is under way, but after it", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    let release: () => void = () => undefined;
+    t.replies.push(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ ok: true, answer: MATCH });
+        }),
+    );
+    t.setPreparation(photosByName({}));
+    const run = t.queue.trigger();
+    await flush();
+    const lookup = t.queue.analysePhotoLookup(LOOKUP_PHOTOS.slice(0, 1));
+    await flush();
+    expect(t.calls).toHaveLength(1);
+    expect(t.prepared.map((call) => call.uri)).toEqual(["file:///photos/1.jpg"]);
+    release();
+    await Promise.all([run, lookup]);
+    expect(t.calls.map((call) => call.imagesBase64)).toEqual([["1"], ["a"]]);
+  });
+});
+
 /** Lets every pending promise callback run. */
 async function flush(): Promise<void> {
   for (let i = 0; i < 20; i += 1) {

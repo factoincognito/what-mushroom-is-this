@@ -68,11 +68,13 @@ export type Strings = {
       readonly invalid: string;
       readonly saveFailed: string;
     };
-    /** The starting value of a text lookup's "Save" switch (docs/SPEC.md 3.9). */
+    /** The starting values of the lookups' "Save" switch (docs/SPEC.md 3.9). */
     readonly lookups: {
       readonly heading: string;
-      /** The label of the switch. */
+      /** The label of the text lookup's switch. */
       readonly textSave: string;
+      /** The label of the photo lookup's switch (PBI-2.13). */
+      readonly photoSave: string;
       readonly saveFailed: string;
     };
   };
@@ -124,6 +126,35 @@ export type Strings = {
     /** The location permission is not given: photos from the camera get no position. */
     readonly locationDenied: string;
     readonly openSettings: string;
+    /** The label of a new photo lookup's "Save" switch (docs/SPEC.md 3.9; PBI-2.13). */
+    readonly save: string;
+    /** What the switch does, on and off. */
+    readonly saveHint: string;
+    /** The photos an unsaved lookup holds against the most; `{count}` and `{max}` are filled in. */
+    readonly heldCount: string;
+    /** The unsaved lookup holds the most photos a find may, so no more are offered. */
+    readonly heldMaxReached: string;
+    /** A held photo's label; `{number}` of `{count}`. Its "Remove photo" is the Find screen's. */
+    readonly heldPhoto: string;
+    /** The question before a held photo is removed (Clead's decision on #61); `{number}`. */
+    readonly removeHeldConfirm: string;
+    /** An unsaved lookup is being analysed on the screen. */
+    readonly analysing: string;
+    /** The analysis could not run for an error in the app; the error itself is not shown. */
+    readonly analysisError: string;
+    /** The offer after a pause or without a key, so the lookup waits in the queue. */
+    readonly turnSaveOn: string;
+    /** The question asked when the screen is left with an unsaved lookup. */
+    readonly leaveLookupConfirm: string;
+    /**
+     * When several photos are kept after a failed save (turning Save on with several held): the
+     * message, the button, the question and its keep answer, and the leave question.
+     */
+    readonly savePhotosFailed: string;
+    readonly discardPhotos: string;
+    readonly discardPhotosConfirm: string;
+    readonly discardPhotosCancel: string;
+    readonly leavePhotosConfirm: string;
   };
   /** The text lookup screen (docs/SPEC.md 3.9, Lookups). `{count}` and `{max}` are filled in. */
   readonly lookup: {
@@ -494,6 +525,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       lookups: {
         heading: "Sökningar",
         textSave: "Spara är på när en textsökning börjar",
+        photoSave: "Spara är på när en fotosökning börjar",
         saveFailed: "Inställningen gick inte att spara. Försök igen.",
       },
     },
@@ -534,6 +566,25 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       locationDenied:
         "Appen får inte använda telefonens plats, så ett foto från kameran sparas utan position. Du kan tillåta det i telefonens inställningar.",
       openSettings: "Öppna telefonens inställningar",
+      save: "Spara",
+      saveHint:
+        "När Spara är på blir sökningen ett fynd i loggen, och varje foto sparas när det tas eller väljs. När Spara är av finns fotona bara på den här sidan, analyseras här och tas bort när du lämnar den.",
+      heldCount: "Sökningen har {count} av högst {max} foton, bara på den här sidan.",
+      heldMaxReached: "Sökningen har så många foton som ett fynd kan ha.",
+      heldPhoto: "Foto {number} av {count} i sökningen",
+      removeHeldConfirm:
+        "Ta bort foto {number} ur sökningen? Bara appens kopia tas bort; ett foto i telefonens galleri finns kvar där.",
+      analysing: "Analyserar …",
+      analysisError: "Analysen kunde inte köras på grund av ett fel i appen.",
+      turnSaveOn: "Slå på Spara, så att sökningen väntar i kön",
+      leaveLookupConfirm:
+        "Lämna sidan och slänga sökningen? Den är inte sparad och går inte att få tillbaka.",
+      savePhotosFailed: "Fotona gick inte att spara. Försök igen.",
+      discardPhotos: "Släng fotona",
+      discardPhotosConfirm: "Slänga fotona? De är inte sparade och går inte att få tillbaka.",
+      discardPhotosCancel: "Behåll fotona",
+      leavePhotosConfirm:
+        "Lämna sidan och slänga fotona? De är inte sparade och går inte att få tillbaka.",
     },
     lookup: {
       title: "Beskriv en svamp",
@@ -792,6 +843,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       lookups: {
         heading: "Lookups",
         textSave: "Save is on when a text lookup starts",
+        photoSave: "Save is on when a photo lookup starts",
         saveFailed: "The setting could not be saved. Try again.",
       },
     },
@@ -831,6 +883,25 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       locationDenied:
         "The app may not use the phone's location, so a photo from the camera is saved without a position. You can allow it in the phone's settings.",
       openSettings: "Open the phone's settings",
+      save: "Save",
+      saveHint:
+        "With Save on, the lookup becomes a find in the log, and each photo is saved as it is taken or picked. With Save off, the photos are held on this screen only, analysed here, and removed when you leave it.",
+      heldCount: "The lookup holds {count} of at most {max} photos, on this screen only.",
+      heldMaxReached: "The lookup holds as many photos as a find can.",
+      heldPhoto: "Photo {number} of {count} of the lookup",
+      removeHeldConfirm:
+        "Remove photo {number} from the lookup? Only the app's copy is removed; a photo in the phone's gallery stays there.",
+      analysing: "Analysing…",
+      analysisError: "The analysis could not run because of an error in the app.",
+      turnSaveOn: "Turn Save on, so the lookup waits in the queue",
+      leaveLookupConfirm:
+        "Leave and discard the lookup? It is not saved, and it cannot be got back.",
+      savePhotosFailed: "The photos could not be saved. Try again.",
+      discardPhotos: "Discard the photos",
+      discardPhotosConfirm: "Discard the photos? They are not saved, and they cannot be got back.",
+      discardPhotosCancel: "Keep the photos",
+      leavePhotosConfirm:
+        "Leave and discard the photos? They are not saved, and they cannot be got back.",
     },
     lookup: {
       title: "Describe a mushroom",
@@ -1087,6 +1158,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       lookups: {
         heading: "Ricerche",
         textSave: "Salva è attivo all'inizio di una ricerca testuale",
+        photoSave: "Salva è attivo all'inizio di una ricerca con foto",
         saveFailed: "Non è stato possibile salvare l'impostazione. Riprova.",
       },
     },
@@ -1127,6 +1199,26 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       locationDenied:
         "L'app non può usare la posizione del telefono, quindi una foto dalla fotocamera viene salvata senza posizione. Puoi consentirlo nelle impostazioni del telefono.",
       openSettings: "Apri le impostazioni del telefono",
+      save: "Salva",
+      saveHint:
+        "Con Salva attivo, la ricerca diventa un ritrovamento nel registro e ogni foto viene salvata appena scattata o scelta. Con Salva disattivato, le foto restano solo in questa pagina, vengono analizzate qui ed eliminate quando la lasci.",
+      heldCount: "La ricerca ha {count} foto su un massimo di {max}, solo in questa pagina.",
+      heldMaxReached: "La ricerca ha il numero massimo di foto di un ritrovamento.",
+      heldPhoto: "Foto {number} di {count} della ricerca",
+      removeHeldConfirm:
+        "Rimuovere la foto {number} dalla ricerca? Viene rimossa solo la copia dell'app; una foto nella galleria del telefono resta lì.",
+      analysing: "Analisi in corso…",
+      analysisError: "Non è stato possibile eseguire l'analisi per un errore nell'app.",
+      turnSaveOn: "Attiva Salva, così la ricerca resta in coda",
+      leaveLookupConfirm:
+        "Uscire e scartare la ricerca? Non è stata salvata e non si potrà recuperare.",
+      savePhotosFailed: "Non è stato possibile salvare le foto. Riprova.",
+      discardPhotos: "Scarta le foto",
+      discardPhotosConfirm:
+        "Scartare le foto? Non sono state salvate e non si potranno recuperare.",
+      discardPhotosCancel: "Tieni le foto",
+      leavePhotosConfirm:
+        "Uscire e scartare le foto? Non sono state salvate e non si potranno recuperare.",
     },
     lookup: {
       title: "Descrivi un fungo",

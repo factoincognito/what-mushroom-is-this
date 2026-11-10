@@ -34,6 +34,11 @@ describe("config", () => {
     expect(config.edibilityConfidenceLine).toBe(70);
   });
 
+  it("holds the starting values of the lookups' Save switch of SPEC 3.9: on for a photo lookup, off for a text lookup (PBI-2.13)", () => {
+    expect(config.photoLookupSavedAtStart).toBe(true);
+    expect(config.textLookupSavedAtStart).toBe(false);
+  });
+
   it("keeps each model's image limits in the image module's ImageLimits type", () => {
     const limits: ImageLimits = { maxEdge: 1568, maxTokens: 1568, patchSize: 28 };
     const model: ModelConfig = { id: "a-model", imageLimits: limits };

@@ -52,6 +52,11 @@ export type AppConfig = {
    * another starting value in Settings (docs/SPEC.md 3.9, Lookups).
    */
   readonly textLookupSavedAtStart: boolean;
+  /**
+   * Whether a photo lookup's "Save" switch is on when the lookup starts, until the user saves
+   * another starting value in Settings (docs/SPEC.md 3.9, Lookups).
+   */
+  readonly photoLookupSavedAtStart: boolean;
 };
 
 /**
@@ -103,4 +108,6 @@ export const config: AppConfig = Object.freeze({
   edibilityConfidenceLine: 70,
   // docs/SPEC.md 3.9: Adam's starting value, "off for a text lookup unless the user changes it".
   textLookupSavedAtStart: false,
+  // docs/SPEC.md 3.9: Adam's starting value, "on for a photo lookup".
+  photoLookupSavedAtStart: true,
 });

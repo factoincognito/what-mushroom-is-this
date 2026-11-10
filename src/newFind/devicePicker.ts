@@ -1,3 +1,4 @@
+import { File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 
 import type { PermissionAsker } from "./permissions";
@@ -30,6 +31,29 @@ export async function pickFromGallery(): Promise<PickResult> {
     }),
     true,
   );
+}
+
+/**
+ * Removes the app's own copy of a photo the camera or the gallery gave, for an unsaved lookup
+ * whose screen is left (docs/SPEC.md 3.9, Lookups; PBI-2.13). The picker leaves its copies in the
+ * app's cache directory; only a file there is removed, named without a parent step, so that
+ * nothing else is, the original in the gallery or the find log's own photos never. A copy that is
+ * gone, an address that is not a file's, or a failed removal is left to the system, which clears
+ * the cache, and is not an error.
+ */
+export function removePickedCopy(uri: string): void {
+  try {
+    const cache = Paths.cache.uri.endsWith("/") ? Paths.cache.uri : `${Paths.cache.uri}/`;
+    if (!uri.startsWith(cache) || uri.split("/").includes("..")) {
+      return;
+    }
+    const copy = new File(uri);
+    if (copy.exists) {
+      copy.delete();
+    }
+  } catch {
+    // The cache directory is the system's to clear.
+  }
 }
 
 export const cameraPermission: PermissionAsker = {
