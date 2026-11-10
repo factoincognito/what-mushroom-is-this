@@ -52,6 +52,7 @@ shipped in the app (internal tooling).
 | `expo-network` | 57.0.3 | MIT | depend | https://github.com/expo/expo, `packages/expo-network` | the queue's "network is back" trigger (PBI-1.7, Known unknown 6). It builds in no other native library: its `android/build.gradle` adds test-only dependencies, and the POM of its prebuilt Android module names only `kotlin-stdlib-jdk7` 2.1.20, `org.jetbrains:annotations` 23.0.0 and `pika-api` 0.3.2, which the POMs of `expo-secure-store`, `expo-sqlite` and `expo-localization` here already name; on Android it uses the platform's `ConnectivityManager`, on iOS Apple's `Network` and `SystemConfiguration` frameworks (its `ios/ExpoNetwork.podspec` depends only on `ExpoModulesCore`) |
 | `expo-location` | 57.0.23 | MIT | depend | https://github.com/expo/expo, `packages/expo-location` | the phone's position for a new find (PBI-1.19). Its Android side builds in Google's `play-services-location`, below, from Maven, not npm (its `android/build.gradle`, and the POM of its prebuilt Android module, which otherwise names only `kotlin-stdlib-jdk7` 2.1.20, `org.jetbrains:annotations` 23.0.0 and `pika-api` 0.3.2, as for `expo-network`); on iOS its `ios/ExpoLocation.podspec` depends only on `ExpoModulesCore` |
 | `expo-font` | 57.0.4 | MIT | depend | https://github.com/expo/expo, `packages/expo-font` | one copy of the fonts library (PBI-1.30): a dependency of `expo`, and a peer library of `expo-symbols`, which `expo-router` depends on. Without it as a direct dependency, npm filled that peer with a version of the next SDK, beside the one `expo` brings |
+| `expo-document-picker` | 57.0.3 | MIT | depend | https://github.com/expo/expo, `packages/expo-document-picker` | photos from the phone's files (PBI-2.6, Known unknown 13). Its Android side builds in the two libraries below, from Maven, not npm (its `android/build.gradle`); the POM of its prebuilt Android module otherwise names only `kotlin-stdlib-jdk7` 2.1.20, `org.jetbrains:annotations` 23.0.0 and `pika-api` 0.3.2, as for `expo-network`; on iOS its `ios/ExpoDocumentPicker.podspec` depends only on `ExpoModulesCore`. Its config plugin adds only iCloud entitlements, and only when `ios.usesIcloudStorage` is set (its `plugin/build/withDocumentPickerIOS.js`); `app.json` neither sets that nor lists the plugin |
 
 ### The Android libraries `expo-image-picker` builds in
 
@@ -119,6 +120,20 @@ into it.
 | `androidx.collection:collection` (Android, named by the POMs of `play-services-base` and `play-services-basement`) | 1.0.0 | Apache-2.0 ("The Apache Software License, Version 2.0", as the POM names it) | depend | https://dl.google.com/dl/android/maven2/, `androidx/collection/collection/1.0.0` | its 1.0.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/androidx/collection/collection/1.0.0/collection-1.0.0.pom |
 | `androidx.core:core` (Android, named by the POMs of `play-services-base` and `play-services-basement`) | 1.2.0 | Apache-2.0 ("The Apache Software License, Version 2.0", as the POM names it) | depend | https://dl.google.com/dl/android/maven2/, `androidx/core/core/1.2.0` | its 1.2.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/androidx/core/core/1.2.0/core-1.2.0.pom |
 | `androidx.fragment:fragment` (Android, named by the POMs of `play-services-base` and `play-services-basement`) | 1.0.0 | Apache-2.0 ("The Apache Software License, Version 2.0", as the POM names it) | depend | https://dl.google.com/dl/android/maven2/, `androidx/fragment/fragment/1.0.0` | its 1.0.0 POM on Google's Maven, read on 2026-11-09 by Clead: https://dl.google.com/dl/android/maven2/androidx/fragment/fragment/1.0.0/fragment-1.0.0.pom |
+
+### The Android libraries `expo-document-picker` builds in
+
+From Maven, not npm; no Gradle cache was at hand, and neither version's own POM was read: each
+licence was read from the pages named, on 2026-11-10. Mode "depend" for each. Both are Apache-2.0,
+a permissive licence (Appendix A.3); the About view gives them the Apache License 2.0 text it
+holds for the other Apache-2.0 libraries. Their NOTICE duties (whether either carries a NOTICE
+file was not checked), and the licence read from each version's own POM, are for PBI-1.24 and the
+release gate.
+
+| Library | Version | Licence | Mode | Source | Where the licence was read |
+|---|---|---|---|---|---|
+| `androidx.annotation:annotation` (Android, through `expo-document-picker`'s `android/build.gradle`) | 1.0.0 | Apache-2.0 ("The Apache Software License, Version 2.0") | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: version 1.1.0's licence on https://badges.mvnrepository.com/artifact/androidx.annotation/annotation/1.1.0, and the AndroidX repository it is built from, as for `activity-ktx` |
+| `commons-io:commons-io` (Android, through `expo-document-picker`'s `android/build.gradle`) | 2.6 | Apache-2.0 | depend | https://commons.apache.org/proper/commons-io/ | not this version's POM: the Maven Central page, https://central.sonatype.com/artifact/commons-io/commons-io, which shows version 2.22.0, lists "Apache-2.0", and its POM's header says the ASF licenses it under the Apache License, Version 2.0 |
 
 ## Development tools
 

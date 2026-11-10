@@ -175,16 +175,19 @@ describe("pickFromFiles", () => {
     ["no height", { width: 4032, height: 0 }],
     ["a size that is not whole pixels", { width: 4032.5, height: 3024 }],
     ["a size that is not a number", { width: Number.NaN, height: 3024 }],
-  ])("refuses a file that loads as an image of %s, releases it, and removes the copy", async (_, size) => {
-    const copy = pickerCopy("files-3.jpg");
-    jest
-      .mocked(DocumentPicker.getDocumentAsync)
-      .mockResolvedValue(wrong({ canceled: false, assets: [fileAsset(copy.uri)] }));
-    const { encoder, release } = encoderGiving(size);
-    await expect(pickFromFiles(encoder)).resolves.toEqual({ kind: "notImage" });
-    expect(release).toHaveBeenCalledTimes(1);
-    expect(copy.exists).toBe(false);
-  });
+  ])(
+    "refuses a file that loads as an image of %s, releases it, and removes the copy",
+    async (_, size) => {
+      const copy = pickerCopy("files-3.jpg");
+      jest
+        .mocked(DocumentPicker.getDocumentAsync)
+        .mockResolvedValue(wrong({ canceled: false, assets: [fileAsset(copy.uri)] }));
+      const { encoder, release } = encoderGiving(size);
+      await expect(pickFromFiles(encoder)).resolves.toEqual({ kind: "notImage" });
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(copy.exists).toBe(false);
+    },
+  );
 
   it("still gives the image when releasing it after the check fails", async () => {
     const copy = pickerCopy("files-4.jpg");

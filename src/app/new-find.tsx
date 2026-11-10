@@ -20,6 +20,7 @@ import type { Strings } from "../i18n/strings";
 import { readPhotoLookupSave } from "../lookup/saveSetting";
 import {
   cameraPermission,
+  pickFromFiles,
   pickFromGallery,
   removePickedCopy,
   takePhoto,
@@ -38,7 +39,7 @@ import { useFindLog } from "../store/FindLogContext";
 
 /**
  * The New find screen (docs/SPEC.md 3.1, 3.9): opens the camera at once; a photo can also be
- * picked from the gallery. With `?find=<id>` (from a find's screen) the photos are added to that
+ * picked from the gallery or the phone's files (PBI-2.6). With `?find=<id>` (from a find's screen) the photos are added to that
  * find, as a new batch, and "Analyse" goes back to where the screen was opened from.
  *
  * Otherwise it is a new photo lookup, with a "Save" switch from its starting value in Settings
@@ -78,6 +79,7 @@ export default function NewFindScreen() {
           findLog,
           camera: { permission: cameraPermission, take: takePhoto },
           gallery: { pick: pickFromGallery },
+          files: { pick: () => pickFromFiles() },
           location: { permission: locationPermission, source: deviceLocationSource },
           readSaveSetting: () => readPhotoLookupSave(deviceStore),
           analyseLookup: analysePhotoLookup,
@@ -271,6 +273,14 @@ export default function NewFindScreen() {
                 style={[styles.button, !canChoose && styles.disabled]}
               >
                 <Text style={styles.buttonText}>{t.pickFromGallery}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={!canChoose}
+                onPress={() => flow.pickFromFiles()}
+                style={[styles.button, !canChoose && styles.disabled]}
+              >
+                <Text style={styles.buttonText}>{t.pickFromFiles}</Text>
               </Pressable>
             </>
           ) : (

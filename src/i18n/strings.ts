@@ -109,6 +109,8 @@ export type Strings = {
     readonly asking: string;
     readonly takePhoto: string;
     readonly pickFromGallery: string;
+    /** Opens the phone's files for a photo (docs/SPEC.md 3.9, Lookups; PBI-2.6). */
+    readonly pickFromFiles: string;
     readonly saving: string;
     /** A photo of the batch is saved to the find (docs/SPEC.md 3.9, Batches). */
     readonly saved: string;
@@ -136,8 +138,10 @@ export type Strings = {
     readonly leaveConfirm: string;
     readonly leaveYes: string;
     readonly leaveCancel: string;
-    /** The camera or the gallery failed to give a photo. */
+    /** The camera, the gallery or the files failed to give a photo. */
     readonly pickFailed: string;
+    /** A file from the phone's files could not be loaded as an image, so it was refused. */
+    readonly fileNotImage: string;
     /** The camera permission was refused; the app may ask again. */
     readonly cameraDenied: string;
     /** The camera permission was refused and the phone lets the app ask no more. */
@@ -571,6 +575,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "Appen ber om att få använda kameran, för att ta fotot, och telefonens plats, för att notera var fyndet gjordes.",
       takePhoto: "Ta ett foto",
       pickFromGallery: "Välj ett foto i galleriet",
+      pickFromFiles: "Välj ett foto bland filerna",
       saving: "Sparar fotot …",
       saved: "Fotot är sparat i fyndet.",
       addTitle: "Lägg till foton",
@@ -590,6 +595,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       leaveYes: "Släng och lämna",
       leaveCancel: "Stanna kvar",
       pickFailed: "Fotot gick inte att ta eller välja. Försök igen.",
+      fileNotImage:
+        "Filen gick inte att läsa in som en bild, så den lades inte till. Välj en annan fil.",
       cameraDenied:
         "Appen får inte använda kameran, så den kan inte ta något foto. Du kan välja ett foto i galleriet i stället.",
       cameraBlocked:
@@ -604,7 +611,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       heldMaxReached: "Sökningen har så många foton som ett fynd kan ha.",
       heldPhoto: "Foto {number} av {count} i sökningen",
       removeHeldConfirm:
-        "Ta bort foto {number} ur sökningen? Bara appens kopia tas bort; ett foto i telefonens galleri finns kvar där.",
+        "Ta bort foto {number} ur sökningen? Bara appens kopia tas bort; ett foto i telefonens galleri eller filer finns kvar där.",
       analysing: "Analyserar …",
       analysisError: "Analysen kunde inte köras på grund av ett fel i appen.",
       turnSaveOn: "Slå på Spara, så att sökningen väntar i kön",
@@ -901,6 +908,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "The app asks to use the camera, to take the photo, and the phone's location, to note where the find was made.",
       takePhoto: "Take a photo",
       pickFromGallery: "Pick a photo from the gallery",
+      pickFromFiles: "Pick a photo from the files",
       saving: "Saving the photo…",
       saved: "The photo is saved to the find.",
       addTitle: "Add photos",
@@ -919,6 +927,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       leaveYes: "Discard and leave",
       leaveCancel: "Stay",
       pickFailed: "The photo could not be taken or picked. Try again.",
+      fileNotImage:
+        "The file could not be loaded as an image, so it was not added. Pick another file.",
       cameraDenied:
         "The app may not use the camera, so it cannot take a photo. You can pick a photo from the gallery instead.",
       cameraBlocked:
@@ -933,7 +943,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       heldMaxReached: "The lookup holds as many photos as a find can.",
       heldPhoto: "Photo {number} of {count} of the lookup",
       removeHeldConfirm:
-        "Remove photo {number} from the lookup? Only the app's copy is removed; a photo in the phone's gallery stays there.",
+        "Remove photo {number} from the lookup? Only the app's copy is removed; a photo in the phone's gallery or files stays there.",
       analysing: "Analysing…",
       analysisError: "The analysis could not run because of an error in the app.",
       turnSaveOn: "Turn Save on, so the lookup waits in the queue",
@@ -1229,6 +1239,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "L'app chiede di usare la fotocamera, per scattare la foto, e la posizione del telefono, per annotare dove è stato fatto il ritrovamento.",
       takePhoto: "Scatta una foto",
       pickFromGallery: "Scegli una foto dalla galleria",
+      pickFromFiles: "Scegli una foto dai file",
       saving: "Salvataggio della foto…",
       saved: "La foto è salvata nel ritrovamento.",
       addTitle: "Aggiungi foto",
@@ -1248,6 +1259,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       leaveYes: "Scarta ed esci",
       leaveCancel: "Resta",
       pickFailed: "Non è stato possibile scattare o scegliere la foto. Riprova.",
+      fileNotImage:
+        "Non è stato possibile caricare il file come immagine, quindi non è stato aggiunto. Scegli un altro file.",
       cameraDenied:
         "L'app non può usare la fotocamera, quindi non può scattare foto. Puoi invece scegliere una foto dalla galleria.",
       cameraBlocked:
@@ -1262,7 +1275,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       heldMaxReached: "La ricerca ha il numero massimo di foto di un ritrovamento.",
       heldPhoto: "Foto {number} di {count} della ricerca",
       removeHeldConfirm:
-        "Rimuovere la foto {number} dalla ricerca? Viene rimossa solo la copia dell'app; una foto nella galleria del telefono resta lì.",
+        "Rimuovere la foto {number} dalla ricerca? Viene rimossa solo la copia dell'app; una foto nella galleria o nei file del telefono resta lì.",
       analysing: "Analisi in corso…",
       analysisError: "Non è stato possibile eseguire l'analisi per un errore nell'app.",
       turnSaveOn: "Attiva Salva, così la ricerca resta in coda",
