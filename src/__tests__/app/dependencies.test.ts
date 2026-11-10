@@ -86,6 +86,96 @@ describe("satisfiesTilde, the range check of these tests", () => {
   });
 });
 
+describe("atSeveralVersions, the check of the native modules below (PBI-1.29)", () => {
+  it("finds a module the lockfile records at two versions, as expo-font was before #45", () => {
+    const lock: Lockfile = {
+      packages: {
+        "": {},
+        "node_modules/expo": { version: "57.0.32" },
+        "node_modules/expo/node_modules/expo-font": { version: "57.0.4" },
+        "node_modules/expo-font": { version: "58.0.11" },
+      },
+    };
+    expect(atSeveralVersions(lock, ["expo", "expo-font"])).toEqual([
+      { name: "expo-font", versions: ["57.0.4", "58.0.11"] },
+    ]);
+  });
+
+  it("finds a scoped module at two versions, nested at any depth", () => {
+    const lock: Lockfile = {
+      packages: {
+        "node_modules/@maplibre/maplibre-react-native": { version: "11.5.1" },
+        "node_modules/a/node_modules/b/node_modules/@maplibre/maplibre-react-native": {
+          version: "11.4.0",
+        },
+      },
+    };
+    expect(atSeveralVersions(lock, ["@maplibre/maplibre-react-native"])).toEqual([
+      { name: "@maplibre/maplibre-react-native", versions: ["11.4.0", "11.5.1"] },
+    ]);
+  });
+
+  it("counts a copy without a version as a version of its own", () => {
+    const lock: Lockfile = {
+      packages: {
+        "node_modules/expo-font": { version: "57.0.4" },
+        "node_modules/x/node_modules/expo-font": {},
+      },
+    };
+    expect(atSeveralVersions(lock, ["expo-font"])).toEqual([
+      { name: "expo-font", versions: ["(no version)", "57.0.4"] },
+    ]);
+  });
+
+  it("passes a module at one version in several copies, and one that is not named", () => {
+    const lock: Lockfile = {
+      packages: {
+        "node_modules/expo-font": { version: "57.0.4" },
+        "node_modules/x/node_modules/expo-font": { version: "57.0.4" },
+        "node_modules/semver": { version: "7.7.2" },
+        "node_modules/x/node_modules/semver": { version: "6.3.1" },
+      },
+    };
+    expect(atSeveralVersions(lock, ["expo-font"])).toEqual([]);
+  });
+
+  it("does not take a package whose name only ends like a named one", () => {
+    const lock: Lockfile = {
+      packages: {
+        "node_modules/expo-font": { version: "57.0.4" },
+        "node_modules/my-expo-font": { version: "1.0.0" },
+        "node_modules/@x/expo-font": { version: "2.0.0" },
+      },
+    };
+    expect(atSeveralVersions(lock, ["expo-font"])).toEqual([]);
+  });
+});
+
+describe("the installed native modules (PBI-1.29, note 2 on #45)", () => {
+  let names: string[];
+
+  beforeAll(async () => {
+    names = await nativeModuleNames();
+  }, 120_000);
+
+  it("are found by Expo's autolinking: the Expo modules, React Native and the other libraries with native code", () => {
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "expo",
+        "expo-font",
+        "expo-sqlite",
+        "react-native",
+        "react-native-screens",
+        "@maplibre/maplibre-react-native",
+      ]),
+    );
+  });
+
+  it("are each at one version in every copy the lockfile records", () => {
+    expect(atSeveralVersions(lockfile(), names)).toEqual([]);
+  });
+});
+
 describe("the installed expo-font (PBI-1.30)", () => {
   const copies = installedCopies("expo-font");
 
