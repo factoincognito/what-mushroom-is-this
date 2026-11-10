@@ -227,11 +227,22 @@ export interface StoreOptions {
  * the mark up to an ID given here. On a damaged file, once the mark is past 2^53, the store cannot
  * read it and it never comes down again, so an ID above every readable ID left may be given again:
  * that of a find since deleted. Computed within the INSERT, so no other write comes between.
+ *
+ * When that is past 2^53 − 1, which only a damaged file can bring about (a readable ID or mark of
+ * exactly 2^53 − 1), the ID is instead one past the highest readable ID below 2^53 − 1 whose next
+ * ID is free, or 1 when that is free: always an ID the store can read and no find holds, so a
+ * damaged file does not make every new find unreadable, nor every INSERT fail on an ID in use; as
+ * for a mark past 2^53, a deleted find's ID may be given again (PBI-1.29, note 4 on #38).
  */
-const NEXT_ID = `1 + MAX(
-  COALESCE((SELECT MAX(id) FROM finds WHERE id BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER}), 0),
-  COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'finds'
-    AND seq BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER}), 0))`;
+const NEXT_ID = `COALESCE(
+  (SELECT next FROM (SELECT 1 + MAX(
+    COALESCE((SELECT MAX(id) FROM finds WHERE id BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER}), 0),
+    COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'finds'
+      AND seq BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER}), 0)) AS next)
+    WHERE next <= ${Number.MAX_SAFE_INTEGER}),
+  (SELECT 1 + MAX(below.id) FROM (SELECT 0 AS id UNION ALL
+    SELECT id FROM finds WHERE id BETWEEN 1 AND ${Number.MAX_SAFE_INTEGER - 1}) AS below
+    WHERE NOT EXISTS (SELECT 1 FROM finds AS taken WHERE taken.id = below.id + 1)))`;
 /** A new photo find, its photo the first, in batch 1, the batch complete or open. */
 const insertPhotoFind = (batchOpen: 0 | 1) => `INSERT INTO finds (id, taken_at_ms,
   utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photos, batches,
