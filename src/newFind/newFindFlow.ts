@@ -22,8 +22,8 @@
  * with its photos, in one open batch, with the first photo's time and position. Once the lookup is
  * a find, the switch cannot change. A photo can be removed from an unsaved lookup, the last too,
  * after a question, which removes the app's copy only (Clead's decision on #61). Leaving the
- * screen with an unsaved lookup asks first; the app's copies of its photos are removed when the
- * screen is left without a find made.
+ * screen with an unsaved lookup asks first; the app's copies of the photos it held and did not
+ * save to a find are removed when the screen is left.
  */
 
 import type { Answer } from "../analysis/answer";
@@ -188,10 +188,17 @@ export class NewFindFlow {
   private pending: Pending[] = [];
   /** The photos an unsaved lookup holds, in order. */
   private held: Held[] = [];
-  /** Counts the changes of `held`, so that an analysis's outcome is shown only for its photos. */
-  private heldVersion = 0;
-  /** The app's copies of the photos taken or picked while the lookup was unsaved. */
+  /**
+   * The app's copies of the photos taken or picked while the lookup was unsaved and not saved to a
+   * find since: removed when the screen is left.
+   */
   private readonly unsavedCopies: string[] = [];
+  /**
+   * Whether a first photo of the unsaved lookup took its position from the tracker, which may
+   * since have stopped or hold a fix from before: a later first photo then gets a tracker of its
+   * own (the review's fix 1 on #61).
+   */
+  private trackerSpent = false;
   /** Whether Save is on; read from Settings when a new lookup starts. */
   private saveOn = true;
   /** The find the photos are saved to: known from the start when adding, else from the first save. */
@@ -237,21 +244,28 @@ export class NewFindFlow {
       return;
     }
     if (location === "granted") {
-      this.tracker = startPositionTracker(this.deps.location.source, {
-        lastKnownMaxAgeMs: this.deps.appConfig.lastKnownPositionMaxAgeMs,
-        fixWaitMs: this.deps.appConfig.positionFixWaitMs,
-        now: () => this.deps.now().getTime(),
-      });
+      this.tracker = this.startTracker();
     }
     this.show({ location, canAddMore: true });
     await this.takePhoto();
+  }
+
+  /** Starts asking the phone for a position, with the limits of SPEC 3.6. */
+  private startTracker(): PositionTracker {
+    return startPositionTracker(this.deps.location.source, {
+      lastKnownMaxAgeMs: this.deps.appConfig.lastKnownPositionMaxAgeMs,
+      fixWaitMs: this.deps.appConfig.positionFixWaitMs,
+      now: () => this.deps.now().getTime(),
+    });
   }
 
   /**
    * Opens the camera. While photos whose save failed are kept, no new photo is taken: the kept
    * ones are saved again or discarded first, so they are never dropped without the user's say.
    * Nor is one taken once the find, or the unsaved lookup, holds the most photos, or while the
-   * unsaved lookup is analysed.
+   * unsaved lookup is analysed. When the camera opens for a new first photo of a lookup whose
+   * earlier first photo was removed, or dropped after a failed save, it starts asking for a
+   * position afresh, so that the new photo's position follows SPEC 3.6 from its own taking.
    */
   async takePhoto(): Promise<void> {
     if (!this.canTake()) {
@@ -266,6 +280,16 @@ export class NewFindFlow {
         message: camera === "blocked" ? "cameraBlocked" : "cameraDenied",
       });
       return;
+    }
+    if (
+      this.trackerSpent &&
+      this.findId === null &&
+      this.held.length === 0 &&
+      this.pending.length === 0
+    ) {
+      this.trackerSpent = false;
+      this.tracker?.stop();
+      this.tracker = this.view.location === "granted" ? this.startTracker() : null;
     }
     const result = await this.pick(this.deps.camera.take);
     if (result !== null) {
@@ -306,7 +330,6 @@ export class NewFindFlow {
     }
     this.pending = this.held.map((photo) => ({ from: "held", uri: photo.uri, taken: photo.taken }));
     this.held = [];
-    this.heldVersion += 1;
     this.show({ outcome: null, offerSave: false });
     await this.save();
   }
@@ -416,20 +439,19 @@ export class NewFindFlow {
   /**
    * The screen is gone: completes the batch still open (leaving the screen completes it, SPEC 3.9;
    * if that fails, the store completes it at the next start), and stops asking for a position,
-   * unless a saved find still waits for a fix. With no find made, the app's copies of the photos
-   * taken or picked while the lookup was unsaved are removed (SPEC 3.9, Lookups).
+   * unless a saved find still waits for a fix. The app's copies of the photos taken or picked
+   * while the lookup was unsaved, and not saved to a find since, are removed (SPEC 3.9, Lookups),
+   * also those dropped after a failed save, whether or not a find was made.
    */
   close(): void {
     this.closed = true;
     if (!this.trackerHandedOff) {
       this.tracker?.stop();
     }
-    const id = this.findId;
-    if (id === null) {
-      for (const uri of this.unsavedCopies) {
-        this.deps.removeCopy(uri);
-      }
+    for (const uri of this.unsavedCopies) {
+      this.deps.removeCopy(uri);
     }
+    const id = this.findId;
     if (id !== null && this.view.batchOpen) {
       this.view = { ...this.view, batchOpen: false };
       void this.deps
@@ -472,6 +494,7 @@ export class NewFindFlow {
         photo.from === "gallery"
           ? takenFromGallery(photo.photo, this.deps.now)
           : await takenByCamera(this.tracker, this.deps.now);
+      this.trackerSpent = true;
     }
     if (this.closed) {
       // The screen was left while the photo came: nothing holds it.
@@ -480,7 +503,6 @@ export class NewFindFlow {
     }
     this.unsavedCopies.push(uri);
     this.held.push({ uri, taken });
-    this.heldVersion += 1;
     this.show({
       phase: "ready",
       message: null,
@@ -504,12 +526,8 @@ export class NewFindFlow {
       if (index === 0 && first !== undefined) {
         first.taken = photo.taken;
       }
-      const copy = this.unsavedCopies.indexOf(photo.uri);
-      if (copy >= 0) {
-        this.unsavedCopies.splice(copy, 1);
-      }
+      this.forgetCopy(photo.uri);
       this.deps.removeCopy(photo.uri);
-      this.heldVersion += 1;
     }
     this.show({
       confirming: null,
@@ -520,12 +538,22 @@ export class NewFindFlow {
     });
   }
 
-  /** Sends the unsaved lookup's photos for analysis, and shows what came of it. */
+  /** Takes a copy off the list of those removed when the screen is left. */
+  private forgetCopy(uri: string): void {
+    const index = this.unsavedCopies.indexOf(uri);
+    if (index >= 0) {
+      this.unsavedCopies.splice(index, 1);
+    }
+  }
+
+  /**
+   * Sends the unsaved lookup's photos for analysis, and shows what came of it. While the analysis
+   * runs, the photos cannot change: taking, picking, removing and the switch wait for "ready".
+   */
   private async analyseHeld(): Promise<void> {
     if (this.held.length === 0 || this.view.phase !== "ready" || this.view.confirming !== null) {
       return;
     }
-    const version = this.heldVersion;
     this.show({ phase: "analysing", outcome: null, offerSave: false, message: null });
     let outcome: PhotoLookupOutcome;
     try {
@@ -536,12 +564,10 @@ export class NewFindFlow {
     } catch {
       outcome = { kind: "error" };
     }
-    // An outcome belongs to the photos it was given for.
-    const current = version === this.heldVersion;
     this.show({
       phase: "ready",
-      outcome: current ? outcome : null,
-      offerSave: current && outcome.kind === "notice" && offersSave(outcome.notice),
+      outcome,
+      offerSave: outcome.kind === "notice" && offersSave(outcome.notice),
     });
   }
 
@@ -626,6 +652,10 @@ export class NewFindFlow {
         }
         this.pending.shift();
         photoCount += 1;
+        if (next.from === "held") {
+          // The store has its own copy now; the screen's copy is no longer the lookup's alone.
+          this.forgetCopy(next.uri);
+        }
       }
       this.leaveWaits = false;
       this.show({
