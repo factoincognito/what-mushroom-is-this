@@ -5,8 +5,8 @@
  * under Process P-11 § 5 (2), kept in the config module beside `config.ts`. Nothing secret
  * belongs here.
  *
- * Sources: the product office's `library/designs/what-mushroom-is-this/phase-2-checks.md`, sections
- * 4 and 5, and Clead's decisions 1 to 7 for PBI-2.9 (the brief of PBI-2.9's Crog agent).
+ * Sources: docs/SPEC.md 3.9 and Known unknown 15, and the product office's
+ * `library/designs/what-mushroom-is-this/phase-2-checks.md`, sections 4 and 5.
  */
 
 export type WikimediaConfig = {
@@ -42,6 +42,8 @@ export type WikimediaConfig = {
   readonly publicDomainTemplates: readonly string[];
   /** The Creative Commons versions accepted under CC BY and CC BY-SA, their ports included. */
   readonly ccVersions: readonly string[];
+  /** The ports accepted besides those named by a two-letter country code. */
+  readonly ccNamedPorts: readonly string[];
   /**
    * The Action API's error codes that say Wikimedia is throttling or is temporarily unavailable:
    * an answer with one of them, whatever its status, makes the picture wait, as a 429 does.
@@ -56,7 +58,7 @@ export const wikimediaConfig: WikimediaConfig = Object.freeze({
   pageHost: "commons.wikimedia.org",
   // Section 5: thumbnails come from thumb.wikimedia.org, originals from upload.wikimedia.org.
   mediaHostSuffix: ".wikimedia.org",
-  // Section 5, "Widths" (Common thumbnail sizes, edited 2026-10-20); Clead's decision 6.
+  // Section 5, "Widths" (Common thumbnail sizes, edited 2026-10-20); SPEC 3.9 and KU 15.
   thumbnailWidths: Object.freeze([20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840]),
   // Section 4: the Action API takes up to 50 entities a request.
   searchLimit: 50,
@@ -70,14 +72,15 @@ export const wikimediaConfig: WikimediaConfig = Object.freeze({
   retryAfterMaxMs: 24 * 60 * 60 * 1_000,
   // Proposed by Crog in PBI-2.9: a 3840 px JPEG thumbnail is a few MB; 25 MB leaves room.
   pictureMaxBytes: 25 * 1024 * 1024,
-  // Clead's decision 5: `Washroom/<app version> (<repository>) expo-fetch`.
+  // SPEC Known unknown 15, the User-Agent's form: `Washroom/<app version> (<repository>) expo-fetch`.
   userAgentContact: "https://github.com/factoincognito/what-mushroom-is-this",
   userAgentLibrary: "expo-fetch",
   // Commons' own CC0 template, {{Cc-zero}}, as Commons:Donate to the public domain recommends it
   // (read on a copy at c.enwp.org, 2026-11-10). A redirect to it is listed with it by the API
   // (from memory, not checked).
   cc0Templates: Object.freeze(["Cc-zero"]),
-  // Clead's decision 3: only templates whose text says "This applies worldwide", each read on
+  // SPEC Known unknown 15: only templates without a country limit, here those whose text says
+  // "This applies worldwide", each read on
   // 2026-11-10 by Crog on a copy of its Commons page (WebFetch cannot reach commons.wikimedia.org):
   // PD-self (c.enwp.org, Commons:Donate to the public domain), PD-author, PD-user-w and
   // PD-user-at-project (c.enwp.org), PD-user (species-id.net/openmedia, a copy that does not say
@@ -89,9 +92,15 @@ export const wikimediaConfig: WikimediaConfig = Object.freeze({
     "PD-user-w",
     "PD-user-at-project",
   ]),
-  // Clead's decision 3: 2.0, 2.5, 3.0 and 4.0, ports such as cc-by-sa-3.0-nl under their family.
-  ccVersions: Object.freeze(["2.0", "2.5", "3.0", "4.0"]),
-  // Clead's decision on #71. Read by Crog on 2026-11-10, at addresses WebSearch gave:
+  // SPEC Known unknown 15 (#72): any version of CC BY and CC BY-SA, and their ports. The versions
+  // Creative Commons published, 1.0, 2.0, 2.1 (ports only), 2.5, 3.0 and 4.0, are from Crog's
+  // knowledge, not read for PBI-2.9; a version not listed gives no picture.
+  ccVersions: Object.freeze(["1.0", "2.0", "2.1", "2.5", "3.0", "4.0"]),
+  // Ports are two-letter country codes, and these (Crog's knowledge, not read: the
+  // intergovernmental-organisation port, and Scotland's of 2.5); another gives no picture.
+  ccNamedPorts: Object.freeze(["igo", "scotland"]),
+  // Clead's decision on #71 (SPEC 3.9, Fetching it). Read by Crog on 2026-11-10, at addresses
+  // WebSearch gave:
   // https://www.mediawiki.org/wiki/API:Errors_and_warnings, "ratelimited" ("You've exceeded your
   // rate limit. Please wait some time and try again") and "readonly" ("The wiki is currently in
   // read-only mode"); https://www.mediawiki.org/wiki/Manual:Maxlag_parameter, "maxlag" (status

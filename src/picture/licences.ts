@@ -1,10 +1,11 @@
 /**
- * A Commons file's licence (docs/SPEC.md 3.9; Clead's decision 3 for PBI-2.9): read from the
- * licence templates on its file page, which the API lists, and mapped by the table in the config
- * module (`wikimediaConfig`) to CC0, public domain without a country limit, CC BY or CC BY-SA, the
- * latter two with their version and any jurisdiction port. A template the table does not map is no
- * licence on the list. The licence a picture is credited under is stored as a code (`cc0`, `pd`,
- * `cc-by-4.0`, `cc-by-sa-3.0-nl`), which `licenceDisplay` names and links to its deed.
+ * A Commons file's licence (docs/SPEC.md 3.9 and Known unknown 15): read from the licence
+ * templates on its file page, which the API lists, and mapped by the table in the config module
+ * (`wikimediaConfig`) to CC0, public domain without a country limit, CC BY or CC BY-SA, the latter
+ * two in any version and with any jurisdiction port: a two-letter country code, or a port the
+ * table names (`igo`, `scotland`). A template the table does not map is no licence on the list. The
+ * licence a picture is credited under is stored as a code (`cc0`, `pd`, `cc-by-4.0`,
+ * `cc-by-sa-3.0-nl`), which `licenceDisplay` names and links to its deed.
  */
 
 import { type WikimediaConfig, wikimediaConfig } from "../config/wikimedia";
@@ -24,9 +25,22 @@ const FAMILY_ORDER: readonly LicenceFamily[] = ["cc0", "pd", "cc-by", "cc-by-sa"
 
 const TEMPLATE_PREFIX = "template:";
 /** A Creative Commons template: `cc-by-<version>` or `cc-by-sa-<version>`, and a port. */
-const CREATIVE_COMMONS = /^cc-by(-sa)?-(\d\.\d)(?:-([a-z]{2}|igo))?$/;
+const CREATIVE_COMMONS = /^cc-by(-sa)?-(\d\.\d)(?:-([a-z]+))?$/;
 /** A stored code, as `licenceCode` writes it. */
-const CODE = /^cc-(by|by-sa)-(\d\.\d)(?:-([a-z]{2}|igo))?$/;
+const CODE = /^cc-(by|by-sa)-(\d\.\d)(?:-([a-z]+))?$/;
+
+/** A version the table knows, and a port that is a country code or one the table names. */
+function known(
+  version: string | undefined,
+  port: string | undefined,
+  appConfig: WikimediaConfig,
+): version is string {
+  return (
+    version !== undefined &&
+    appConfig.ccVersions.includes(version) &&
+    (port === undefined || /^[a-z]{2}$/.test(port) || appConfig.ccNamedPorts.includes(port))
+  );
+}
 
 /** A title's name, compared as MediaWiki would after its first letter, here without case. */
 function normal(name: string): string {
@@ -54,10 +68,14 @@ export function licenceOfTemplate(
   }
   const match = CREATIVE_COMMONS.exec(name);
   const version = match?.[2];
-  if (match === null || version === undefined || !appConfig.ccVersions.includes(version)) {
+  if (match === null || !known(version, match[3], appConfig)) {
     return null;
   }
-  return { family: match[1] === undefined ? "cc-by" : "cc-by-sa", version, port: match[3] ?? null };
+  return {
+    family: match[1] === undefined ? "cc-by" : "cc-by-sa",
+    version: match[2] ?? version,
+    port: match[3] ?? null,
+  };
 }
 
 /** The code a licence is stored under. */
@@ -131,12 +149,7 @@ export function licenceDisplay(code: string): LicenceDisplay {
   }
   const match = CODE.exec(code);
   const [, kind, version, port] = match ?? [];
-  if (
-    match === null ||
-    kind === undefined ||
-    version === undefined ||
-    !wikimediaConfig.ccVersions.includes(version)
-  ) {
+  if (match === null || kind === undefined || !known(version, port, wikimediaConfig)) {
     return { kind: "named", name: code, deed: null };
   }
   const name = `CC ${kind.toUpperCase()} ${version}${port === undefined ? "" : ` ${port.toUpperCase()}`}`;

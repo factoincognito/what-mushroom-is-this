@@ -48,7 +48,9 @@
  * takes the find for (after its photos added since, which come first); in a run it ends the run, as
  * a find that waits does (3.4, and 3.9: "a check that waits for want of a network or a fault on …
  * Wikimedia's side ends the run"), with its pause, and no request goes to Wikimedia before its
- * `Retry-After` (Clead's decision 5). From the find's screen, a picture that waits sets no pause.
+ * `Retry-After` (3.9, Fetching it). A run asks a find's picture once at most, so a store that
+ * still gives the find ends the run rather than looping (review of #71). From the find's screen, a
+ * picture that waits sets no pause.
  * The fetch's copy is removed once the store has its own. An unsaved lookup's picture is fetched
  * on its screen's asking (`fetchLookupPicture`), and not stored; the screen removes its copy. The
  * check on the picture is PBI-2.10's: until then the self-check waits, or has no picture. A picture
@@ -199,6 +201,11 @@ const FAILED_LOADS_THAT_STOP = 2;
 interface RunCount {
   /** The finds in a row, in this run, whose photo did not load. */
   failedLoads: number;
+  /**
+   * The finds whose picture this run has asked for already. The store's pick gives the same find
+   * again while it still waits for its picture, so taking one twice ends the run (review of #71).
+   */
+  picturesTried: Set<number>;
 }
 
 export class AnalysisQueue {
@@ -412,7 +419,7 @@ export class AnalysisQueue {
   }
 
   private async runLoop(): Promise<void> {
-    const count: RunCount = { failedLoads: 0 };
+    const count: RunCount = { failedLoads: 0, picturesTried: new Set() };
     while (this.inFront && this.state.stop === null) {
       this.triggered = false;
       const step = await this.exclusive(() => this.stepOldest(count));
@@ -436,7 +443,7 @@ export class AnalysisQueue {
     }
     if (!waitsForTheQueue(find)) {
       // Its picture waits (PBI-2.9), or it was analysed from its screen since: take the next.
-      return picturePending(find) ? this.pictureStep(log, find) : "next";
+      return picturePending(find) ? this.pictureStep(log, find, count) : "next";
     }
     const analysed = find.analysis.state === "done";
     const attempt = await this.attempt(find, count);
@@ -444,6 +451,7 @@ export class AnalysisQueue {
       case "answered": {
         await this.storeAnswer(log, find, attempt);
         // The run that brings a text answer fetches its picture at once (docs/SPEC.md 3.9).
+        count.picturesTried.add(id);
         const pause = await this.pictureAfterAnswer(log, id);
         if (pause === null) {
           return "next";
@@ -552,8 +560,16 @@ export class AnalysisQueue {
       : { ok: false, failure, allLoaded };
   }
 
-  /** A run's step for a find whose picture waits: fetches it, and ends the run when it waits. */
-  private async pictureStep(log: QueueLog, find: StoredFind): Promise<Step> {
+  /**
+   * A run's step for a find whose picture waits: fetches it, and ends the run when it waits. A find
+   * this run has asked a picture for already, which the store still gives, ends the run, so that
+   * the run never takes the same find without end; the next run asks again.
+   */
+  private async pictureStep(log: QueueLog, find: StoredFind, count: RunCount): Promise<Step> {
+    if (count.picturesTried.has(find.id)) {
+      return "end";
+    }
+    count.picturesTried.add(find.id);
     const pause = await this.storePicture(log, find);
     if (pause === null) {
       return "next";
@@ -579,10 +595,12 @@ export class AnalysisQueue {
    */
   private async storePicture(log: QueueLog, find: StoredFind): Promise<PauseCause | null> {
     const { analysis } = find;
-    if (analysis.state !== "done" || analysis.answer.result !== "match") {
-      return null;
-    }
-    const fetched = await this.picture(analysis.answer.names.la);
+    // A waiting check beside an answer that names no species, which only a damaged file holds,
+    // has no species to fetch a picture of: it is stored as having none (review of #71, note 2).
+    const fetched: PictureFetch =
+      analysis.state === "done" && analysis.answer.result === "match"
+        ? await this.picture(analysis.answer.names.la)
+        : { kind: "none", reason: "answer" };
     switch (fetched.kind) {
       case "picture": {
         const { uri, author, licence, page } = fetched.picture;

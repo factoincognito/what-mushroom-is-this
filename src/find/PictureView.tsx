@@ -42,7 +42,7 @@ type PictureCreditProps = {
 };
 
 /**
- * The credit a picture's licence requires (Clead's decision 4 for PBI-2.9): that it is a picture of
+ * The credit a picture's licence requires (docs/SPEC.md 3.9 and Known unknown 15): that it is a picture of
  * the species from Wikimedia Commons, not of the user's mushroom; its author; its licence's name,
  * a link to its deed but for public domain, which has none; that the app resized it; and a link to
  * its page on Commons. A link that cannot be opened says so.

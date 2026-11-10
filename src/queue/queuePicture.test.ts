@@ -258,7 +258,7 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
     expect(t.removed).toEqual([PICTURE.uri]);
   });
 
-  it("goes on when the check's 'no picture' finds the find changed meanwhile, and rejects on any other store error", async () => {
+  it("does not reject when the check's 'no picture' finds the find changed meanwhile, and rejects on any other store error", async () => {
     const stale = setup();
     await textFind(stale.log);
     await photoFind(stale.log);
@@ -267,7 +267,14 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
       .spyOn(stale.log, "setSelfCheck")
       .mockRejectedValueOnce(new StoreError("wrong-state", "analysed again since"));
     await stale.queue.trigger();
-    expect(stale.events.at(-1)).toBe("analyse photos");
+    // The stand-in store still gives the find, so the run ends there (review of #71); the next run
+    // asks for its picture again and goes on.
+    expect(stale.events).toEqual(["analyse text", `picture Cantharellus cibarius ${MODEL}`]);
+    await stale.queue.trigger();
+    expect(stale.events.slice(2)).toEqual([
+      `picture Cantharellus cibarius ${MODEL}`,
+      "analyse photos",
+    ]);
 
     const damaged = setup();
     await textFind(damaged.log);

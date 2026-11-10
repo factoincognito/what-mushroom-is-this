@@ -5,11 +5,12 @@
  * one request at a time. Every answer is read as untrusted input: anything not of the shape the
  * section gives is an answer the app does not know, and gives no picture.
  *
- * The item and the image follow Clead's decisions 1 and 2 for PBI-2.9: among the items whose taxon
- * name, P225, is the name, ignoring case, those whose rank, P105, is species; of them, those with
- * an image, P18; of them, the one with the most sitelinks, the first in the search's order when two
- * have as many. Its image is the first P18 of preferred rank, else the first of normal rank, never
- * a deprecated one. A deprecated P225 or P105 does not count.
+ * The item and the image follow docs/SPEC.md Known unknown 15, as settled for PBI-2.9: among the
+ * items whose taxon name, P225, is the name, ignoring case, those whose rank, P105, is species; of
+ * them, those with a P18 that is not deprecated; of them, the one with the most sitelinks, and no
+ * picture on a tie for the most. Its image is the first P18 of preferred rank, else the first of
+ * normal rank, never a deprecated one. A deprecated P225 or P105 does not count, and a P18 without
+ * a file name ("somevalue") is no image.
  */
 
 import { type WikimediaConfig, wikimediaConfig } from "../config/wikimedia";
@@ -53,7 +54,7 @@ export function searchUrl(name: string, appConfig: WikimediaConfig = wikimediaCo
   });
 }
 
-/** Section 5, call 2: the items' claims, and their sitelinks for Clead's decision 1. */
+/** Section 5, call 2: the items' claims, and their sitelinks for the choice among homonyms. */
 export function entitiesUrl(
   ids: readonly string[],
   appConfig: WikimediaConfig = wikimediaConfig,
@@ -69,7 +70,7 @@ export function entitiesUrl(
 
 /**
  * Section 5, call 3, without a width: the original's size and address, the file page's address,
- * its author (`extmetadata` Artist only) and its templates, for the licence (Clead's decision 3).
+ * its author (`extmetadata` Artist only) and its templates, for the licence (SPEC Known unknown 15).
  */
 export function fileInfoUrl(file: string, appConfig: WikimediaConfig = wikimediaConfig): string {
   return apiUrl(appConfig.commonsApiUrl, {
@@ -164,7 +165,7 @@ function counted(claims: unknown, property: string): unknown[] {
     .map((claim) => claim.value);
 }
 
-/** The item's image by Clead's decision 2, or null. */
+/** The item's image (SPEC Known unknown 15: the first preferred, else the first normal), or null. */
 function imageOf(claims: unknown): string | null {
   const images = claimValues(claims, "P18").filter(
     (claim): claim is { rank: Rank; value: string } =>
@@ -178,11 +179,11 @@ function imageOf(claims: unknown): string | null {
 
 export type ChosenFile =
   | { readonly ok: true; readonly file: string }
-  | { readonly ok: false; readonly reason: "no-item" | "no-image" | "answer" };
+  | { readonly ok: false; readonly reason: "no-item" | "no-image" | "tie" | "answer" };
 
 /**
- * The Commons file of the image of the species' item (Clead's decisions 1 and 2), from the
- * answer of `entitiesUrl(ids)`, the items taken in the order of `ids`, the search's.
+ * The Commons file of the image of the species' item (docs/SPEC.md Known unknown 15, settled for
+ * PBI-2.9), from the answer of `entitiesUrl(ids)`.
  */
 export function chooseImageFile(
   answer: unknown,
@@ -216,13 +217,22 @@ export function chooseImageFile(
   if (species.length === 0) {
     return { ok: false, reason: "no-item" };
   }
-  let chosen: { image: string; sitelinks: number } | null = null;
-  for (const { image, sitelinks } of species) {
-    if (image !== null && (chosen === null || sitelinks > chosen.sitelinks)) {
-      chosen = { image, sitelinks };
-    }
+  // The image first, then the sitelinks: an item without an image never takes the place, nor
+  // ties with, one that has one.
+  const withImage = species.filter(
+    (item): item is { image: string; sitelinks: number } => item.image !== null,
+  );
+  if (withImage.length === 0) {
+    return { ok: false, reason: "no-image" };
   }
-  return chosen === null ? { ok: false, reason: "no-image" } : { ok: true, file: chosen.image };
+  const most = Math.max(...withImage.map((item) => item.sitelinks));
+  const [first, ...others] = withImage.filter((item) => item.sitelinks === most);
+  if (first === undefined) {
+    return { ok: false, reason: "no-image" };
+  }
+  // A tie for the most gives no picture (SPEC Known unknown 15): the self-check would not catch a
+  // homonym of the same genus.
+  return others.length > 0 ? { ok: false, reason: "tie" } : { ok: true, file: first.image };
 }
 
 export type FileInfo =
@@ -338,7 +348,7 @@ const NAMED_ENTITIES: { readonly [name: string]: string } = {
 };
 
 /**
- * Artist's HTML as text (Clead's decision 4): line breaks as blanks, every tag dropped, the
+ * Artist's HTML as text, for the author SPEC 3.9 shows: line breaks as blanks, every tag dropped, the
  * entities decoded, the blanks single and trimmed. An entity the app does not know stays as it is.
  */
 export function plainText(html: string): string {
@@ -369,7 +379,7 @@ function tokenOf(fields: object, key: "name" | "version"): string | null {
 }
 
 /**
- * The User-Agent of the picture's requests (Clead's decision 5), from the app's config, app.json's
+ * The User-Agent of the picture's requests (SPEC Known unknown 15), from the app's config, app.json's
  * `expo`: `<name>/<version> (<repository>) expo-fetch`. Null when the name or the version is
  * missing or not a product token, ASCII only, as OkHttp refuses other header values; then nothing
  * is sent, since Wikimedia blocks generic agents.

@@ -3,7 +3,7 @@
  * for text lookups"; PBI-2.9). Only the Latin name is sent to Wikimedia: the search names it, and
  * the later calls only what Wikimedia gave back. The requests go one at a time, each with the
  * app's User-Agent and `Accept-Encoding: gzip`, each within the time limit, never retried here
- * (Clead's decision 5):
+ * (SPEC Known unknown 15):
  *
  * 1. Wikidata's search for the items whose taxon name, P225, is the name;
  * 2. the items' claims and sitelinks, and the image of the one chosen (`chooseImageFile`);
@@ -16,8 +16,11 @@
  * The picture is then resized and checked on the phone as a photo is for analysis (3.3); the copy
  * kept is the resized JPEG, which passed the metadata check. The copy downloaded is removed.
  *
- * What comes of it, by 3.9's "Fetching it": no network, the time limit, a 429 or a 5xx make the
- * picture wait (a 429 or 503 until its `Retry-After`, or at least 5 seconds); no item, no image, a
+ * What comes of it, by 3.9's "Fetching it": no network, the time limit, a 429 or a 5xx, or an API
+ * error whose code is a temporary one, make the picture wait (a 429, a 503 or such an error until
+ * its `Retry-After`, or at least 5 seconds); an API call answered with status 200 but not with JSON,
+ * such as a Wi-Fi sign-in page, counts as no network (Clead's decision on #71, as 3.3 treats a
+ * sign-in page as no answer of the API's); no item, no image, a tie for the most sitelinks, a
  * licence not on the list, no machine-readable author, any other answer, a picture of another type,
  * one too large, or one that cannot be loaded or fails the metadata check after its resize give no
  * picture for that answer. An error that is not Wikimedia's nor the picture's (a copy that cannot
@@ -48,6 +51,7 @@ export type NoPictureReason =
   | "user-agent"
   | "no-item"
   | "no-image"
+  | "tie"
   | "licence"
   | "no-author"
   | "answer"
@@ -216,7 +220,8 @@ export async function fetchPicture(
    * An Action API answer as JSON. One that reports an error (`{"error": {"code": …}}`, which the
    * API gives with status 200) makes the picture wait when its code is one the configuration
    * lists as temporary, as a 429 does (Clead's decision on #71); any other error is an answer the
-   * app does not know, and gives no picture.
+   * app does not know, and gives no picture. A body that is not JSON at all, such as a Wi-Fi
+   * sign-in page, counts as no network: the picture waits (Clead's decision on #71).
    */
   const json = (url: string) =>
     get<unknown>(url, async (response) => {
@@ -225,7 +230,7 @@ export async function fetchPicture(
       try {
         value = JSON.parse(text);
       } catch {
-        return none("answer");
+        return { ok: false, outcome: { kind: "waits", cause: "network", retryAtMs: null } };
       }
       const error =
         typeof value === "object" && value !== null
