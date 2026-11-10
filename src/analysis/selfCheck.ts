@@ -29,17 +29,30 @@ export function selfCheckOutcome(matched: SpeciesNames, check: Answer): Compared
 
 /**
  * Whether two Latin names have the same first two words, genus and species, ignoring case. A name
- * of fewer than two words, such as a genus alone, names no species and matches none.
+ * of fewer than two words, such as a genus alone, names no species and matches none; so does one
+ * whose second word is a rank or uncertainty mark (`NOT_A_SPECIES`), such as "Boletus sp." or
+ * "Amanita cf. phalloides" (Clead's decision on the review of #75, note 1).
  */
 export function sameSpecies(a: string, b: string): boolean {
   const first = genusAndSpecies(a);
   return first !== null && first === genusAndSpecies(b);
 }
 
+/**
+ * The marks that stand in a Latin name's second place for no species: an unnamed species or
+ * several, "compare with", "akin to", a subspecies, a variety, an aggregate. They are matched
+ * ignoring case, with or without their full stop.
+ */
+const NOT_A_SPECIES: readonly string[] = ["sp", "spp", "cf", "aff", "ssp", "subsp", "var", "agg"];
+
 function genusAndSpecies(latin: string): string | null {
   const words = latin.trim().split(/\s+/);
   const [genus, species] = words;
   if (genus === undefined || genus === "" || species === undefined) {
+    return null;
+  }
+  const lowered = species.toLowerCase();
+  if (NOT_A_SPECIES.includes(lowered.endsWith(".") ? lowered.slice(0, -1) : lowered)) {
     return null;
   }
   return `${genus} ${species}`.toLowerCase();
