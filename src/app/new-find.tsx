@@ -308,6 +308,7 @@ export default function NewFindScreen() {
         <AnswerView
           answer={view.outcome.answer}
           selfCheck={null}
+          hasPhotos
           subject="photo"
           language={language}
           strings={strings}

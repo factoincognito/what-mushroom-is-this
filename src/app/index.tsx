@@ -487,7 +487,14 @@ function SummaryView({ find, language, strings }: FindRowProps) {
         return <Text style={styles.text}>{said}</Text>;
       }
       // An answer from the text alone shows "unknown" until its self-check agrees (SPEC 3.9).
-      const reason = selfCheckReason(find.selfCheck, analysis.names, language, strings);
+      // A waiting check on a find with photos waits on them (Clead's decision on #78).
+      const reason = selfCheckReason(
+        find.selfCheck,
+        analysis.names,
+        language,
+        strings,
+        find.photoUri !== null,
+      );
       return (
         <>
           <Text style={styles.name}>{analysis.names[language]}</Text>

@@ -210,13 +210,16 @@ export function answerSubject(
  * What the find says of the self-check of an answer from the text alone (docs/SPEC.md 3.9), in
  * the app's language: until the check agrees, why the edibility is "unknown", one sentence for
  * each state, a disagreement naming both species; once it agreed, that it agreed (3.9: "the find
- * says the check agreed"). Null for an answer without a check.
+ * says the check agreed"). Null for an answer without a check. A waiting check on a find that has
+ * photos (`hasPhotos`) is never run (3.9), so its sentence says that it waits until the photos are
+ * analysed or removed, not that it has not been made yet (Clead's decision on #78; PBI-2.16).
  */
 export function selfCheckReason(
   selfCheck: SelfCheck | null,
   matched: Texts,
   language: Language,
   strings: Strings,
+  hasPhotos: boolean,
 ): string | null {
   const t = strings.find.selfCheck;
   switch (selfCheck?.state) {
@@ -225,7 +228,7 @@ export function selfCheckReason(
     case "agreed":
       return t.agreed;
     case "waiting":
-      return t.waiting;
+      return hasPhotos ? t.waitingOnPhotos : t.waiting;
     case "disagreed":
       return fillIn(t.disagreed, { matched: matched[language], named: selfCheck.names[language] });
     case "no-species":

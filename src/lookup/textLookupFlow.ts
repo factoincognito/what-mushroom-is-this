@@ -88,6 +88,20 @@ export function lookupSelfCheck(outcome: TextLookupOutcome | null): SelfCheck | 
   return outcome.check?.state === "done" ? outcome.check.outcome : { state: "waiting" };
 }
 
+/**
+ * The `maxLength` of the description's text field while it holds `text`, for a limit of
+ * `maxCodePoints` characters. The field counts UTF-16 units, while the counter, `setText` and the
+ * store count code points (the configured length; PBI-2.14, note 2), and a code point takes one or
+ * two units. So the field gets the units of the text it holds and two more for each character
+ * still free: it never stops a text the counter still has room for, and at the limit it is full
+ * and takes no more, wherever in the text the user types (Clead's decision on #89). Short of the
+ * limit it can let through more characters than are free, when they take one unit each; those
+ * `setText` cuts.
+ */
+export function lookupFieldMaxLength(text: string, maxCodePoints: number): number {
+  return text.length + 2 * (maxCodePoints - [...text].length);
+}
+
 export interface TextLookupView {
   /**
    * starting: reading the Save setting and asking for the location; ready; analysing: an unsaved

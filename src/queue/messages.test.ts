@@ -28,7 +28,8 @@ const STOPS: readonly QueueStop[] = [
   { reason: "key-not-scoped" },
   { reason: "no-credit" },
   { reason: "model-unknown" },
-  { reason: "answer" },
+  { reason: "answer", findMarkedFailed: true },
+  { reason: "answer", findMarkedFailed: false },
   { reason: "internal-error" },
   { reason: "other", status: 418 },
 ];
@@ -438,6 +439,31 @@ describe("failureMessage: a failure that names one of the find's photos (SPEC 3.
     };
     expect(failureMessage(failure, STRINGS.en)).toBe(STRINGS.en.queue.failed.request.unknown);
   });
+
+  it.each(LANGUAGES)(
+    "gives in %s the reason alone, without the photo's number or the advice to remove it, once the find holds no photo of that number (Clead's decision on #89)",
+    (language) => {
+      const t = STRINGS[language];
+      const removed = /remove that photo|ta bort det fotot|rimuovere quella foto/;
+      // The only photo of a text find failed and was removed: the find holds none.
+      const only: FindFailure = { cause: "photo", detail: "photo 1: load-failed" };
+      expect(failureMessage(only, t, "described", 0)).toBe(t.queue.failed.photo.loadFailed);
+      expect(failureMessage(only, t, "described", 0)).not.toMatch(removed);
+      // The last of three failed and was removed: the find holds two.
+      const last: FindFailure = { cause: "segment-check", detail: "photo 3: trailing-data" };
+      expect(failureMessage(last, t, "photo", 2)).toBe(t.queue.failed.segmentCheck.trailingData);
+    },
+  );
+
+  it("still names a photo the find holds, and every photo when told nothing of what the find holds", () => {
+    const t = STRINGS.en.queue.failed;
+    const failure: FindFailure = { cause: "photo", detail: "photo 2: load-failed" };
+    const numbered = t.numbered.replace("{number}", "2").replace("{reason}", t.photo.loadFailed);
+    expect(failureMessage(failure, STRINGS.en, "photo", 2)).toBe(numbered);
+    expect(failureMessage(failure, STRINGS.en, "photo", 5)).toBe(numbered);
+    expect(failureMessage(failure, STRINGS.en, "photo")).toBe(numbered);
+    expect(numbered).toMatch(/remove that photo/);
+  });
 });
 
 describe("the placeholders of the queue's strings", () => {
@@ -494,6 +520,50 @@ describe("the message for a refused answer (PBI-1.21)", () => {
     expect(failureMessage(failure, STRINGS.en, "described")).toBe(
       failureMessage(failure, STRINGS.en),
     );
+  });
+});
+
+describe("the stop for an answer not of the shape (PBI-2.14; PBI-2.16, #75)", () => {
+  const marked = {
+    sv: /markerat som misslyckat/,
+    en: /marked failed/,
+    it: /segnato come non riuscito/,
+  } as const;
+  const stopped = (findMarkedFailed: boolean, language: (typeof LANGUAGES)[number]) =>
+    noticeMessage(
+      { kind: "stopped", stop: { reason: "answer", findMarkedFailed } },
+      STRINGS[language],
+      formatTime,
+    );
+
+  it.each(LANGUAGES)("says in %s that a find is marked failed when one was", (language) => {
+    const message = stopped(true, language);
+    expect(message).toBe(STRINGS[language].queue.stopped.answer);
+    expect(message).toMatch(marked[language]);
+    expect(message).toContain(STRINGS[language].queue.analyseNow);
+  });
+
+  it.each(LANGUAGES)(
+    "says in %s only that an answer did not fit, when no find was marked failed",
+    (language) => {
+      const message = stopped(false, language);
+      expect(message).toBe(STRINGS[language].queue.stopped.answerNoFindFailed);
+      expect(message).not.toMatch(marked[language]);
+      expect(message).toContain(STRINGS[language].queue.analyseNow);
+      // The rest is the same as when a find was marked failed: what the answer was, and what to
+      // do. Only the sentence about the find is gone.
+      const sentences = (text: string) => text.split(/(?<=\.) /);
+      const withFind = sentences(stopped(true, language));
+      expect(withFind.filter((sentence) => !marked[language].test(sentence))).toEqual(
+        sentences(message),
+      );
+      expect(withFind).toHaveLength(sentences(message).length + 1);
+    },
+  );
+
+  it("needs no setting either way, so neither message links to Settings", () => {
+    expect(stopNeedsSettings({ reason: "answer", findMarkedFailed: true })).toBe(false);
+    expect(stopNeedsSettings({ reason: "answer", findMarkedFailed: false })).toBe(false);
   });
 });
 

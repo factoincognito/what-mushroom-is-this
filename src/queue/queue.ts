@@ -23,10 +23,11 @@
  * request, with the find's text when it has one; a text find without photos is sent by its text
  * (docs/SPEC.md 3.9, Batches; PBI-2.4, PBI-2.5). When a photo cannot be loaded, decoded or sized,
  * or fails the segment check, nothing is sent and the find fails, its failure naming the photo
- * when the find holds more than one (`photo <n>: <detail>`, which `messages.ts` reads). For the
- * count above, a find counts as one whose photos do not load when any of them does not, and a
- * find whose photos all load, or a text find without photos, ends it: in a run, the photos after
- * one that loaded but failed are still prepared, until one does not load, so that the count knows.
+ * when the find holds more than one, or is a text find, whose one photo can be removed
+ * (`photo <n>: <detail>`, which `messages.ts` reads; PBI-2.16). For the count above, a find counts
+ * as one whose photos do not load when any of them does not, and a find whose photos all load, or
+ * a text find without photos, ends it: in a run, the photos after one that loaded but failed are
+ * still prepared, until one does not load, so that the count knows.
  *
  * A run also takes an analysed find whose photos added since its answer wait (its batch complete:
  * the store's pick). It keeps its answer whatever comes of the new analysis. An error class that
@@ -117,8 +118,13 @@ export type QueueStop =
   | { reason: "no-credit" }
   /** 404: Settings asks for a model. */
   | { reason: "model-unknown" }
-  /** An answer not of the shape, or not from the API; that find was marked failed. */
-  | { reason: "answer" }
+  /**
+   * An answer not of the shape, or not from the API. `findMarkedFailed` says whether a find was
+   * marked failed for it, so that the message says so only then: not for an unsaved lookup, of
+   * which nothing is stored, nor for a find that keeps its answer, nor for a self-check, which
+   * waits (PBI-2.14, PBI-2.16).
+   */
+  | { reason: "answer"; findMarkedFailed: boolean }
   /**
    * A run rejected with an error the queue does not handle (a programming, configuration or store
    * error), or a find's analysis did, or the photos of two finds in a row in a run did not load
@@ -210,7 +216,12 @@ export interface QueueSettings {
 type Attempt =
   /** An answer from the API, its confidence a number, as the store takes it (PBI-2.12). */
   | { type: "answered"; answer: ApiAnswer; model: string }
-  | { type: "find-failed"; failure: FindFailure; stop: QueueStop | null }
+  /**
+   * `stopsQueue`: the failure is an answer not of the shape, or not from the API, which also stops
+   * the queue (`answerStop`); whoever stores what came of the attempt knows whether a find was
+   * marked failed.
+   */
+  | { type: "find-failed"; failure: FindFailure; stopsQueue: boolean }
   | { type: "stays-waiting"; cause: PauseCause }
   /**
    * `photosWait`: the photos added since an answer stay waiting, as for a missing key or the stop
@@ -350,8 +361,9 @@ export class AnalysisQueue {
           } else {
             await log.markFailed(id, attempt.failure);
           }
-          if (attempt.stop !== null) {
-            this.setStop(attempt.stop);
+          if (attempt.stopsQueue) {
+            // A find that had an answer keeps it, and is not marked failed.
+            this.setStop(answerStop(!analysed));
           }
           return {
             ok: false,
@@ -416,10 +428,13 @@ export class AnalysisQueue {
       if (!access.ok) {
         return lookupResult(access.attempt, (stop) => this.setStop(stop));
       }
-      const prepared = await this.preparePhotos(photoUris, access.model, false);
+      const prepared = await this.preparePhotos(photoUris, access.model, {
+        settleLoads: false,
+        nameOnlyPhoto: false,
+      });
       const attempt: Attempt = prepared.ok
         ? await this.send({ imagesBase64: prepared.imagesBase64 }, access)
-        : { type: "find-failed", failure: prepared.failure, stop: null };
+        : { type: "find-failed", failure: prepared.failure, stopsQueue: false };
       return lookupResult(attempt, (stop) => this.setStop(stop));
     });
   }
@@ -535,10 +550,11 @@ export class AnalysisQueue {
         } else {
           await log.markFailed(id, attempt.failure);
         }
-        if (attempt.stop === null) {
+        if (!attempt.stopsQueue) {
           return "next";
         }
-        this.setStop(attempt.stop);
+        // A find that had an answer keeps it, and is not marked failed.
+        this.setStop(answerStop(!analysed));
         return "end";
       case "stays-waiting":
         this.setState({ pause: attempt.cause });
@@ -575,7 +591,8 @@ export class AnalysisQueue {
     const prepared = await this.preparePhotos(
       find.photos.map((photo) => photo.uri),
       access.model,
-      count !== null,
+      // The one photo of a text find can be removed, so its failure names it too (PBI-2.16).
+      { settleLoads: count !== null, nameOnlyPhoto: find.text !== null },
     );
     if (count !== null) {
       count.failedLoads = prepared.allLoaded ? 0 : count.failedLoads + 1;
@@ -585,7 +602,7 @@ export class AnalysisQueue {
       }
     }
     if (!prepared.ok) {
-      return { type: "find-failed", failure: prepared.failure, stop: null };
+      return { type: "find-failed", failure: prepared.failure, stopsQueue: false };
     }
     const { imagesBase64 } = prepared;
     return this.send(
@@ -597,17 +614,19 @@ export class AnalysisQueue {
   /**
    * Prepares a find's photos, or an unsaved lookup's, one at a time, in the order added
    * (docs/SPEC.md 3.9, Batches). A photo that cannot be loaded, decoded or sized, or fails the
-   * segment check, comes back as a failure naming it; any other error while preparing one is not
-   * the photo's and passes through (Clead's decision for PBI-1.21). After a failure nothing is
-   * sent, so no more bytes are kept; with `settleLoads` (in a run) the photos after one that loaded
-   * are still prepared, until one does not load, so that the count of failed loads knows whether
-   * all of them load.
+   * segment check, comes back as a failure naming it by its number when there are several, and
+   * with `nameOnlyPhoto` also when it is the only one (a text find's, which the user can remove;
+   * PBI-2.16); any other error while preparing one is not the photo's and passes through (Clead's
+   * decision for PBI-1.21). After a failure nothing is sent, so no more bytes are kept; with
+   * `settleLoads` (in a run) the photos after one that loaded are still prepared, until one does
+   * not load, so that the count of failed loads knows whether all of them load.
    */
   private async preparePhotos(
     photoUris: readonly string[],
     model: string,
-    settleLoads: boolean,
+    { settleLoads, nameOnlyPhoto }: { settleLoads: boolean; nameOnlyPhoto: boolean },
   ): Promise<PreparedPhotos> {
+    const named = photoUris.length > 1 || nameOnlyPhoto;
     const imagesBase64: string[] = [];
     let failure: FindFailure | null = null;
     let allLoaded = true;
@@ -620,7 +639,7 @@ export class AnalysisQueue {
         continue;
       }
       allLoaded = allLoaded && prepared.loaded;
-      failure ??= naming(prepared.failure, index + 1, photoUris.length);
+      failure ??= named ? naming(prepared.failure, index + 1) : prepared.failure;
       if (!settleLoads || !allLoaded) {
         break;
       }
@@ -965,9 +984,10 @@ function checkOf(attempt: Attempt, matched: SpeciesNames): CheckAttempt {
     case "answered":
       return { type: "outcome", outcome: selfCheckOutcome(matched, attempt.answer) };
     case "find-failed":
-      return attempt.stop === null
-        ? { type: "outcome", outcome: { state: "failed" } }
-        : { type: "stop", stop: attempt.stop };
+      // The check waits for the stop; no find is marked failed for it (PBI-2.16).
+      return attempt.stopsQueue
+        ? { type: "stop", stop: answerStop(false) }
+        : { type: "outcome", outcome: { state: "failed" } };
     case "stays-waiting":
       return { type: "waits", cause: attempt.cause };
     case "stop":
@@ -1000,8 +1020,9 @@ function lookupResult(attempt: Attempt, setStop: (stop: QueueStop) => void): Ana
     case "answered":
       return { ok: true, answer: attempt.answer, model: attempt.model };
     case "find-failed":
-      if (attempt.stop !== null) {
-        setStop(attempt.stop);
+      if (attempt.stopsQueue) {
+        // Nothing of an unsaved lookup is stored, so no find is marked failed (PBI-2.14).
+        setStop(answerStop(false));
       }
       return { ok: false, notice: { kind: "find-failed", failure: attempt.failure } };
     case "stays-waiting":
@@ -1013,11 +1034,19 @@ function lookupResult(attempt: Attempt, setStop: (stop: QueueStop) => void): Ana
 }
 
 /**
- * A photo's failure, naming the photo by its number when the find holds more than one
- * (docs/SPEC.md 3.9, Batches): `photo <n>: <detail>`, the form `messages.ts` reads.
+ * A photo's failure, naming the photo by its number (docs/SPEC.md 3.9, Batches):
+ * `photo <n>: <detail>`, the form `messages.ts` reads.
  */
-function naming(failure: FindFailure, number: number, count: number): FindFailure {
-  return count > 1 ? { ...failure, detail: `photo ${number}: ${failure.detail}` } : failure;
+function naming(failure: FindFailure, number: number): FindFailure {
+  return { ...failure, detail: `photo ${number}: ${failure.detail}` };
+}
+
+/**
+ * The stop for an answer not of the shape, or not from the API; `findMarkedFailed` as whoever
+ * stored what came of it knows it.
+ */
+function answerStop(findMarkedFailed: boolean): QueueStop {
+  return { reason: "answer", findMarkedFailed };
 }
 
 /** The outcome of SPEC 3.3's table for an error class. */
@@ -1041,11 +1070,7 @@ function outcomeOf(error: AnalysisError, accessResumesAtMs: number | null): Atte
         "detail" in error
           ? { cause: error.reason === "refused" ? "refused" : "answer", detail: error.detail }
           : { cause: "request", detail: `${error.reason} (status ${error.status})` };
-      return {
-        type: "find-failed",
-        failure,
-        stop: error.queue === "stops" ? { reason: "answer" } : null,
-      };
+      return { type: "find-failed", failure, stopsQueue: error.queue === "stops" };
     }
     case "other":
       return stop({ reason: "other", status: error.status });

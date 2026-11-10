@@ -420,7 +420,10 @@ function AnalysisView({
       return (
         <View style={styles.section}>
           <Text style={styles.text}>{t.failed}</Text>
-          <Text style={styles.text}>{failureMessage(analysis.failure, strings, subject)}</Text>
+          {/* A photo the failure names that was removed since is not named (decision on #89). */}
+          <Text style={styles.text}>
+            {failureMessage(analysis.failure, strings, subject, find.photos.length)}
+          </Text>
         </View>
       );
     case "done":
@@ -444,6 +447,7 @@ function AnalysisView({
           <AnswerView
             answer={analysis.answer}
             selfCheck={find.selfCheck}
+            hasPhotos={find.photos.length > 0}
             // Its disclaimer, "no mushroom" and "cannot tell" follow what the answer was based on
             // (Clead's decision 3 on #57; SPEC 3.9, Answers; PBI-2.15).
             subject={answerSubject(find.answerBasis, find.photos.length > 0)}
@@ -462,6 +466,11 @@ type AnswerViewProps = {
    * the edibility shown is "unknown", with why (SPEC 3.9).
    */
   readonly selfCheck: SelfCheck | null;
+  /**
+   * Whether the find or lookup shown holds photos: a waiting check then waits until they are
+   * analysed or removed, and the reason says so (SPEC 3.9; Clead's decision on #78).
+   */
+  readonly hasPhotos: boolean;
   /** What was analysed: for a lookup without photos, the answers speak of the description. */
   readonly subject: LookupSubject;
   readonly language: Language;
@@ -473,7 +482,14 @@ type AnswerViewProps = {
  * disclaimer, or what Claude could not name. The text lookup screen shows an unsaved lookup's
  * answer with it too.
  */
-export function AnswerView({ answer, selfCheck, subject, language, strings }: AnswerViewProps) {
+export function AnswerView({
+  answer,
+  selfCheck,
+  hasPhotos,
+  subject,
+  language,
+  strings,
+}: AnswerViewProps) {
   const t = strings.find;
   const described = subject === "described";
   switch (answer.result) {
@@ -482,6 +498,7 @@ export function AnswerView({ answer, selfCheck, subject, language, strings }: An
         <MatchView
           match={answer}
           selfCheck={selfCheck}
+          hasPhotos={hasPhotos}
           disclaimer={described ? strings.disclaimerDescribed : strings.disclaimer}
           language={language}
           strings={strings}
@@ -497,16 +514,17 @@ export function AnswerView({ answer, selfCheck, subject, language, strings }: An
 type MatchViewProps = {
   readonly match: Match;
   readonly selfCheck: SelfCheck | null;
+  readonly hasPhotos: boolean;
   /** The disclaimer next to the edibility: SPEC 3.5's, or 3.9's for a lookup without photos. */
   readonly disclaimer: string;
   readonly language: Language;
   readonly strings: Strings;
 };
 
-function MatchView({ match, selfCheck, disclaimer, language, strings }: MatchViewProps) {
+function MatchView({ match, selfCheck, hasPhotos, disclaimer, language, strings }: MatchViewProps) {
   const t = strings.find;
   const edibility = edibilityText(checkedEdibility(match, selfCheck), strings);
-  const reason = selfCheckReason(selfCheck, match.names, language, strings);
+  const reason = selfCheckReason(selfCheck, match.names, language, strings, hasPhotos);
   return (
     <View style={styles.section}>
       <View testID="match-names">

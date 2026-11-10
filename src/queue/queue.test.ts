@@ -652,7 +652,8 @@ describe("the error classes of SPEC 3.3 in a run", () => {
       await t.queue.trigger();
       expect(t.log.changes).toEqual(["markFailed 1 answer: the answer is not JSON"]);
       expect(t.log.state(2)).toEqual({ state: "waiting" });
-      expect(t.queue.getState().stop).toEqual({ reason: "answer" });
+      // The stop says a find was marked failed: one was (PBI-2.14).
+      expect(t.queue.getState().stop).toEqual({ reason: "answer", findMarkedFailed: true });
     },
   );
 
@@ -1224,6 +1225,32 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
     expect(t.log.changes).toEqual(["markFailed 1 request: request-wrong (status 400)"]);
   });
 
+  it("marks a waiting find failed on an answer not of the shape, and the stop says a find was (PBI-2.14)", async () => {
+    const t = setup();
+    t.log.addFind(1);
+    t.replies.push(
+      fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
+    );
+    await expect(t.queue.analyseFind(1)).resolves.toEqual({
+      ok: false,
+      notice: { kind: "find-failed", failure: { cause: "answer", detail: "bad" } },
+      answerKept: false,
+    });
+    expect(t.log.changes).toEqual(["markFailed 1 answer: bad"]);
+    expect(t.queue.getState().stop).toEqual({ reason: "answer", findMarkedFailed: true });
+  });
+
+  it("marks a failed find failed again on such an answer, with the new cause, and the stop says a find is marked failed (PBI-2.14)", async () => {
+    const t = setup();
+    t.log.addFind(1, { state: "failed", failure: { cause: "request", detail: "x" } });
+    t.replies.push(
+      fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
+    );
+    await expect(t.queue.analyseFind(1)).resolves.toMatchObject({ ok: false, answerKept: false });
+    expect(t.log.changes).toEqual(["markFailed 1 answer: bad"]);
+    expect(t.queue.getState().stop).toEqual({ reason: "answer", findMarkedFailed: true });
+  });
+
   it("puts a failed find back to waiting when it meets no network, so the queue tries it", async () => {
     const t = setup();
     t.log.addFind(1, { state: "failed", failure: { cause: "request", detail: "x" } });
@@ -1291,7 +1318,8 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
         "an answer not of the shape",
         fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
         { kind: "find-failed", failure: { cause: "answer", detail: "bad" } },
-        { reason: "answer" },
+        // No find was marked failed: the find keeps its answer (PBI-2.14).
+        { reason: "answer", findMarkedFailed: false },
       ],
       [
         "401",
@@ -1626,6 +1654,44 @@ describe("all of a find's photos in one request (SPEC 3.9, Batches; PBI-2.5)", (
     ]);
   });
 
+  it("names the one photo of a text find, which can be removed, when it fails, in a run and from the find's screen (PBI-2.16, note 2 on #57)", async () => {
+    const t = setup();
+    const one = [{ uri: "file:///photos/1-1.jpg", batch: 1 }];
+    t.log.addTextFind(1, DESCRIPTION, { state: "waiting" }, one);
+    t.log.addTextFind(2, DESCRIPTION, { state: "waiting" }, [
+      { uri: "file:///photos/2-1.jpg", batch: 1 },
+    ]);
+    t.setPreparation(photosByName({ "1-1": refused, "2-1": badSize("invalid-size: 0 x 0") }));
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual([
+      "markFailed 1 segment-check: photo 1: forbidden-segment 0xFFE1",
+      "markFailed 2 photo: photo 1: invalid-size: 0 x 0",
+    ]);
+    t.log.addTextFind(3, DESCRIPTION, ANSWERED, [{ uri: "file:///photos/3-1.jpg", batch: 2 }]);
+    t.setPreparation(photosByName({ "3-1": loadFailed("load-failed") }));
+    await expect(t.queue.analyseFind(3)).resolves.toEqual({
+      ok: false,
+      notice: { kind: "find-failed", failure: { cause: "photo", detail: "photo 1: load-failed" } },
+      answerKept: true,
+    });
+  });
+
+  it("does not name the one photo of a find without text, which cannot be removed, nor of an unsaved lookup", async () => {
+    const t = setup();
+    t.log.addPhotos(1, [1]);
+    t.setPreparation(photosByName({ "1-1": refused }));
+    await t.queue.trigger();
+    expect(t.log.changes).toEqual(["markFailed 1 segment-check: forbidden-segment 0xFFE1"]);
+    t.setPreparation(async () => refused);
+    await expect(t.queue.analysePhotoLookup(["file:///cache/a.jpg"])).resolves.toEqual({
+      ok: false,
+      notice: {
+        kind: "find-failed",
+        failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+      },
+    });
+  });
+
   it("analysed from its screen, stops preparing at the first photo that fails", async () => {
     const t = setup();
     t.log.addPhotos(1, [1, 1, 1]);
@@ -1797,7 +1863,8 @@ describe("a new batch on an analysed find (SPEC 3.9, Batches; PBI-2.5)", () => {
     [
       "an answer not of the shape",
       fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
-      { reason: "answer" },
+      // No find was marked failed: only its new photos are not yet analysed (PBI-2.14).
+      { reason: "answer", findMarkedFailed: false },
     ],
     [
       "401",
@@ -1974,7 +2041,8 @@ describe("an unsaved lookup, analysed from its screen (SPEC 3.9, Lookups)", () =
       "an answer not of the shape",
       fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
       { kind: "find-failed", failure: { cause: "answer", detail: "bad" } },
-      { reason: "answer" },
+      // Nothing of an unsaved lookup is stored, so no find was marked failed (PBI-2.14).
+      { reason: "answer", findMarkedFailed: false },
     ],
     [
       "401",
@@ -2193,7 +2261,8 @@ describe("an unsaved photo lookup, analysed from its screen (SPEC 3.9, Lookups; 
       "an answer not of the shape",
       fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
       { kind: "find-failed", failure: { cause: "answer", detail: "bad" } },
-      { reason: "answer" },
+      // Nothing of an unsaved lookup is stored, so no find was marked failed (PBI-2.14).
+      { reason: "answer", findMarkedFailed: false },
     ],
     [
       "401",

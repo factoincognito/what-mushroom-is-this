@@ -1,7 +1,8 @@
 /**
  * What the New find screen does (docs/SPEC.md 3.1, 3.6, 3.9), kept out of the screen so that it
  * renders nothing: the location permission the first time a find is made, the position asked
- * for from when the camera opens, the camera permission, the camera or the gallery, and the save.
+ * for from when the camera opens, the camera permission, the camera, the gallery or the phone's
+ * files, and the save.
  * The screen shows the `NewFindView` it is given; its tests are those of the screen
  * (`src/__tests__/app/newFind.test.tsx`, `src/__tests__/app/photoLookup.test.tsx`) and this
  * module's own.
@@ -74,8 +75,9 @@ export type PhotoLookupOutcome =
 export interface NewFindView {
   /**
    * starting: asking for the permissions, or reading the find photos are added to; ready: the
-   * camera and gallery buttons; busy: the camera or the gallery is open; saving; saved: a photo
-   * was saved to the find; analysing: an unsaved lookup is being analysed.
+   * camera, gallery and files buttons; busy: the camera, the gallery or the phone's files are
+   * open; saving; saved: a photo was saved to the find; analysing: an unsaved lookup is being
+   * analysed.
    */
   phase: "starting" | "ready" | "busy" | "saving" | "saved" | "analysing";
   message: NewFindMessage | null;
@@ -162,7 +164,10 @@ export interface NewFindDeps {
   readSaveSetting: () => Promise<boolean>;
   /** The queue's analysis of an unsaved photo lookup (`analysePhotoLookup`). */
   analyseLookup: (photoUris: readonly string[]) => Promise<AnalyseLookupResult>;
-  /** Removes the app's copy of a photo the camera or the gallery gave (`removePickedCopy`). */
+  /**
+   * Removes the app's copy of a photo the camera, the gallery or the phone's files gave
+   * (`removePickedCopy`).
+   */
   removeCopy: (uri: string) => void;
   appConfig: Pick<
     AppConfig,
@@ -496,7 +501,10 @@ export class NewFindFlow {
     return this.pending.length === 0 && this.view.canAddMore && this.view.phase !== "analysing";
   }
 
-  /** A photo from the camera or the gallery: held by an unsaved lookup, else saved to the find. */
+  /**
+   * A photo from the camera, the gallery or the phone's files: held by an unsaved lookup, else
+   * saved to the find.
+   */
   private async receive(photo: Pending): Promise<void> {
     if (this.unsaved()) {
       await this.hold(photo);

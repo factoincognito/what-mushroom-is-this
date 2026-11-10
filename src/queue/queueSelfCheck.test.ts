@@ -301,7 +301,8 @@ describe("the check's error groups in a run (docs/SPEC.md 3.9)", () => {
     [
       "an answer not of the shape",
       { kind: "find-failed", reason: "shape", detail: "no result", status: 200, queue: "stops" },
-      { reason: "answer" },
+      // The check waits; no find was marked failed (PBI-2.16, #75).
+      { reason: "answer", findMarkedFailed: false },
     ],
     ["any other status", { kind: "other", status: 418 }, { reason: "other", status: 418 }],
   ] as const)(
@@ -628,6 +629,21 @@ describe("a text find analysed from its screen (docs/SPEC.md 3.9)", () => {
       selfCheck: { state: "waiting" },
     });
   });
+
+  it("a check answer not of the shape stops the queue with a stop that says no find was marked failed (PBI-2.16, #75)", async () => {
+    const t = setup();
+    const id = await textFind(t);
+    t.replies.push(ok(MATCH), {
+      ok: false,
+      error: { kind: "find-failed", reason: "shape", detail: "x", status: 200, queue: "stops" },
+    });
+    await expect(t.queue.analyseFind(id)).resolves.toEqual({ ok: true });
+    expect(t.queue.getState().stop).toEqual({ reason: "answer", findMarkedFailed: false });
+    expect(await t.log.getStored(id)).toMatchObject({
+      analysis: { state: "done", answer: MATCH },
+      selfCheck: { state: "waiting" },
+    });
+  });
 });
 
 describe("an unsaved lookup's check (docs/SPEC.md 3.9: run at once after its answer, not stored)", () => {
@@ -682,6 +698,21 @@ describe("an unsaved lookup's check (docs/SPEC.md 3.9: run at once after its ans
       notice: { kind: "stopped", stop: { reason: "no-key" } },
     });
     expect(keyless.events).toEqual([]);
+  });
+
+  it("a check answer not of the shape stops the queue, and the stop says no find was marked failed (PBI-2.16, #75)", async () => {
+    const t = setup();
+    t.replies.push({
+      ok: false,
+      error: { kind: "find-failed", reason: "shape", detail: "x", status: 200, queue: "stops" },
+    });
+    const stop = { reason: "answer", findMarkedFailed: false };
+    await expect(t.queue.checkLookupPicture(PICTURE.uri, MATCH.names)).resolves.toEqual({
+      ok: false,
+      notice: { kind: "stopped", stop },
+    });
+    expect(t.queue.getState().stop).toEqual(stop);
+    expect(await t.log.list()).toEqual([]);
   });
 
   it("any other class, or a picture that cannot be loaded, fails the check", async () => {

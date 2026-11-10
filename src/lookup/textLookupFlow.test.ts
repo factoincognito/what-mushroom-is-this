@@ -5,6 +5,7 @@ import type { AnalyseLookupResult, CheckLookupResult } from "../queue/queue";
 import type { NewTextFind, Position } from "../store/find";
 import {
   INITIAL_TEXT_LOOKUP_VIEW,
+  lookupFieldMaxLength,
   lookupSelfCheck,
   TextLookupFlow,
   type TextLookupView,
@@ -240,6 +241,39 @@ describe("the text (SPEC 3.9: up to the configured length)", () => {
     await t.flow.start();
     t.flow.setText("🍄".repeat(25));
     expect(t.view().text).toBe("🍄".repeat(20));
+  });
+
+  it.each([
+    ["nothing", "", 40],
+    ["letters short of the limit", "a".repeat(19), 21],
+    ["emoji short of the limit", "🍄".repeat(19), 40],
+    ["letters and emoji", `${"a".repeat(5)}${"🍄".repeat(5)}`, 35],
+  ])(
+    "gives the text field, while it holds %s, room in UTF-16 units for the characters still free, each taking up to two (PBI-2.14, note 2)",
+    (_, held, limit) => {
+      expect(lookupFieldMaxLength(held, 20)).toBe(limit);
+    },
+  );
+
+  it.each([
+    ["letters", "a".repeat(20)],
+    ["emoji", "🍄".repeat(20)],
+    ["letters and emoji", `${"a".repeat(10)}${"🍄".repeat(10)}`],
+  ])(
+    "gives the text field at the limit, full of %s, the length of the text it holds, so that it takes no more (Clead's decision on #89)",
+    (_, held) => {
+      expect(lookupFieldMaxLength(held, 20)).toBe(held.length);
+    },
+  );
+
+  it("still cuts to the configured length what the field lets through beyond it", async () => {
+    // 19 letters leave the field room for two units: two more letters fit there, one too many.
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText("a".repeat(19));
+    expect(lookupFieldMaxLength(t.view().text, 20)).toBe(21);
+    t.flow.setText("a".repeat(21));
+    expect(t.view().text).toBe("a".repeat(20));
   });
 
   it("does not analyse or save an empty text, and says so", async () => {

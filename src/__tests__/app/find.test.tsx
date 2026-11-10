@@ -1163,6 +1163,48 @@ describe("the edibility of an answer from text alone, until its self-check agree
     expect(edibility.getByText(t.find.selfCheck.waiting)).toBeOnTheScreen();
   });
 
+  /** A text find whose answer is from its text alone, its check waiting, with a photo added since. */
+  const withPhotoAdded = (addedPhotos: "waiting" | "not-analysed") =>
+    aTextFind(done(CHANTERELLE), {
+      photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+      addedPhotos,
+      selfCheck: { state: "waiting" },
+    });
+
+  it.each(["waiting", "not-analysed"] as const)(
+    "says that a waiting check waits until the find's photos are analysed or removed, while they are %s, not that it has not been made yet (Clead's decision on #78)",
+    async (addedPhotos) => {
+      mockLog.finds.set(1, withPhotoAdded(addedPhotos));
+      await startApp();
+      const edibility = within(await screen.findByTestId("match-edibility"));
+      expect(edibility.getByText(unknownText)).toBeOnTheScreen();
+      expect(edibility.queryByText(en.find.selfCheck.waiting)).not.toBeOnTheScreen();
+      expect(edibility.getByText(en.find.selfCheck.waitingOnPhotos)).toBeOnTheScreen();
+    },
+  );
+
+  it.each(["sv", "it"] as const)("says so in %s", async (lang) => {
+    phoneIn(lang);
+    const t = STRINGS[lang].find;
+    mockLog.finds.set(1, withPhotoAdded("not-analysed"));
+    await startApp();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.queryByText(t.selfCheck.waiting)).not.toBeOnTheScreen();
+    expect(edibility.getByText(t.selfCheck.waitingOnPhotos)).toBeOnTheScreen();
+  });
+
+  it("says the check has not been made yet once the photo it waited on is removed", async () => {
+    mockLog.finds.set(1, withPhotoAdded("not-analysed"));
+    await startApp();
+    await fireEvent.press(
+      await screen.findByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
+    );
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
+    expect(await screen.findByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
+    expect(screen.queryByText(/waits until the find's photos/)).not.toBeOnTheScreen();
+    expect((await mockLog.getStored(1))?.selfCheck).toEqual({ state: "waiting" });
+  });
+
   it("once a text find's answer from its photos and text replaces its text answer, shows the edibility by the photo rule, with no self-check and the photo disclaimer (PBI-2.5)", async () => {
     const id = await mockLog.addText({
       text: DESCRIPTION,
@@ -1546,6 +1588,88 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
       ),
     ).toBeOnTheScreen();
     expect(screen.queryByText(INTERNAL)).not.toBeOnTheScreen();
+  });
+
+  /** What the image module gives for a photo the encoder cannot load. */
+  const NOT_LOADED = {
+    ok: false,
+    loaded: false,
+    failure: { cause: "photo", detail: "load-failed" },
+  } as const;
+  const numberedLoadFailure = fillIn(en.queue.failed.numbered, {
+    number: "1",
+    reason: en.queue.failed.photo.loadFailed,
+  });
+
+  it("names the one photo of a text find when it fails, saying it can be removed, beside the button that removes it (PBI-2.16, note 2 on #57)", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind({ state: "waiting" }, { photos: [{ uri: "file:///photos/1.jpg", batch: 1 }] }),
+    );
+    jest.mocked(preparePhotoForAnalysis).mockResolvedValueOnce(NOT_LOADED);
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
+    expect(await screen.findByText(numberedLoadFailure)).toBeOnTheScreen();
+    expect(
+      screen.getByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
+    ).toBeOnTheScreen();
+    expect(mockLog.finds.get(1)?.analysis).toEqual({
+      state: "failed",
+      failure: { cause: "photo", detail: "photo 1: load-failed" },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(INTERNAL)).not.toBeOnTheScreen();
+  });
+
+  it("recovers as the message says: once the failed photo is removed, the find gives the reason without the advice to remove it, and Analyse again answers from the text (Clead's decision on #89)", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind({ state: "waiting" }, { photos: [{ uri: "file:///photos/1.jpg", batch: 1 }] }),
+    );
+    jest.mocked(preparePhotoForAnalysis).mockResolvedValueOnce(NOT_LOADED);
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
+    expect(await screen.findByText(numberedLoadFailure)).toBeOnTheScreen();
+    const removePhoto1 = fillIn(en.find.removePhoto, { number: "1" });
+    await fireEvent.press(screen.getByRole("button", { name: removePhoto1 }));
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
+    // Between the removal and the new analysis: the find is still failed, for the photo it held,
+    // and says why in the plain sentence, with no photo to remove named.
+    expect(await screen.findByText(en.queue.failed.photo.loadFailed)).toBeOnTheScreen();
+    expect(screen.getByText(en.find.failed)).toBeOnTheScreen();
+    expect(screen.queryByText(numberedLoadFailure)).not.toBeOnTheScreen();
+    expect(screen.queryByText(/remove that photo/)).not.toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: removePhoto1 })).not.toBeOnTheScreen();
+    expect(screen.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+    expect(await mockLog.getStored(1)).toMatchObject({
+      photos: [],
+      analysis: { state: "failed", failure: { cause: "photo", detail: "photo 1: load-failed" } },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    // "Analyse again" sends the description alone, and its answer takes the failure's place.
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await fireEvent.press(screen.getByRole("button", { name: en.find.analyseAgain }));
+    expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.messages[0].content[0]).toEqual({ type: "text", text: DESCRIPTION });
+    expect(JSON.stringify(body)).not.toContain('"image"');
+    expect(preparePhotoForAnalysis).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(en.find.failed)).not.toBeOnTheScreen();
+    expect(screen.queryByText(en.queue.failed.photo.loadFailed)).not.toBeOnTheScreen();
+    expect(screen.queryByText(numberedLoadFailure)).not.toBeOnTheScreen();
+    expect(mockLog.finds.get(1)?.analysis.state).toBe("done");
+  });
+
+  it("does not tell the user to remove the one photo of a find without text, which cannot be removed", async () => {
+    mockLog.finds.set(1, withPhotos(1, { analysis: { state: "waiting" }, addedPhotos: null }));
+    jest.mocked(preparePhotoForAnalysis).mockResolvedValueOnce(NOT_LOADED);
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
+    expect(await screen.findByText(en.queue.failed.photo.loadFailed)).toBeOnTheScreen();
+    expect(screen.queryByText(numberedLoadFailure)).not.toBeOnTheScreen();
+    expect(
+      screen.queryByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
+    ).not.toBeOnTheScreen();
   });
 
   it("a find whose batch is still open: Analyse completes the batch and leaves the find to the queue", async () => {
