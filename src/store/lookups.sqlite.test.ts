@@ -1215,3 +1215,70 @@ describe("a find a damaged file holds past the store's limits (PBI-2.14 note 1, 
     await expect(store.oldestWaiting()).resolves.toBe(id);
   });
 });
+
+describe("an answer whose columns differ from it, which only a damaged file can hold (PBI-2.17)", () => {
+  it.each<[string, string]>([
+    ["edibility", "edibility = 'deadly_poisonous'"],
+    ["Swedish name", "name_sv = 'Narrkantarell'"],
+  ])(
+    "passes over a find whose new photos wait and whose %s column differs from its answer's, in the queue's pick, and lists it as unreadable",
+    async (_, set) => {
+      const id = await store.add(photoFind());
+      await store.setAnswer(id, analysed, await sentAll(id));
+      await store.addPhoto(id, "file:///cache/b.jpg");
+      await store.completeBatch(id);
+      const next = await store.add(photoFind("file:///cache/next.jpg"));
+      sqlite.prepare(`UPDATE finds SET ${set} WHERE id = ?`).run(id);
+      await expect(store.oldestWaiting()).resolves.toBe(next);
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: next }),
+        { readable: false, id },
+      ]);
+      await expect(store.getStored(id)).rejects.toMatchObject({ code: "corrupt" });
+    },
+  );
+
+  it("passes over a text answer whose self-check waits and whose edibility column differs from it, and lists it as unreadable", async () => {
+    const id = await answeredTextFind();
+    const next = await store.add(photoFind("file:///cache/next.jpg"));
+    sqlite.prepare("UPDATE finds SET edibility = 'poisonous' WHERE id = ?").run(id);
+    await expect(store.oldestWaiting()).resolves.toBe(next);
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id: next }),
+      { readable: false, id },
+    ]);
+  });
+});
+
+describe("a text find whose answer naming a species has no self-check (PBI-2.14, note 4)", () => {
+  /**
+   * Closed by #84 (PBI-2.15) without new code: an answer naming a species is from the text alone
+   * exactly when it has a self-check, so such a find, which only a damaged file can hold, is one
+   * the store cannot read, and no reader shows its answer's edibility. Here its added photos wait,
+   * so the queue's pick would take it if it could read it.
+   */
+  it.each<[string, string]>([
+    ["its basis the text alone", "self_check = NULL"],
+    ["no basis", "self_check = NULL, answer_basis = NULL"],
+  ])(
+    "lists one with %s as unreadable; getStored refuses it and the queue's pick passes over it",
+    async (_, set) => {
+      const id = await answeredTextFind();
+      await store.addPhoto(id, "file:///cache/b.jpg");
+      await store.completeBatch(id);
+      const next = await store.add(photoFind("file:///cache/next.jpg"));
+      sqlite.exec("PRAGMA ignore_check_constraints = ON");
+      try {
+        sqlite.prepare(`UPDATE finds SET ${set} WHERE id = ?`).run(id);
+      } finally {
+        sqlite.exec("PRAGMA ignore_check_constraints = OFF");
+      }
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: next }),
+        { readable: false, id },
+      ]);
+      await expect(store.getStored(id)).rejects.toMatchObject({ code: "corrupt" });
+      await expect(store.oldestWaiting()).resolves.toBe(next);
+    },
+  );
+});

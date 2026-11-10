@@ -831,6 +831,15 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
     ],
     ["a latitude past 90 (PBI-2.16, #68)", (photo) => insertWaitingAt(90.5, 17.08, photo)],
     ["a latitude below -90 (PBI-2.16, #68)", (photo) => insertWaitingAt(-91, 17.08, photo)],
+    [
+      "an edibility, though it has no answer (PBI-2.17)",
+      (photo) =>
+        insertPastChecks(
+          `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state,
+            edibility) VALUES (9000000, 0, 'saved', ${PHOTO}, 'waiting', 'edible')`,
+          photo,
+        ),
+    ],
   ];
 
   it("reads the finds the store saved at the edges of the position's range, in the list, the queue's pick and get (PBI-2.16)", async () => {
@@ -906,7 +915,77 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
           .run(id);
       },
     ],
+    [
+      "a result column that differs from its answer's (PBI-2.17)",
+      (id) => {
+        insertPastChecks("UPDATE finds SET result = 'cannot_tell' WHERE id = ?", id);
+      },
+    ],
+    [
+      "a Swedish name column that differs from its answer's (PBI-2.17)",
+      (id) => {
+        sqlite.prepare("UPDATE finds SET name_sv = 'Narrkantarell' WHERE id = ?").run(id);
+      },
+    ],
+    [
+      "an English name column that differs from its answer's (PBI-2.17)",
+      (id) => {
+        sqlite.prepare("UPDATE finds SET name_en = 'False chanterelle' WHERE id = ?").run(id);
+      },
+    ],
+    [
+      "an Italian name column that differs from its answer's (PBI-2.17)",
+      (id) => {
+        sqlite.prepare("UPDATE finds SET name_it = 'Falso gallinaccio' WHERE id = ?").run(id);
+      },
+    ],
+    [
+      "an edibility column that differs from its answer's (PBI-2.17)",
+      (id) => {
+        sqlite.prepare("UPDATE finds SET edibility = 'deadly_poisonous' WHERE id = ?").run(id);
+      },
+    ],
   ];
+
+  it("reads an answer the store stored whose names hold a NUL and lone surrogates, which SQLite does not give back as written, in the list and get (PBI-2.17)", async () => {
+    const odd: ApiMatch = {
+      ...match,
+      names: { sv: "Kant\u0000arell", en: "Chan\uD800terelle", la: "C. c.", it: "Galli\uDC00naccio" },
+    };
+    const id = await store.add(newFind(1_000));
+    const sent = await sentPhoto(id);
+    await store.setAnswer(id, { ...analysed, answer: odd }, sent);
+    const columns = sqlite
+      .prepare("SELECT name_sv, name_en, name_it FROM finds WHERE id = ?")
+      .get(id);
+    // Shown so the test says why the store does not compare these names: on `node:sqlite` the
+    // columns come back cut at the NUL and with U+FFFD for each lone surrogate.
+    expect(columns).not.toEqual({ name_sv: odd.names.sv, name_en: odd.names.en, name_it: odd.names.it });
+    await expect(store.get(id)).resolves.toMatchObject({
+      analysis: { state: "done", answer: { names: odd.names } },
+    });
+    await expect(store.list()).resolves.toEqual([expect.objectContaining({ readable: true, id })]);
+  });
+
+  it("reads a match of every edibility, and answers naming no species, as the store stored them (PBI-2.17)", async () => {
+    const ids: number[] = [];
+    for (const edibility of EDIBILITIES) {
+      const id = await store.add(newFind(1_000));
+      await store.setAnswer(id, { ...analysed, answer: { ...match, edibility } }, await sentPhoto(id));
+      ids.push(id);
+    }
+    for (const result of ["no_mushroom", "cannot_tell"] as const) {
+      const id = await store.add(newFind(1_000));
+      await store.setAnswer(id, { ...analysed, answer: { result } }, await sentPhoto(id));
+      ids.push(id);
+    }
+    const list = await store.list();
+    expect(list).toHaveLength(ids.length);
+    expect(list.every((entry) => entry.readable)).toBe(true);
+    for (const id of ids) {
+      await expect(store.get(id)).resolves.toMatchObject({ id });
+    }
+  });
 
   it.each(unreadableDone)(
     "marks a done find with %s unreadable in the list, by its ID, which get refuses and delete still removes",
