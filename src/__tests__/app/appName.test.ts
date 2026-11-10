@@ -1,9 +1,10 @@
 /**
  * @jest-environment node
  *
- * The app's public name, "Washroom" ("as in What Mushroom"): Adam's decision, recorded in the
- * product office's DECISIONS.md on 2026-11-09. It is the same in Swedish, English and Italian, as
- * it is a name. The repository, the Expo slug and scheme, and the Android application ID stay.
+ * The app's public name, "Wushroom": Adam's decision, recorded in the product office's
+ * DECISIONS.md on 2026-11-10 (PBI-2.19). It was "Washroom" from 2026-11-09 ("as in What Mushroom")
+ * and "What mushroom is this" before. It is the same in Swedish, English and Italian, as it is a
+ * name. The repository, the Expo slug and scheme, and the Android application ID stay.
  * The name reaches the phone through app.json's `name`, so the Android label and the iOS display
  * name are read as `npx expo config --type introspect` gives them, by running the real config over
  * this project's app.json, as easBuild.test.ts does.
@@ -21,10 +22,13 @@ const { readFileSync } = fs;
 const ts: typeof TypeScript = jest.requireActual("typescript");
 
 /** The app's public name, in every language. */
-const APP_NAME = "Washroom";
+const APP_NAME = "Wushroom";
 
-/** The app's name before the decision, which no text shown to the user may give any more. */
-const OLD_NAME = /what mushroom is this/gi;
+/**
+ * The app's names before the decision, "What mushroom is this" and "Washroom", which no text shown
+ * to the user may give any more.
+ */
+const OLD_NAME = /what mushroom is this|washroom/gi;
 
 type PluginEntry = string | [string, Record<string, unknown>?];
 type Application = { $: Record<string, string> };
@@ -49,11 +53,11 @@ type ExpoConfig = Record<string, unknown> & {
 const appJson: { expo: ExpoConfig } = jest.requireActual("../../../app.json");
 
 /**
- * What a text says the app is called: each time it gives the old name, then each time it gives
- * "Washroom", in any case, as written in the text.
+ * What a text says the app is called: each time it gives an old name, then each time it gives
+ * "Wushroom", in any case, as written in the text.
  */
 function namesOfTheApp(text: string): string[] {
-  return [...text.matchAll(OLD_NAME), ...text.matchAll(/washroom/gi)].map((match) => match[0]);
+  return [...text.matchAll(OLD_NAME), ...text.matchAll(/wushroom/gi)].map((match) => match[0]);
 }
 
 /**
@@ -125,11 +129,19 @@ describe("namesOfTheApp, the check the tests below use", () => {
     ]);
   });
 
-  it("finds every spelling of Washroom, so a wrong case fails the tests that use it", () => {
+  it("finds Washroom, the name before Wushroom, in any case", () => {
     expect(namesOfTheApp("Washroom, washroom and WASHROOM")).toEqual([
       "Washroom",
       "washroom",
       "WASHROOM",
+    ]);
+  });
+
+  it("finds every spelling of Wushroom, so a wrong case fails the tests that use it", () => {
+    expect(namesOfTheApp("Wushroom, wushroom and WUSHROOM")).toEqual([
+      "Wushroom",
+      "wushroom",
+      "WUSHROOM",
     ]);
   });
 
@@ -139,7 +151,7 @@ describe("namesOfTheApp, the check the tests below use", () => {
 });
 
 describe("app.json: the app's public name", () => {
-  it("is Washroom", () => {
+  it("is Wushroom", () => {
     expect(appJson.expo.name).toBe(APP_NAME);
   });
 
@@ -173,7 +185,7 @@ describe("the name the phone shows under the app's icon", () => {
     config = await introspected();
   }, 120_000);
 
-  it("is Washroom on Android: the application's label is the app_name string, which is Washroom", () => {
+  it("is Wushroom on Android: the application's label is the app_name string, which is Wushroom", () => {
     const android = config._internal?.modResults?.android;
     expect(android?.manifest?.manifest.application?.[0]?.$["android:label"]).toBe(
       "@string/app_name",
@@ -182,7 +194,7 @@ describe("the name the phone shows under the app's icon", () => {
     expect(appName?.map((s) => s._)).toEqual([APP_NAME]);
   });
 
-  it("is Washroom on iOS (CFBundleDisplayName)", () => {
+  it("is Wushroom on iOS (CFBundleDisplayName)", () => {
     expect(config._internal?.modResults?.ios?.infoPlist?.CFBundleDisplayName).toBe(APP_NAME);
   });
 
@@ -255,7 +267,7 @@ describe("the texts the app shows to the user", () => {
     expect(texts).toContain("the picker gave no photo");
   });
 
-  it("name the app, wherever they do, only as Washroom, in every language: never by its old name and never in another case", () => {
+  it("name the app, wherever they do, only as Wushroom, in every language: never by an old name and never in another case", () => {
     const names = texts.flatMap(namesOfTheApp);
     expect(names.filter((name) => name !== APP_NAME)).toEqual([]);
   });

@@ -464,17 +464,17 @@ describe("plainText (docs/SPEC.md 3.9: the author as text, from Artist's HTML)",
 
 describe("pictureUserAgent (docs/SPEC.md Known unknown 15: a User-Agent that names the app)", () => {
   it("names the app and its version from app.json, the repository and the library", () => {
-    expect(pictureUserAgent({ name: "Washroom", version: "0.1.0" })).toBe(
-      "Washroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
+    expect(pictureUserAgent({ name: "Wushroom", version: "0.1.0" })).toBe(
+      "Wushroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
     );
   });
 
   it.each([
     ["no config", null],
-    ["no version", { name: "Washroom" }],
-    ["a name with a space", { name: "Wash room", version: "0.1.0" }],
-    ["a version that is not ASCII", { name: "Washroom", version: "0.1.0é" }],
-    ["a version that is not text", { name: "Washroom", version: 1 }],
+    ["no version", { name: "Wushroom" }],
+    ["a name with a space", { name: "Wush room", version: "0.1.0" }],
+    ["a version that is not ASCII", { name: "Wushroom", version: "0.1.0é" }],
+    ["a version that is not text", { name: "Wushroom", version: 1 }],
   ])("is null for %s, so nothing is sent with a generic agent", (_name, expoConfig) => {
     expect(pictureUserAgent(expoConfig)).toBeNull();
   });
