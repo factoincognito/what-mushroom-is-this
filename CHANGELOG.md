@@ -106,6 +106,11 @@ All notable changes to What mushroom is this? are documented here.
   the text alone or from photos, and "no mushroom" and "cannot tell" speak
   of the description or the photo accordingly; the migration fills this
   in only where the stored data proves it (#84).
+- A find a damaged file holds past the store's limits (more than 5
+  photos, a text over 2,000 characters, a position out of range), or
+  whose stored species, names or edibility differ from its answer, is
+  shown as one that cannot be read, can be deleted, and no longer stops
+  the queue (#87).
 
 ## Project created
 
