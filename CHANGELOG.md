@@ -78,6 +78,9 @@ All notable changes to What mushroom is this? are documented here.
 - A "Save" switch on a new photo lookup, on by default from Settings: an
   unsaved photo lookup is analysed on its screen and nothing of it is
   kept (#61).
+- The Library replaces the Log as the start screen: the finds with
+  species, year and month filters, held while the app runs; a text find
+  without photos shows a text mark (#63).
 
 ## Project created
 
