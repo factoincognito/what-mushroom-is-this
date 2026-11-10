@@ -833,10 +833,12 @@ describe("an unsaved lookup's self-check (docs/SPEC.md 3.9; PBI-2.10)", () => {
     expect(t.view().outcome).toMatchObject({ picture: SHOWN, check: AGREED });
   });
 
-  it("Check again does nothing once the check has an outcome, and a failed check is not tried again", async () => {
+  it("Check again does nothing before an answer is shown, once the check has an outcome, and a failed check is not tried again", async () => {
     const t = setup();
     await t.flow.start();
     t.flow.setText(SHORT);
+    await t.flow.checkAgain();
+    expect(t.pictureNames).toEqual([]);
     t.checkReplies.push({ ok: true, outcome: { state: "failed" } });
     await t.flow.analyse();
     await t.flow.checkAgain();

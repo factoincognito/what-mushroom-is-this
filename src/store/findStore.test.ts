@@ -161,7 +161,7 @@ const SAFE_OFFSET =
 const SAFE_ID = "CASE WHEN id BETWEEN 1 AND 9007199254740991 THEN id END AS id";
 const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES}, ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}, added_photos, picture_file, picture_author, picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
-const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE (state = 'waiting' OR (state = 'done' AND (added_photos = 'waiting' OR (self_check = 'waiting' AND picture_file IS NULL)))) AND batch_open = 0 AND finds.id > ? AND finds.id <= 9007199254740991 ORDER BY finds.id ASC LIMIT 1`;
+const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE (state = 'waiting' OR (state = 'done' AND (added_photos = 'waiting' OR (self_check = 'waiting' AND (picture_file IS NULL OR ${PHOTO_COUNT} = 0))))) AND batch_open = 0 AND finds.id > ? AND finds.id <= 9007199254740991 ORDER BY finds.id ASC LIMIT 1`;
 const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv, name_en, name_it, edibility, confidence, confidence_score FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /** Only among the IDs the store cannot read: a readable find is deleted by `delete` alone. */
 const UNREADABLE_ID = "(id < 1 OR id > 9007199254740991)";

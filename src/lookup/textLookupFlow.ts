@@ -283,10 +283,11 @@ export class TextLookupFlow {
       return;
     }
     if (
+      outcome.answer.result === "match" &&
       outcome.picture?.state === "shown" &&
       (outcome.check?.state === "waits" || outcome.check?.state === "error")
     ) {
-      await this.runCheck();
+      await this.runCheck(outcome.picture.picture.uri, outcome.answer.names);
     }
   }
 
@@ -324,41 +325,40 @@ export class TextLookupFlow {
     }
     this.show({ outcome: { ...shown, picture } });
     if (picture.state === "shown") {
-      await this.runCheck();
+      await this.runCheck(picture.picture.uri, outcome.answer.names);
     }
   }
 
   /**
-   * Runs the self-check on the picture shown, against the answer's species (docs/SPEC.md 3.9), and
-   * shows what came of it while that answer and picture are still shown.
+   * Runs the self-check on the picture shown (`pictureUri`), against the species of the answer
+   * shown (`matched`; docs/SPEC.md 3.9), and shows what came of it while that answer and picture
+   * are still shown.
    */
-  private async runCheck(): Promise<void> {
-    const { outcome } = this.view;
-    if (
-      outcome?.kind !== "answer" ||
-      outcome.answer.result !== "match" ||
-      outcome.picture?.state !== "shown"
-    ) {
-      return;
-    }
+  private async runCheck(pictureUri: string, matched: SpeciesNames): Promise<void> {
     const token = this.pictureToken;
-    const { uri } = outcome.picture.picture;
-    this.show({ outcome: { ...outcome, check: { state: "checking" } } });
+    this.showCheck({ state: "checking" });
     let check: LookupCheck;
     try {
-      const result = await this.deps.checkPicture(uri, outcome.answer.names);
+      const result = await this.deps.checkPicture(pictureUri, matched);
       check = result.ok
         ? { state: "done", outcome: result.outcome }
         : { state: "waits", notice: result.notice };
     } catch {
       check = { state: "error" };
     }
-    const shown = this.view.outcome;
-    if (token !== this.pictureToken || this.closed || shown?.kind !== "answer") {
+    if (token !== this.pictureToken || this.closed) {
       // The answer and the picture it was for are no longer shown.
       return;
     }
-    this.show({ outcome: { ...shown, check } });
+    this.showCheck(check);
+  }
+
+  /** Shows the check of the answer shown; an outcome that is not an answer has none. */
+  private showCheck(check: LookupCheck): void {
+    const { outcome } = this.view;
+    if (outcome?.kind === "answer") {
+      this.show({ outcome: { ...outcome, check } });
+    }
   }
 
   /** The answer's picture is no longer shown: a fetch under way is stale, and a copy is removed. */

@@ -670,21 +670,17 @@ export class AnalysisQueue {
   }
 
   /**
-   * After the picture is stored: when the find's check waits on it (`checkPending`), runs the check
+   * After the picture is stored: when the find's check waits on it (`pendingCheck`), runs the check
    * and stores its outcome. Gives what the check came to, or null when no check was due. A find
    * deleted or changed meanwhile keeps nothing of it.
    */
   private async checkAfterPicture(log: QueueLog, id: number): Promise<CheckAttempt | null> {
     const find = await log.getStored(id);
-    if (find === null || !checkPending(find)) {
+    const pending = find === null ? null : pendingCheck(find);
+    if (pending === null) {
       return null;
     }
-    const { analysis, picture } = find;
-    if (analysis.state !== "done" || analysis.answer.result !== "match" || picture === null) {
-      // `checkPending` holds it; this narrows the types.
-      return null;
-    }
-    const check = await this.checkPicture(picture.uri, analysis.answer.names);
+    const check = await this.checkPicture(pending.pictureUri, pending.matched);
     if (check.type === "outcome") {
       try {
         await log.setSelfCheck(id, check.outcome);
@@ -935,22 +931,26 @@ function selfCheckWaits(find: StoredFind): boolean {
 }
 
 /**
- * Whether the find's self-check waits for the queue (docs/SPEC.md 3.9; PBI-2.10), as the store's
- * pick judges it: an answer naming a species, a check that waits and its picture stored, its batch
- * complete, and no photo on the find. A text find's photos all came after its answer from the
- * text alone, so a check still waiting on a find that holds one is skipped: the analysis of its
- * photos with the text is to replace that answer, and the check with it (the backlog note on
- * PBI-2.10).
+ * The picture and the species of a find whose self-check waits for the queue (docs/SPEC.md 3.9;
+ * PBI-2.10), as the store's pick judges it, or null: an answer naming a species, a check that
+ * waits and its picture stored, its batch complete, and no photo on the find. A text find's photos
+ * all came after its answer from the text alone, so a check still waiting on a find that holds one
+ * is skipped: the analysis of its photos with the text is to replace that answer, and the check
+ * with it (the backlog note on PBI-2.10).
  */
-function checkPending(find: StoredFind): boolean {
-  return (
-    !find.batchOpen &&
-    find.photos.length === 0 &&
-    find.analysis.state === "done" &&
-    find.analysis.answer.result === "match" &&
-    find.selfCheck?.state === "waiting" &&
-    find.picture !== null
-  );
+function pendingCheck(find: StoredFind): { pictureUri: string; matched: SpeciesNames } | null {
+  const { analysis, picture } = find;
+  if (
+    find.batchOpen ||
+    find.photos.length > 0 ||
+    analysis.state !== "done" ||
+    analysis.answer.result !== "match" ||
+    find.selfCheck?.state !== "waiting" ||
+    picture === null
+  ) {
+    return null;
+  }
+  return { pictureUri: picture.uri, matched: analysis.answer.names };
 }
 
 /**
