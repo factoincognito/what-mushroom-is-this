@@ -113,6 +113,13 @@ All notable changes to What mushroom is this? are documented here.
   the queue (#87).
 - The app is named Wushroom, not Washroom, on the phone and in the
   User-Agent it sends (#91).
+- What the app tells the user: the stop after an answer of the wrong form
+  says a find is marked failed only when one was; a self-check that waits
+  on a find's photos says that it waits until they are analysed or
+  removed; when the only photo of a text find fails, the message names the
+  photo and says it can be removed; a description takes its full 2,000
+  characters also when they are emoji; and the message when the camera
+  may not be used names the phone's files beside the gallery (#89).
 
 ## Project created
 
