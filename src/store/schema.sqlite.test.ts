@@ -13,7 +13,7 @@ import {
   sqliteDatabase,
 } from "../testing/sqliteDatabase";
 import { type AnalysedAnswer, FAILURE_CAUSES, type NewFind } from "./find";
-import { createFindStore, type FindStore } from "./findStore";
+import { createFindStore, type FindStore, type LookupStore } from "./findStore";
 import { MIGRATIONS } from "./schema";
 
 const match: Match = {
@@ -631,6 +631,95 @@ describe("the ID of a new find, on a real SQLite (PBI-1.27)", () => {
     await store.delete(second);
     await expect(store.add(newFind(3_000))).resolves.toBe(second + 1);
     expect(first).toBe(second - 1);
+  });
+});
+
+/**
+ * The high-water mark, or an ID, of exactly 2^53 − 1, the largest the store can read (PBI-1.29,
+ * note 4 on #38): one past it, 2^53, is an ID the store cannot read, so the next ID is taken
+ * below it, as for a mark past 2^53, and every new find stays readable.
+ */
+describe("the ID of a new find at the largest readable ID, on a real SQLite (PBI-1.29)", () => {
+  const LARGEST = BigInt(Number.MAX_SAFE_INTEGER);
+
+  /** Inserts a waiting find with the ID given, as a damaged file could hold it. */
+  function insertWithId(id: bigint, photo: string): void {
+    sqlite
+      .prepare(
+        `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state)
+          VALUES (?, 9000000, 0, 'saved', ${PHOTO}, 'waiting')`,
+      )
+      .run(id, photo);
+  }
+
+  /** Sets AUTOINCREMENT's high-water mark for the table, as a damaged file could hold it. */
+  function setHighWaterMark(seq: bigint): void {
+    sqlite.prepare("UPDATE sqlite_sequence SET seq = ? WHERE name = 'finds'").run(seq);
+  }
+
+  /** The IDs in the table, as SQLite writes them, from the lowest. */
+  function storedIds(): string[] {
+    return sqlite
+      .prepare("SELECT CAST(id AS TEXT) AS id FROM finds ORDER BY id")
+      .all()
+      .map((row) => String((row as { id: unknown }).id));
+  }
+
+  it("is readable, and above the readable IDs, when the high-water mark is 2^53 − 1", async () => {
+    const before = await store.add(newFind(1_000));
+    setHighWaterMark(LARGEST);
+    const id = await store.add(newFind(2_000));
+    expect(id).toBe(before + 1);
+    await expect(store.get(id)).resolves.toMatchObject({ id, analysis: { state: "waiting" } });
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id }),
+      expect.objectContaining({ readable: true, id: before }),
+    ]);
+  });
+
+  it("stays readable, and new, for each find after it, without taking an ID in use", async () => {
+    const before = await store.add(newFind(1_000));
+    setHighWaterMark(LARGEST);
+    const ids = [
+      await store.add(newFind(2_000)),
+      await store.add(newFind(3_000)),
+      // The text find's INSERT takes its ID by the same rule (PBI-2.4).
+      await (store as FindStore & LookupStore).addText({
+        text: "a brown cap",
+        time: newFind(4_000).time,
+        position: null,
+      }),
+    ];
+    expect(ids).toEqual([before + 1, before + 2, before + 3]);
+    expect(storedIds()).toEqual([before, ...ids].map(String));
+  });
+
+  it("is readable, and does not take that ID, when a find with the ID 2^53 − 1 is in the table", async () => {
+    const before = await store.add(newFind(1_000));
+    // Left as it is, as PBI-1.27 decided for a find with this ID.
+    insertWithId(LARGEST, "u1.jpg");
+    const id = await store.add(newFind(2_000));
+    expect(id).toBe(before + 1);
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id: Number.MAX_SAFE_INTEGER }),
+      expect.objectContaining({ readable: true, id }),
+      expect.objectContaining({ readable: true, id: before }),
+    ]);
+  });
+
+  it("does not give an ID in use when the IDs 2^53 − 2 and 2^53 − 1 are both in the table", async () => {
+    const before = await store.add(newFind(1_000));
+    insertWithId(LARGEST - 1n, "u1.jpg");
+    insertWithId(LARGEST, "u2.jpg");
+    const id = await store.add(newFind(2_000));
+    expect(id).toBe(before + 1);
+    expect(storedIds()).toEqual([before, id, LARGEST - 1n, LARGEST].map(String));
+  });
+
+  it("is 1 for the first find when the table is empty and the high-water mark is 2^53 − 1", async () => {
+    await store.delete(await store.add(newFind(1_000)));
+    setHighWaterMark(LARGEST);
+    await expect(store.add(newFind(2_000))).resolves.toBe(1);
   });
 });
 
