@@ -522,6 +522,7 @@ describe("a find the store cannot read, in the list (PBI-1.16)", () => {
         time,
         analysis: { state: "waiting" },
         selfCheck: null,
+        species: null,
       },
     ];
     jest.spyOn(mockLog, "list").mockResolvedValue(entries);

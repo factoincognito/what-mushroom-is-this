@@ -309,6 +309,8 @@ describe("the store's statements on a real SQLite", () => {
         photoUri: "file:///photos/p1.jpg",
         time: { takenAtMs: 1_000, utcOffsetMinutes: 60, source: "saved" },
         selfCheck: null,
+        // The Latin name, from the stored answer, for the Library's species filter (PBI-2.7).
+        species: match.names,
         analysis: {
           state: "done",
           result: "match",

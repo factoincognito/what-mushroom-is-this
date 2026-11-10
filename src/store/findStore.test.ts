@@ -1391,6 +1391,7 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         selfCheck: null,
+        species: match.names,
         analysis: {
           state: "done",
           result: "match",
@@ -1405,6 +1406,7 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         selfCheck: null,
+        species: match.names,
         analysis: {
           state: "done",
           result: "match",
@@ -1419,6 +1421,7 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         selfCheck: null,
+        species: null,
         analysis: { state: "done", result: "no_mushroom" },
       },
       {
@@ -1427,6 +1430,7 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         selfCheck: null,
+        species: null,
         analysis: { state: "failed", failure: { cause: "answer", detail: "shape" } },
       },
       {
@@ -1435,10 +1439,56 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         selfCheck: null,
+        species: null,
         analysis: { state: "waiting" },
       },
     ]);
     expect(events).toEqual([{ method: "all", sql: LIST, params: [] }]);
+  });
+
+  it("gives the species of a find's answer by its four names, the Latin from the stored answer, which has no column of its own (PBI-2.7)", async () => {
+    const porcini: Match = {
+      ...match,
+      names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
+    };
+    db.reply("all", LIST, [
+      doneMatchRow({
+        id: 10,
+        answer_json: answerToJson(porcini),
+        name_sv: porcini.names.sv,
+        name_en: porcini.names.en,
+        name_it: porcini.names.it,
+      }),
+      summaryRow({
+        id: 9,
+        state: "done",
+        answer_json: answerToJson({ result: "cannot_tell" }),
+        model: "m",
+        analysed_at_ms: 1,
+        added_photos: "analysed",
+        result: "cannot_tell",
+      }),
+    ]);
+    const [first, second] = await store.list();
+    expect(first).toMatchObject({ id: 10, species: porcini.names });
+    expect(second).toMatchObject({ id: 9, species: null });
+  });
+
+  it("gives the species of an answer from a text alone while its self-check waits (SPEC 3.9: the filters use the text answer's species)", async () => {
+    db.reply("all", LIST, [
+      summaryRow({
+        ...textRow({ id: 7 }),
+        result: "match",
+        name_sv: "Kantarell",
+        name_en: "Chanterelle",
+        name_it: "Gallinaccio",
+        edibility: "edible",
+        confidence_score: 90,
+      }),
+    ]);
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ id: 7, selfCheck: { state: "waiting" }, species: match.names }),
+    ]);
   });
 
   it("lists a text find without photos as readable, with no photo (PBI-2.4)", async () => {
@@ -1462,6 +1512,7 @@ describe("list", () => {
         time: { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" },
         analysis: { state: "waiting" },
         selfCheck: null,
+        species: null,
       },
       expect.objectContaining({
         readable: true,
