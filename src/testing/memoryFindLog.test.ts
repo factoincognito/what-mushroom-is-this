@@ -21,6 +21,10 @@ const match: Match = {
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [],
 };
+const porcini: Match = {
+  ...match,
+  names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
+};
 const analysed: AnalysedAnswer = { answer: match, model: "claude-model-x", analysedAtMs: 5_000 };
 const time = { takenAtMs: 1_000, utcOffsetMinutes: 60, source: "saved" } as const;
 const photoFind: NewFind = { photoUri: "file:///cache/a.jpg", time, position: null };
@@ -180,11 +184,7 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
   [
     "the list gives each find's species by its current answer, the text answer's too, and none without an answer naming one (PBI-2.7)",
     async (log) => {
-      const porcini: Match = {
-        ...match,
-        names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
-      };
-      const waiting = await log.add({ ...photoFind, time: { ...time, takenAtMs: 1_000 } });
+      const waiting =await log.add({ ...photoFind, time: { ...time, takenAtMs: 1_000 } });
       const named = await log.add({ ...photoFind, time: { ...time, takenAtMs: 2_000 } });
       await log.setAnswer(named, analysed, await sentAll(log, named));
       const failed = await log.add({ ...photoFind, time: { ...time, takenAtMs: 3_000 } });
@@ -221,7 +221,7 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
     },
   ],
   [
-    "a text answer's picture: the pick takes its find until it has one or its check has none, and the list gives it (PBI-2.9)",
+    "a text answer's picture: the pick takes its find while its check waits, with a picture or without, until it has none, and the list gives it (PBI-2.9, PBI-2.10)",
     async (log) => {
       const pictured = await log.addText(textFind);
       await log.setAnswer(pictured, analysed, { photoUris: [] });
@@ -241,6 +241,33 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
       seen.push(view(await log.getStored(without)), await log.oldestWaiting());
       seen.push(await outcome(() => log.setSelfCheck(without, { state: "no-picture" })));
       seen.push(await outcome(() => log.setPicture(without, newPicture)));
+      seen.push(await listView(log));
+      return seen;
+    },
+  ],
+  [
+    "a waiting check: the pick takes its find until the check has an outcome, and not once photos came since its answer (PBI-2.10)",
+    async (log) => {
+      const checked = await log.addText(textFind);
+      await log.setAnswer(checked, analysed, { photoUris: [] });
+      await log.setPicture(checked, newPicture);
+      const skipped = await log.addText({ ...textFind, time: { ...time, takenAtMs: 2_000 } });
+      await log.setAnswer(skipped, analysed, { photoUris: [] });
+      await log.setPicture(skipped, newPicture);
+      const seen: unknown[] = [await log.oldestWaiting()];
+      seen.push(
+        await outcome(() =>
+          log.setSelfCheck(checked, { state: "disagreed", names: porcini.names }),
+        ),
+      );
+      seen.push(view(await log.getStored(checked)), await log.oldestWaiting());
+      await log.addPhoto(skipped, "file:///cache/a.jpg");
+      seen.push(await log.oldestWaiting());
+      await log.completeBatch(skipped);
+      seen.push(await log.oldestWaiting());
+      await log.setAddedPhotos(skipped, "not-analysed");
+      seen.push(view(await log.getStored(skipped)), await log.oldestWaiting());
+      seen.push(await outcome(() => log.setSelfCheck(checked, { state: "agreed" })));
       seen.push(await listView(log));
       return seen;
     },
@@ -345,7 +372,8 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
       expect.objectContaining({ selfCheck: { state: "waiting" }, picture: false }),
       "ok",
       expect.objectContaining({ selfCheck: { state: "waiting" }, picture: true }),
-      2,
+      // Its check now waits on the picture, so the pick still takes it (PBI-2.10).
+      1,
     ]);
     expect(seen.slice(6, 11)).toEqual([
       "wrong-state",
@@ -355,7 +383,7 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
       expect.anything(),
     ]);
     expect(seen[10]).toMatchObject({ selfCheck: { state: "no-picture" }, picture: false });
-    expect(seen[11]).toBeNull();
+    expect(seen[11]).toBe(1);
     expect(seen.at(-1)).toEqual([
       expect.objectContaining({ id: 2, picture: null, selfCheck: { state: "no-picture" } }),
       expect.objectContaining({
@@ -368,6 +396,27 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
         },
       }),
     ]);
+  });
+
+  it("the check scenario sees the store's pick and the check's outcome, not nothing (PBI-2.10)", async () => {
+    const scenario = scenarios.find(([name]) => name.startsWith("a waiting check"));
+    if (scenario === undefined) {
+      throw new Error("no check scenario");
+    }
+    const seen = await scenario[1](await realStore());
+    expect(seen.slice(0, 6)).toEqual([
+      1,
+      "ok",
+      expect.objectContaining({
+        selfCheck: { state: "disagreed", names: porcini.names },
+        picture: true,
+      }),
+      2,
+      null,
+      2,
+    ]);
+    expect(seen[6]).toMatchObject({ selfCheck: { state: "waiting" }, addedPhotos: "not-analysed" });
+    expect(seen.slice(7, 9)).toEqual([null, "wrong-state"]);
   });
 
   it("the list scenario sees the species the store gives, not nothing (PBI-2.7)", async () => {
