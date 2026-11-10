@@ -10,6 +10,7 @@
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
 import type { Answer, Match } from "../analysis/answer";
 import type { PictureFetch } from "../picture/fetchPicture";
+import { StoreError } from "../store/find";
 import { memoryFindLog } from "../testing/memoryFindLog";
 import { AnalysisQueue, type QueueDeps } from "./queue";
 
@@ -231,6 +232,36 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
     expect(t.removed).toEqual([PICTURE.uri]);
     expect(t.events.at(-1)).toBe("analyse photos");
     expect(t.queue.getState().stop).toBeNull();
+  });
+
+  it("rejects the run with a store error that is not a change gone stale, still removing the copy", async () => {
+    const t = setup();
+    await textFind(t.log);
+    jest
+      .spyOn(t.log, "setPicture")
+      .mockRejectedValueOnce(new StoreError("corrupt", "the picture's row is damaged"));
+    await expect(t.queue.trigger()).rejects.toMatchObject({ code: "corrupt" });
+    expect(t.removed).toEqual([PICTURE.uri]);
+  });
+
+  it("goes on when the check's 'no picture' finds the find changed meanwhile, and rejects on any other store error", async () => {
+    const stale = setup();
+    await textFind(stale.log);
+    await photoFind(stale.log);
+    stale.pictures.push({ kind: "none", reason: "no-item" });
+    jest
+      .spyOn(stale.log, "setSelfCheck")
+      .mockRejectedValueOnce(new StoreError("wrong-state", "analysed again since"));
+    await stale.queue.trigger();
+    expect(stale.events.at(-1)).toBe("analyse photos");
+
+    const damaged = setup();
+    await textFind(damaged.log);
+    damaged.pictures.push({ kind: "none", reason: "no-item" });
+    jest
+      .spyOn(damaged.log, "setSelfCheck")
+      .mockRejectedValueOnce(new StoreError("corrupt", "damaged"));
+    await expect(damaged.queue.trigger()).rejects.toMatchObject({ code: "corrupt" });
   });
 
   it("rejects the run with an error of the fetch that is not Wikimedia's, leaving the check waiting", async () => {

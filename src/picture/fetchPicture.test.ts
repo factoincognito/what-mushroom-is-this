@@ -504,6 +504,35 @@ describe("Wikimedia's failures, classed (docs/SPEC.md 3.9, Fetching it)", () => 
   });
 });
 
+describe("answers and limits the fetch cannot use", () => {
+  it("gives no picture for a search answer not of the shape, asking nothing more", async () => {
+    const t = setup({ search: { status: 200, json: { batchcomplete: true } } });
+    await expect(fetchPicture(NAME, HIGH_TIER_MODEL, t.deps)).resolves.toEqual({
+      kind: "none",
+      reason: "answer",
+    });
+    expect(t.steps()).toEqual(["search"]);
+  });
+
+  it("gives no picture when the model's limits cannot size the original, asking for no thumbnail", async () => {
+    const t = setup();
+    const fetched = await fetchPicture(NAME, HIGH_TIER_MODEL, {
+      ...t.deps,
+      imageLimits: () => ({ maxEdge: 0, maxTokens: 0, patchSize: 28 }),
+    });
+    expect(fetched).toEqual({ kind: "none", reason: "answer" });
+    expect(t.steps()).toEqual(["search", "entities", "fileinfo"]);
+  });
+
+  it("refuses a time limit a timer cannot hold, as a programming error", async () => {
+    const t = setup();
+    await expect(
+      fetchPicture(NAME, HIGH_TIER_MODEL, t.deps, { ...wikimediaConfig, requestTimeoutMs: 0 }),
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(t.calls).toEqual([]);
+  });
+});
+
 describe("errors that are not Wikimedia's", () => {
   it("passes on an error of the resize that is not the picture's, removing the copy", async () => {
     const t = setup();
