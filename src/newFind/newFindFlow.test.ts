@@ -896,7 +896,11 @@ describe("turning Save on during an unsaved photo lookup (SPEC 3.9, Lookups; PBI
     expect(log.added).toEqual([
       {
         photoUri: "file:///cache/gallery-1.jpg",
-        time: { takenAtMs: Date.UTC(2026, 8, 14, 13, 42, 7), utcOffsetMinutes: 120, source: "photo" },
+        time: {
+          takenAtMs: Date.UTC(2026, 8, 14, 13, 42, 7),
+          utcOffsetMinutes: 120,
+          source: "photo",
+        },
         position: { latitude: 59.7, longitude: 17.2, accuracyM: null, source: "photo" },
       },
     ]);
@@ -1043,6 +1047,17 @@ describe("leaving an unsaved photo lookup (SPEC 3.9, Lookups; PBI-2.13)", () => 
     await analysing;
     expect(last()).toBe(shown);
     expect(removed).toEqual(["file:///cache/camera-1.jpg"]);
+  });
+
+  it("removes the copy of a photo that comes after the screen was left, and holds nothing", async () => {
+    const { flow, removed, last } = setUpLookup({ cancelCamera: 1 });
+    await flow.start();
+    const shown = last();
+    const taking = flow.takePhoto();
+    flow.close();
+    await taking;
+    expect(removed).toEqual(["file:///cache/camera-1.jpg"]);
+    expect(last()).toBe(shown);
   });
 
   it("removes the copies of photos kept after a failed save when no find was made", async () => {

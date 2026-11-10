@@ -110,13 +110,16 @@ describe("the starting value of a photo lookup's Save switch (SPEC 3.9, Lookups;
   it.each([
     [true, "on"],
     [false, "off"],
-  ] as const)("saves %s as %s, and reads it back, leaving the text lookup's alone", async (on, stored) => {
-    const store = memoryStore();
-    await expect(savePhotoLookupSave(store, on)).resolves.toEqual({ ok: true });
-    expect(store.values.get(PHOTO_LOOKUP_SAVE_KEY)).toBe(stored);
-    expect(store.values.has(TEXT_LOOKUP_SAVE_KEY)).toBe(false);
-    await expect(readPhotoLookupSave(store)).resolves.toBe(on);
-  });
+  ] as const)(
+    "saves %s as %s, and reads it back, leaving the text lookup's alone",
+    async (on, stored) => {
+      const store = memoryStore();
+      await expect(savePhotoLookupSave(store, on)).resolves.toEqual({ ok: true });
+      expect(store.values.get(PHOTO_LOOKUP_SAVE_KEY)).toBe(stored);
+      expect(store.values.has(TEXT_LOOKUP_SAVE_KEY)).toBe(false);
+      await expect(readPhotoLookupSave(store)).resolves.toBe(on);
+    },
+  );
 
   it.each(["yes", "false", "0", "OFF", ""])(
     "reads a stored value it does not know (%j) as the configuration's, coercing nothing",

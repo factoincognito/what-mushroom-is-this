@@ -489,9 +489,7 @@ describe("QueueProvider, a run that rejects (Clead's decision on #17)", () => {
     const { queue } = await renderQueue();
     jest.spyOn(queue, "analysePhotoLookup").mockRejectedValue(new Error("ENOSPC"));
     await act(async () => {
-      await expect(current().analysePhotoLookup(["file:///cache/a.jpg"])).rejects.toThrow(
-        "ENOSPC",
-      );
+      await expect(current().analysePhotoLookup(["file:///cache/a.jpg"])).rejects.toThrow("ENOSPC");
     });
     expect(shownState()).toEqual(INTERNAL);
   });

@@ -90,8 +90,11 @@ export interface TextLookupDeps {
   now: () => Date;
 }
 
-/** The notices after which the screen offers to turn Save on (docs/SPEC.md 3.9). */
-function offersSave(notice: QueueNotice): boolean {
+/**
+ * The notices after which a lookup screen offers to turn Save on (docs/SPEC.md 3.9): a class that
+ * leaves a find waiting, and a missing key. The photo lookup's flow uses it too (PBI-2.13).
+ */
+export function offersSave(notice: QueueNotice): boolean {
   return notice.kind === "paused" || (notice.kind === "stopped" && notice.stop.reason === "no-key");
 }
 

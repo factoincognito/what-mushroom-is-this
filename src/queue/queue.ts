@@ -35,13 +35,15 @@
  * class marks them not yet analysed, and they are analysed only when the user asks; from the
  * find's screen, then, a pause or a stop that leaves them waiting puts them back to waiting.
  *
- * An unsaved text lookup is sent from its screen (`analyseLookup`): nothing of it is stored, and
- * each error class has the outcome it has for a find analysed from its screen.
+ * An unsaved lookup is sent from its screen, a text (`analyseLookup`) or photos
+ * (`analysePhotoLookup`, PBI-2.13): nothing of it is stored, and each error class has the outcome
+ * it has for a find analysed from its screen.
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
 import type { Answer } from "../analysis/answer";
 import type { AnalysisError } from "../analysis/errors";
+import { config } from "../config/config";
 import type { PreparedPhoto } from "../image/prepareForAnalysis";
 import type { ReadKeyResult } from "../key/apiKey";
 import { type AnalysisSent, type FindFailure, type StoredFind, StoreError } from "../store/find";
@@ -304,20 +306,34 @@ export class AnalysisQueue {
     return this.exclusive(async () => {
       const access = await this.access();
       const attempt = access.ok ? await this.send({ text }, access) : access.attempt;
-      switch (attempt.type) {
-        case "answered":
-          return { ok: true, answer: attempt.answer, model: attempt.model };
-        case "find-failed":
-          if (attempt.stop !== null) {
-            this.setStop(attempt.stop);
-          }
-          return { ok: false, notice: { kind: "find-failed", failure: attempt.failure } };
-        case "stays-waiting":
-          return { ok: false, notice: { kind: "paused", cause: attempt.cause } };
-        case "stop":
-          this.setStop(attempt.stop);
-          return { ok: false, notice: { kind: "stopped", stop: attempt.stop } };
+      return lookupResult(attempt, (stop) => this.setStop(stop));
+    });
+  }
+
+  /**
+   * Analyses an unsaved photo lookup at once, from its screen (docs/SPEC.md 3.9, PBI-2.13), as
+   * `analyseLookup` does a text: all its photos, given as the app's copies in the order added, are
+   * prepared one at a time and sent in one request, and nothing is stored. A photo that cannot be
+   * prepared fails the lookup, naming the photo when there are several, as for a find analysed
+   * from its screen, which the count of failed loads (PBI-1.25) does not count. No photo, or more
+   * than a find holds, is a programming error and rejects with a `RangeError`.
+   */
+  analysePhotoLookup(photoUris: readonly string[]): Promise<AnalyseLookupResult> {
+    if (photoUris.length === 0 || photoUris.length > config.maxPhotosPerFind) {
+      return Promise.reject(
+        new RangeError(`a photo lookup holds 1 to ${config.maxPhotosPerFind} photos`),
+      );
+    }
+    return this.exclusive(async () => {
+      const access = await this.access();
+      if (!access.ok) {
+        return lookupResult(access.attempt, (stop) => this.setStop(stop));
       }
+      const prepared = await this.preparePhotos(photoUris, access.model, false);
+      const attempt: Attempt = prepared.ok
+        ? await this.send({ imagesBase64: prepared.imagesBase64 }, access)
+        : { type: "find-failed", failure: prepared.failure, stop: null };
+      return lookupResult(attempt, (stop) => this.setStop(stop));
     });
   }
 
@@ -422,7 +438,11 @@ export class AnalysisQueue {
       }
       return this.send({ text: find.text }, access);
     }
-    const prepared = await this.preparePhotos(find, access.model, count !== null);
+    const prepared = await this.preparePhotos(
+      find.photos.map((photo) => photo.uri),
+      access.model,
+      count !== null,
+    );
     if (count !== null) {
       count.failedLoads = prepared.allLoaded ? 0 : count.failedLoads + 1;
       if (count.failedLoads >= FAILED_LOADS_THAT_STOP) {
@@ -441,23 +461,24 @@ export class AnalysisQueue {
   }
 
   /**
-   * Prepares the find's photos one at a time, in the order added (docs/SPEC.md 3.9, Batches). A
-   * photo that cannot be loaded, decoded or sized, or fails the segment check, comes back as a
-   * failure naming it; any other error while preparing one is not the photo's and passes through
-   * (Clead's decision for PBI-1.21). After a failure nothing is sent, so no more bytes are kept;
-   * with `settleLoads` (in a run) the photos after one that loaded are still prepared, until one
-   * does not load, so that the count of failed loads knows whether all of them load.
+   * Prepares a find's photos, or an unsaved lookup's, one at a time, in the order added
+   * (docs/SPEC.md 3.9, Batches). A photo that cannot be loaded, decoded or sized, or fails the
+   * segment check, comes back as a failure naming it; any other error while preparing one is not
+   * the photo's and passes through (Clead's decision for PBI-1.21). After a failure nothing is
+   * sent, so no more bytes are kept; with `settleLoads` (in a run) the photos after one that loaded
+   * are still prepared, until one does not load, so that the count of failed loads knows whether
+   * all of them load.
    */
   private async preparePhotos(
-    find: StoredFind,
+    photoUris: readonly string[],
     model: string,
     settleLoads: boolean,
   ): Promise<PreparedPhotos> {
     const imagesBase64: string[] = [];
     let failure: FindFailure | null = null;
     let allLoaded = true;
-    for (const [index, photo] of find.photos.entries()) {
-      const prepared = await this.deps.preparePhoto(photo.uri, model);
+    for (const [index, uri] of photoUris.entries()) {
+      const prepared = await this.deps.preparePhoto(uri, model);
       if (prepared.ok) {
         if (failure === null) {
           imagesBase64.push(prepared.imageBase64);
@@ -465,7 +486,7 @@ export class AnalysisQueue {
         continue;
       }
       allLoaded = allLoaded && prepared.loaded;
-      failure ??= naming(prepared.failure, index + 1, find.photos.length);
+      failure ??= naming(prepared.failure, index + 1, photoUris.length);
       if (!settleLoads || !allLoaded) {
         break;
       }
@@ -614,6 +635,28 @@ function waitsForTheQueue(find: StoredFind): boolean {
  */
 function sentOf(find: StoredFind): AnalysisSent {
   return { photoUris: find.photos.map((photo) => photo.uri) };
+}
+
+/**
+ * What an unsaved lookup's attempt comes to on its screen (docs/SPEC.md 3.9, Lookups), with the
+ * screen in the find's place: the answer; or the notice, with the queue stopped (`setStop`) for a
+ * class that stops it, a missing key too. A class that leaves a find waiting sets no pause.
+ */
+function lookupResult(attempt: Attempt, setStop: (stop: QueueStop) => void): AnalyseLookupResult {
+  switch (attempt.type) {
+    case "answered":
+      return { ok: true, answer: attempt.answer, model: attempt.model };
+    case "find-failed":
+      if (attempt.stop !== null) {
+        setStop(attempt.stop);
+      }
+      return { ok: false, notice: { kind: "find-failed", failure: attempt.failure } };
+    case "stays-waiting":
+      return { ok: false, notice: { kind: "paused", cause: attempt.cause } };
+    case "stop":
+      setStop(attempt.stop);
+      return { ok: false, notice: { kind: "stopped", stop: attempt.stop } };
+  }
 }
 
 /**

@@ -18,8 +18,8 @@ import { AppState } from "react-native";
 
 import type { Answer, Match } from "../../analysis/answer";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
-import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { STRINGS } from "../../i18n/strings";
+import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { PHOTO_LOOKUP_SAVE_KEY, TEXT_LOOKUP_SAVE_KEY } from "../../lookup/saveSetting";
 import { answerToJson } from "../../store/answerJson";
@@ -284,7 +284,7 @@ describe("the Save switch on New find (SPEC 3.9, Lookups)", () => {
       picture: null,
       selfCheck: null,
     });
-    renderRouter(APP_DIR, { initialUrl: "/new-find?find=1" });
+    await renderRouter(APP_DIR, { initialUrl: "/new-find?find=1" });
     await settle();
     expect(await screen.findByText(en.newFind.saved)).toBeOnTheScreen();
     expect(screen.queryByRole("switch", { name: en.newFind.save })).not.toBeOnTheScreen();
@@ -372,7 +372,11 @@ describe("an unsaved photo lookup (Save off)", () => {
     await press(en.newFind.takePhoto);
     jest.mocked(preparePhotoForAnalysis).mockImplementation(async (uri) =>
       uri === shots[1]?.uri
-        ? { ok: false, loaded: true, failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" } }
+        ? {
+            ok: false,
+            loaded: true,
+            failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+          }
         : { ok: true, imageBase64: btoa(uri), width: 1, height: 1 },
     );
     await press(en.newFind.analyse);
@@ -387,9 +391,12 @@ describe("an unsaved photo lookup (Save off)", () => {
     expect(notice.queryByText(/0x|forbidden-segment|file:/)).not.toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: en.newFind.turnSaveOn })).not.toBeOnTheScreen();
     expect(fetchMock).not.toHaveBeenCalled();
-    jest
-      .mocked(preparePhotoForAnalysis)
-      .mockImplementation(async (uri) => ({ ok: true, imageBase64: btoa(uri), width: 1, height: 1 }));
+    jest.mocked(preparePhotoForAnalysis).mockImplementation(async (uri) => ({
+      ok: true,
+      imageBase64: btoa(uri),
+      width: 1,
+      height: 1,
+    }));
     fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
     await press(en.newFind.analyse);
     expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();

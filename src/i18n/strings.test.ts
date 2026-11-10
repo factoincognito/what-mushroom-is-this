@@ -175,11 +175,14 @@ describe("the strings of the new find", () => {
     ]);
   });
 
-  it.each(LANGUAGES)("fill in the count and the most of the photos an unsaved lookup holds, in %s (PBI-2.13)", (language) => {
-    const { heldCount } = STRINGS[language].newFind;
-    expect(heldCount).toContain("{count}");
-    expect(heldCount).toContain("{max}");
-  });
+  it.each(LANGUAGES)(
+    "fill in the count and the most of the photos an unsaved lookup holds, in %s (PBI-2.13)",
+    (language) => {
+      const { heldCount } = STRINGS[language].newFind;
+      expect(heldCount).toContain("{count}");
+      expect(heldCount).toContain("{max}");
+    },
+  );
 
   it("say in English that an unsaved lookup's photos are held on the screen only, and the plural questions speak of the photos (PBI-2.13)", () => {
     const t = STRINGS.en.newFind;
