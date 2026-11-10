@@ -31,7 +31,7 @@ All notable changes to What mushroom is this? are documented here.
 - Phase 2's specification, approved by Adam: text lookup, several photos
   per find, a 1–100 confidence, the Library with a map, a Wikimedia
   picture and a self-check for text lookups (#47, #50, #56, #58, #62,
-  #69).
+  #69, #72).
 - The store at schema version 2, with a migration that keeps every
   Phase 1 find (#49).
 
@@ -88,6 +88,9 @@ All notable changes to What mushroom is this? are documented here.
   phone's position, the finds that pass the filters as pins, with the
   map data's attribution; the iOS location text now says the map's
   provider sees the area shown (#68).
+- A text lookup's answer gets a representative picture of the species
+  from Wikimedia Commons, credited, under an allowlist of licences; it is
+  shown on the find, the lookup screen and in the Library (#71).
 
 ## Project created
 
