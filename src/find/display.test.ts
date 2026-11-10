@@ -11,6 +11,7 @@ import {
   formatFindTime,
   formatUtcOffset,
   mapLink,
+  matchBasis,
   parseFindId,
   positionSourceText,
   selfCheckReason,
@@ -221,6 +222,27 @@ describe("the texts of a find's values", () => {
       t.positionSources.lastKnown,
       t.positionSources.photo,
     ]);
+  });
+});
+
+describe("matchBasis: what an answer naming a species was based on (Clead's decision 3 on #57)", () => {
+  it.each([
+    "waiting",
+    "agreed",
+    "no-species",
+    "failed",
+    "no-picture",
+  ] as const)("is the description for an answer with a self-check that is %s: the text alone", (state) => {
+    expect(matchBasis({ state })).toBe("described");
+  });
+
+  it("is the description for an answer whose self-check disagreed", () => {
+    const names = { sv: "a", en: "b", la: "c d", it: "e" };
+    expect(matchBasis({ state: "disagreed", names })).toBe("described");
+  });
+
+  it("is a photo for an answer without a self-check: from photos, with or without text", () => {
+    expect(matchBasis(null)).toBe("photo");
   });
 });
 

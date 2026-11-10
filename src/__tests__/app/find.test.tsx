@@ -859,7 +859,8 @@ describe("a text find (SPEC 3.9, PBI-2.4)", () => {
     "shows the disclaimer for a lookup without photos in %s",
     async (lang) => {
       phoneIn(lang);
-      mockLog.finds.set(1, aTextFind(done(CHANTERELLE)));
+      // As the store holds it: an answer from the text alone that names a species has a check.
+      mockLog.finds.set(1, aTextFind(done(CHANTERELLE), { selfCheck: { state: "waiting" } }));
       await startApp();
       const edibility = within(await screen.findByTestId("match-edibility"));
       expect(edibility.getByText(STRINGS[lang].disclaimerDescribed)).toBeOnTheScreen();
@@ -1090,6 +1091,63 @@ describe("the edibility of an answer from text alone, until its self-check agree
     expect(after.getByText(en.disclaimer)).toBeOnTheScreen();
     expect(after.queryByText(en.disclaimerDescribed)).not.toBeOnTheScreen();
     expect(screen.queryByText(en.find.addedPhotos.waiting)).not.toBeOnTheScreen();
+  });
+});
+
+describe("the disclaimer follows what the answer shown was based on (Clead's decision 3 on #57)", () => {
+  it.each([
+    "waiting",
+    "not-analysed",
+  ] as const)("an answer from the text alone keeps the disclaimer for a description once the find has photos that are %s", async (addedPhotos) => {
+    mockLog.finds.set(
+      1,
+      aTextFind(done(CHANTERELLE), {
+        photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+        addedPhotos,
+        selfCheck: { state: "agreed" },
+      }),
+    );
+    await startApp();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+    expect(edibility.queryByText(en.disclaimer)).not.toBeOnTheScreen();
+  });
+
+  it("an answer from the text alone keeps the disclaimer for a description after the photos added since are removed, through the find log", async () => {
+    const id = await mockLog.addText({
+      text: DESCRIPTION,
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
+    await mockLog.setAnswer(
+      id,
+      { answer: CHANTERELLE, model: "m", analysedAtMs: 1 },
+      { photoUris: [] },
+    );
+    await mockLog.addPhoto(id, "file:///photos/a.jpg");
+    await mockLog.completeBatch(id);
+    await mockLog.removePhoto(id, 1);
+    await startApp(`/find/${id}`);
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+  });
+
+  it("an answer from photos keeps 3.5's disclaimer after the text find's photos are all removed, through the find log", async () => {
+    const id = await mockLog.addText({
+      text: DESCRIPTION,
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
+    await mockLog.addPhoto(id, "file:///photos/a.jpg");
+    await mockLog.completeBatch(id);
+    const sent = { photoUris: ["file:///photos/a.jpg"] };
+    await mockLog.setAnswer(id, { answer: CHANTERELLE, model: "m", analysedAtMs: 1 }, sent);
+    await mockLog.removePhoto(id, 1);
+    expect((await mockLog.getStored(id))?.photos).toEqual([]);
+    await startApp(`/find/${id}`);
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(en.disclaimer)).toBeOnTheScreen();
+    expect(edibility.queryByText(en.disclaimerDescribed)).not.toBeOnTheScreen();
   });
 });
 

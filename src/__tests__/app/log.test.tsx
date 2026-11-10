@@ -406,6 +406,28 @@ describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
     expect(row.queryByText(en.disclaimerDescribed)).toBeNull();
   });
 
+  it("an answer from the text alone keeps the disclaimer for a description once the find has photos waiting (Clead's decision 3 on #57)", async () => {
+    mockLog.finds.set(1, {
+      ...textFind(1, 0, done(CHANTERELLE)),
+      photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+      addedPhotos: "waiting",
+    });
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(row.getByLabelText(en.find.photo)).toBeOnTheScreen();
+    expect(row.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+    expect(row.queryByText(en.disclaimer)).toBeNull();
+  });
+
+  it("an answer from photos keeps 3.5's disclaimer once the text find's photos are all removed (Clead's decision 3 on #57)", async () => {
+    mockLog.finds.set(1, textFind(1, 0, done(CHANTERELLE), null));
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(row.queryByLabelText(en.find.photo)).toBeNull();
+    expect(row.getByText(en.disclaimer)).toBeOnTheScreen();
+    expect(row.queryByText(en.disclaimerDescribed)).toBeNull();
+  });
+
   it("has a link to the text lookup", async () => {
     const app = await startApp();
     await fireEvent.press(await screen.findByRole("link", { name: en.log.textLookup }));
