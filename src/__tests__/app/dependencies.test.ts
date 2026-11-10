@@ -5,6 +5,7 @@
  * duplicate dependencies are installed: `expo` brought `expo-font` 57.0.4, and npm filled the
  * `expo-font: "*"` peer of `expo-symbols` (a dependency of `expo-router`) with 58.0.11, of the
  * next SDK. CI cannot run `expo doctor` (it asks Expo's servers), so the lockfile is checked here.
+ * Since PBI-1.29 (note 2 on #45) the same holds for every native module Expo's autolinking finds.
  */
 import { fs, PROJECT_ROOT, path } from "../../testing/projectFiles";
 
@@ -25,6 +26,65 @@ function installedCopies(name: string): { at: string; version: unknown }[] {
   return Object.entries(packages)
     .filter(([at]) => at === `node_modules/${name}` || at.endsWith(`/node_modules/${name}`))
     .map(([at, entry]) => ({ at, version: entry.version }));
+}
+
+/** The package a lockfile entry installs, by its path: the name after its last `node_modules/`. */
+function packageAt(at: string): string | undefined {
+  const marker = "node_modules/";
+  const index = at.lastIndexOf(marker);
+  return index === -1 ? undefined : at.slice(index + marker.length);
+}
+
+/**
+ * The packages among `names` that the lockfile records at more than one version, each with its
+ * versions, sorted; a copy without a version counts as a version of its own (PBI-1.29).
+ */
+function atSeveralVersions(
+  lock: Lockfile,
+  names: string[],
+): { name: string; versions: string[] }[] {
+  const wanted = new Set(names);
+  const versions = new Map<string, Set<string>>();
+  for (const [at, entry] of Object.entries(lock.packages ?? {})) {
+    const name = packageAt(at);
+    if (name !== undefined && wanted.has(name)) {
+      const version = typeof entry.version === "string" ? entry.version : "(no version)";
+      versions.set(name, (versions.get(name) ?? new Set()).add(version));
+    }
+  }
+  return [...versions]
+    .filter(([, found]) => found.size > 1)
+    .map(([name, found]) => ({ name, versions: [...found].sort() }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+type AutolinkingDependencies = {
+  makeCachedDependenciesLinker(params: { projectRoot: string }): unknown;
+  scanDependencyResolutionsForPlatform(
+    linker: unknown,
+    platform: "android" | "ios",
+    extraInclude?: string[],
+  ): Promise<Record<string, unknown>>;
+  mergeResolutionResults(results: Record<string, unknown>[]): Record<string, unknown>;
+};
+
+/**
+ * The native modules of the app, by name: those Expo's autolinking finds for Android and iOS in
+ * the installed dependencies, as `npx expo-modules-autolinking verify -p native` scans them, with
+ * React Native, which that command adds (its source, `build/commands/verifyCommand.js`).
+ */
+async function nativeModuleNames(): Promise<string[]> {
+  const autolinking: AutolinkingDependencies = jest.requireActual(
+    "expo-modules-autolinking/build/dependencies/index",
+  );
+  const linker = autolinking.makeCachedDependenciesLinker({ projectRoot: PROJECT_ROOT });
+  const platforms = ["android", "ios"] as const;
+  const results = await Promise.all(
+    platforms.map((platform) =>
+      autolinking.scanDependencyResolutionsForPlatform(linker, platform, ["react-native"]),
+    ),
+  );
+  return Object.keys(autolinking.mergeResolutionResults(results)).sort();
 }
 
 /** A version as `major.minor.patch`, or undefined for any other form (a pre-release included). */
