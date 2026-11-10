@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "Q1001": {
+      "type": "item",
+      "id": "Q1001",
+      "claims": {
+        "P225": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P225",
+              "datavalue": { "value": "Cantharellus cibarius", "type": "string" },
+              "datatype": "string"
+            },
+            "type": "statement",
+            "id": "Q1001$1",
+            "rank": "normal"
+          }
+        ],
+        "P105": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P105",
+              "datavalue": {
+                "value": { "entity-type": "item", "numeric-id": 7432, "id": "Q7432" },
+                "type": "wikibase-entityid"
+              },
+              "datatype": "wikibase-item"
+            },
+            "type": "statement",
+            "id": "Q1001$2",
+            "rank": "normal"
+          }
+        ],
+        "P171": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P171",
+              "datavalue": {
+                "value": { "entity-type": "item", "numeric-id": 1002, "id": "Q1002" },
+                "type": "wikibase-entityid"
+              },
+              "datatype": "wikibase-item"
+            },
+            "type": "statement",
+            "id": "Q1001$3",
+            "rank": "normal"
+          }
+        ],
+        "P18": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P18",
+              "datavalue": { "value": "Chanterelle Cantharellus cibarius.jpg", "type": "string" },
+              "datatype": "commonsMedia"
+            },
+            "type": "statement",
+            "id": "Q1001$4",
+            "rank": "normal"
+          }
+        ]
+      },
+      "sitelinks": {
+        "enwiki": { "site": "enwiki", "title": "Cantharellus cibarius", "badges": [] },
+        "svwiki": { "site": "svwiki", "title": "Kantarell", "badges": [] },
+        "itwiki": { "site": "itwiki", "title": "Cantharellus cibarius", "badges": [] }
+      }
+    }
+  },
+  "success": 1
+}

@@ -1,0 +1,45 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "normalized": [
+      {
+        "fromencoded": false,
+        "from": "File:Chanterelle_Cantharellus_cibarius.jpg",
+        "to": "File:Chanterelle Cantharellus cibarius.jpg"
+      }
+    ],
+    "pages": [
+      {
+        "pageid": 3001,
+        "ns": 6,
+        "title": "File:Chanterelle Cantharellus cibarius.jpg",
+        "templates": [
+          { "ns": 10, "title": "Template:Information" },
+          { "ns": 10, "title": "Template:Self" },
+          { "ns": 10, "title": "Template:GFDL" },
+          { "ns": 10, "title": "Template:Cc-by-sa-3.0" },
+          { "ns": 10, "title": "Template:Cc-by-sa-layout" },
+          { "ns": 10, "title": "Template:License template tag" }
+        ],
+        "imagerepository": "local",
+        "imageinfo": [
+          {
+            "size": 2871444,
+            "width": 4000,
+            "height": 3000,
+            "url": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Chanterelle_Cantharellus_cibarius.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+            "descriptionurl": "https://commons.wikimedia.org/wiki/File:Chanterelle_Cantharellus_cibarius.jpg",
+            "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=3001",
+            "mime": "image/jpeg",
+            "extmetadata": {
+              "Artist": {
+                "value": "<a href=\"//commons.wikimedia.org/wiki/User:Example\" title=\"User:Example\">Example&nbsp;Photographer</a> &amp; <span lang=\"sv\">Ann Exempel</span>",
+                "source": "commons-desc-page"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

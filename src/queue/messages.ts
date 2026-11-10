@@ -42,6 +42,7 @@ export function noticeMessage(
         network: t.paused.network,
         "time-out": t.paused.timeOut,
         server: t.paused.server,
+        "picture-source": t.paused.pictureSource,
       }[notice.cause];
     case "stopped":
       return stopMessage(notice.stop, strings, formatTime);

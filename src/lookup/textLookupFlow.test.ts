@@ -1,5 +1,6 @@
 import type { Answer } from "../analysis/answer";
 import { phoneTimeNow } from "../newFind/saveFind";
+import type { PictureFetch } from "../picture/fetchPicture";
 import type { AnalyseLookupResult } from "../queue/queue";
 import type { NewTextFind, Position } from "../store/find";
 import { INITIAL_TEXT_LOOKUP_VIEW, TextLookupFlow, type TextLookupView } from "./textLookupFlow";
@@ -19,6 +20,15 @@ const MATCH: Answer = {
   lookAlikes: [],
 };
 
+const PICTURE = {
+  uri: "file:///cache/picture-2.jpg",
+  author: "Example Photographer",
+  licence: "cc-by-sa-3.0",
+  page: "https://commons.wikimedia.org/wiki/File:Chanterelle.jpg",
+};
+const FOUND: PictureFetch = { kind: "picture", picture: PICTURE };
+const SHOWN = { state: "shown", picture: PICTURE } as const;
+
 const granted = { status: "granted", canAskAgain: true };
 const undetermined = { status: "undetermined", canAskAgain: true };
 const denied = { status: "denied", canAskAgain: true };
@@ -36,6 +46,10 @@ function setup(options: { saveAtStart?: boolean; permission?: unknown; lastKnown
   let watchStopped = 0;
   let permissionAsked = 0;
   let current = options.permission ?? granted;
+  const pictures: (PictureFetch | Error)[] = [];
+  const pictureNames: string[] = [];
+  const removed: string[] = [];
+  let pictureHold: Promise<void> | null = null;
 
   const flow = new TextLookupFlow(
     {
@@ -61,6 +75,20 @@ function setup(options: { saveAtStart?: boolean; permission?: unknown; lastKnown
           throw reply;
         }
         return reply;
+      },
+      fetchPicture: async (latinName) => {
+        pictureNames.push(latinName);
+        if (pictureHold !== null) {
+          await pictureHold;
+        }
+        const reply = pictures.shift() ?? FOUND;
+        if (reply instanceof Error) {
+          throw reply;
+        }
+        return reply;
+      },
+      removePictureCopy: (uri) => {
+        removed.push(uri);
       },
       readSaveSetting: async () => options.saveAtStart ?? false,
       location: {
@@ -103,6 +131,20 @@ function setup(options: { saveAtStart?: boolean; permission?: unknown; lastKnown
     permissionAsked: () => permissionAsked,
     failAdds: (error: Error | null) => {
       addError = error;
+    },
+    pictures,
+    pictureNames,
+    removed,
+    /** Holds the picture fetches open until the function it gives is called. */
+    holdPictures: () => {
+      let release: () => void = () => undefined;
+      pictureHold = new Promise((resolve) => {
+        release = () => {
+          pictureHold = null;
+          resolve();
+        };
+      });
+      return release;
     },
     /** Holds the saves open until the function it gives is called. */
     holdAdds: () => {
@@ -179,9 +221,11 @@ describe("the text (SPEC 3.9: up to the configured length)", () => {
     await t.flow.start();
     t.flow.setText(SHORT);
     await t.flow.analyse();
-    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH });
+    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN });
     t.flow.setText(`${SHORT} White.`);
     expect(t.view().outcome).toBeNull();
+    // Its picture goes with it (docs/SPEC.md 3.9: shown, not stored).
+    expect(t.removed).toEqual([PICTURE.uri]);
   });
 });
 
@@ -325,7 +369,7 @@ describe("an unsaved lookup (Save off)", () => {
       });
       await t.flow.analyse();
       expect(t.lookups).toEqual([SHORT, SHORT]);
-      expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH });
+      expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN });
     },
   );
 
@@ -491,5 +535,145 @@ describe("the edges of the flow", () => {
     release();
     await saving;
     expect(t.watchStopped()).toBe(1);
+  });
+});
+
+describe("an unsaved lookup's representative picture (docs/SPEC.md 3.9; PBI-2.9)", () => {
+  it("is fetched at once after an answer naming a species, by its Latin name, and shown", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    const release = t.holdPictures();
+    const analysing = t.flow.analyse();
+    await flush();
+    expect(t.view()).toMatchObject({
+      phase: "ready",
+      outcome: { kind: "answer", answer: MATCH, picture: { state: "fetching" } },
+    });
+    release();
+    await analysing;
+    expect(t.pictureNames).toEqual(["Cantharellus cibarius"]);
+    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN });
+    expect(t.added).toEqual([]);
+  });
+
+  it.each([
+    ["no mushroom", { result: "no_mushroom" }],
+    ["cannot tell", { result: "cannot_tell" }],
+  ] as const)("is not fetched for %s", async (_name, answer) => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    t.replies.push({ ok: true, answer, model: "claude-opus-5-5" });
+    await t.flow.analyse();
+    expect(t.pictureNames).toEqual([]);
+    expect(t.view().outcome).toEqual({ kind: "answer", answer, picture: null });
+  });
+
+  it("with no picture for the answer, shows none", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    t.pictures.push({ kind: "none", reason: "no-author" });
+    await t.flow.analyse();
+    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: { state: "none" } });
+  });
+
+  it.each([
+    ["no network", "network"],
+    ["a fault on Wikimedia's side", "picture-source"],
+  ] as const)("%s: the picture waits, and Check again fetches it again", async (_name, cause) => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    t.pictures.push({ kind: "waits", cause, retryAtMs: null });
+    await t.flow.analyse();
+    expect(t.view().outcome).toEqual({
+      kind: "answer",
+      answer: MATCH,
+      picture: { state: "waits", cause },
+    });
+    await t.flow.checkAgain();
+    expect(t.pictureNames).toEqual(["Cantharellus cibarius", "Cantharellus cibarius"]);
+    expect(t.lookups).toEqual([SHORT]);
+    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN });
+  });
+
+  it("an error in the app while fetching it: says so, and Check again tries again", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    t.pictures.push(new Error("No space left on device"));
+    await t.flow.analyse();
+    expect(t.view().outcome).toEqual({
+      kind: "answer",
+      answer: MATCH,
+      picture: { state: "error" },
+    });
+    await t.flow.checkAgain();
+    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN });
+  });
+
+  it("Check again does nothing while a picture is shown, or none was found", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    await t.flow.analyse();
+    await t.flow.checkAgain();
+    t.pictures.push({ kind: "none", reason: "licence" });
+    t.flow.setText(`${SHORT} Red.`);
+    await t.flow.analyse();
+    await t.flow.checkAgain();
+    expect(t.pictureNames).toHaveLength(2);
+  });
+
+  it("removes its copy when the screen is left, and a fetch that ends after that keeps nothing", async () => {
+    const shown = setup();
+    await shown.flow.start();
+    shown.flow.setText(SHORT);
+    await shown.flow.analyse();
+    shown.flow.close();
+    expect(shown.removed).toEqual([PICTURE.uri]);
+
+    const late = setup();
+    await late.flow.start();
+    late.flow.setText(SHORT);
+    const release = late.holdPictures();
+    const analysing = late.flow.analyse();
+    await flush();
+    late.flow.close();
+    release();
+    await analysing;
+    expect(late.removed).toEqual([PICTURE.uri]);
+  });
+
+  it("removes the copy of a picture that comes for an answer no longer shown", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    const release = t.holdPictures();
+    const analysing = t.flow.analyse();
+    await flush();
+    t.flow.setText(`${SHORT} Red.`);
+    release();
+    await analysing;
+    expect(t.view().outcome).toBeNull();
+    expect(t.removed).toEqual([PICTURE.uri]);
+  });
+
+  it("removes the copy shown when Analyse is tapped again, and shows the new answer's picture", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    await t.flow.analyse();
+    const next = { ...PICTURE, uri: "file:///cache/picture-4.jpg" };
+    t.pictures.push({ kind: "picture", picture: next });
+    await t.flow.analyse();
+    expect(t.removed).toEqual([PICTURE.uri]);
+    expect(t.view().outcome).toEqual({
+      kind: "answer",
+      answer: MATCH,
+      picture: { state: "shown", picture: next },
+    });
   });
 });

@@ -1,0 +1,13 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {
+        "ns": 6,
+        "title": "File:Chanterelle Cantharellus cibarius.jpg",
+        "missing": true,
+        "known": false
+      }
+    ]
+  }
+}

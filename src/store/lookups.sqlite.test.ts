@@ -225,12 +225,13 @@ describe("a text find (PBI-2.2)", () => {
         analysis: { state: "waiting" },
         selfCheck: null,
         species: null,
+        picture: null,
       },
     ]);
     await expect(store.oldestWaiting()).resolves.toBe(id);
   });
 
-  it("is listed with its answer once analysed from its text, its self-check waiting (PBI-2.4)", async () => {
+  it("is listed with its answer once analysed from its text, its self-check waiting, and taken by the queue's pick for its picture (PBI-2.4, PBI-2.9)", async () => {
     const id = await answeredTextFind();
     await expect(store.list()).resolves.toEqual([
       {
@@ -249,9 +250,11 @@ describe("a text find (PBI-2.2)", () => {
         selfCheck: { state: "waiting" },
         // The text answer's species, for the Library's filters while the check waits (PBI-2.7).
         species: match.names,
+        picture: null,
       },
     ]);
-    await expect(store.oldestWaiting()).resolves.toBeNull();
+    // Its picture waits for the queue (docs/SPEC.md 3.9, Fetching it; PBI-2.9).
+    await expect(store.oldestWaiting()).resolves.toBe(id);
   });
 
   it("is shown by Phase 1's views once it has a photo", async () => {
@@ -517,6 +520,78 @@ describe("the queue's pick of an analysed find with new photos (SPEC 3.9, Batche
     await expect(store.oldestWaiting()).resolves.toBe(first);
     await store.replaceAnswer(first, analysed, await sentAll(first));
     await expect(store.oldestWaiting()).resolves.toBe(second);
+  });
+});
+
+describe("the queue's pick of a text answer whose picture waits (docs/SPEC.md 3.9, Fetching it; PBI-2.9)", () => {
+  it("takes it until it has its picture, or its check has none", async () => {
+    const pictured = await answeredTextFind();
+    const without = await answeredTextFind();
+    await expect(store.oldestWaiting()).resolves.toBe(pictured);
+    await store.setPicture(pictured, newPicture);
+    await expect(store.oldestWaiting()).resolves.toBe(without);
+    await store.setSelfCheck(without, { state: "no-picture" });
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
+  it("takes the finds oldest first by ID, waiting ones and those whose picture waits alike", async () => {
+    const waiting = await store.add(photoFind());
+    const text = await answeredTextFind();
+    await expect(store.oldestWaiting()).resolves.toBe(waiting);
+    await store.setAnswer(waiting, analysed, await sentAll(waiting));
+    await expect(store.oldestWaiting()).resolves.toBe(text);
+  });
+
+  it("does not take it while a batch of photos is open on it, and takes it for its photos once complete", async () => {
+    const id = await answeredTextFind();
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+    await store.completeBatch(id);
+    await expect(store.oldestWaiting()).resolves.toBe(id);
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      addedPhotos: "waiting",
+      selfCheck: { state: "waiting" },
+      picture: null,
+    });
+  });
+
+  it("does not take a text answer whose picture is stored, nor one from photos, nor a photo find's", async () => {
+    const id = await answeredTextFind();
+    await store.setPicture(id, newPicture);
+    const photo = await store.add(photoFind());
+    await store.setAnswer(photo, analysed, await sentAll(photo));
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+});
+
+describe("the list's picture of a text find (docs/SPEC.md 3.9, The Library; PBI-2.9)", () => {
+  it("gives the picture, with its credit, in place of a photo, also once the find has photos", async () => {
+    const id = await answeredTextFind();
+    await store.setPicture(id, newPicture);
+    const picture = {
+      // The test's photo directory names every copy `.jpg` (`memoryPhotos`).
+      uri: "file:///photos/p1.jpg",
+      author: newPicture.author,
+      licence: newPicture.licence,
+      page: newPicture.page,
+    };
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ id, photoUri: null, picture }),
+    ]);
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.completeBatch(id);
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ id, photoUri: "file:///photos/p2.jpg", picture }),
+    ]);
+  });
+
+  it("gives none once an answer from the find's photos replaces its text answer", async () => {
+    const id = await answeredTextFind();
+    await store.setPicture(id, newPicture);
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.completeBatch(id);
+    await store.replaceAnswer(id, analysed, await sentAll(id));
+    await expect(store.list()).resolves.toEqual([expect.objectContaining({ id, picture: null })]);
   });
 });
 

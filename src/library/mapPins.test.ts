@@ -52,6 +52,7 @@ function summary(
           },
     selfCheck: null,
     species,
+    picture: null,
   };
 }
 

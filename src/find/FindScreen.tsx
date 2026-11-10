@@ -43,6 +43,7 @@ import {
   selfCheckReason,
   timeSourceText,
 } from "./display";
+import { PictureView } from "./PictureView";
 
 /** What the screen has read of its find. */
 type Loaded =
@@ -85,6 +86,9 @@ type Message =
  * since its answer are said to wait, or not to have been analysed, while the answer is kept. A
  * find whose batch is still open has "Analyse" complete it, which leaves the find to the queue.
  * The find is read again whenever the screen comes into view, so photos added are shown.
+ *
+ * A text answer's representative picture (SPEC 3.9; PBI-2.9) is shown after the photos, apart
+ * from them, labelled as a picture of the species, not of the user's mushroom, with its credit.
  */
 export function FindScreen({ id }: { readonly id: number | null }) {
   const { language, strings } = useLanguage();
@@ -281,6 +285,16 @@ export function FindScreen({ id }: { readonly id: number | null }) {
               </View>
             );
           })}
+          {find.picture !== null &&
+            find.analysis.state === "done" &&
+            find.analysis.answer.result === "match" && (
+              // Apart from the photos: never one of them (docs/SPEC.md 3.9; PBI-2.9).
+              <PictureView
+                picture={find.picture}
+                speciesName={find.analysis.answer.names[language]}
+                strings={strings}
+              />
+            )}
           {count < config.maxPhotosPerFind ? (
             <Link href={`/new-find?find=${find.id}`} accessibilityRole="link" style={styles.link}>
               {t.addPhotos}

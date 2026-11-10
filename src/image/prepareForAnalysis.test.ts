@@ -4,6 +4,7 @@ import {
   type JpegEncoder,
   type LoadedImage,
   PhotoPreparationError,
+  prepareJpegForAnalysis,
   preparePhotoForAnalysis,
 } from "./prepareForAnalysis";
 
@@ -239,5 +240,37 @@ describe("preparePhotoForAnalysis", () => {
     await expect(
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder, custom),
     ).rejects.toBeInstanceOf(PhotoPreparationError);
+  });
+});
+
+describe("prepareJpegForAnalysis (the representative picture's resize, docs/SPEC.md 3.9; PBI-2.9)", () => {
+  it("gives the checked JPEG's bytes, sized as a photo's, for a copy to be kept", async () => {
+    const prepared = await prepareJpegForAnalysis(
+      "file:///cache/picture-1.png",
+      "claude-opus-5-5",
+      encoder,
+    );
+    expect(encoder.encoded).toEqual([[2212, 1659, config.analysisJpegQuality]]);
+    expect(prepared).toEqual({ ok: true, bytes: CLEAN, width: 2212, height: 1659 });
+    expect(encoder.released).toBe(1);
+  });
+
+  it("fails as a photo fails: what the segment check refuses, and what cannot be loaded", async () => {
+    encoder.bytes = WITH_EXIF;
+    await expect(
+      prepareJpegForAnalysis("file:///cache/picture-1.png", "claude-opus-5-5", encoder),
+    ).resolves.toEqual({
+      ok: false,
+      loaded: true,
+      failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+    });
+    encoder.loadError = new Error("");
+    await expect(
+      prepareJpegForAnalysis("file:///cache/picture-1.png", "claude-opus-5-5", encoder),
+    ).resolves.toEqual({
+      ok: false,
+      loaded: false,
+      failure: { cause: "photo", detail: "load-failed" },
+    });
   });
 });

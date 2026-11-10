@@ -50,6 +50,8 @@ beforeEach(async () => {
       },
       now: () => 10_000,
       schedule: () => () => undefined,
+      fetchPicture: async () => ({ kind: "none", reason: "no-item" }),
+      removePictureCopy: () => undefined,
     },
     { apiAddress: "https://api.anthropic.com", timeLimitMs: 60_000 },
   );

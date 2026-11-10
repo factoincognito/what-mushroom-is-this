@@ -345,6 +345,7 @@ describe("the migration to schema version 2, on a version 1 database (PBI-2.2)",
       selfCheck: null,
       // The Latin name, from the stored answer, for the Library's species filter (PBI-2.7).
       species: match.names,
+      picture: null,
       analysis: {
         state: "done",
         result: "match",

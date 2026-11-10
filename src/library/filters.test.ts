@@ -68,6 +68,7 @@ function entry(
           }),
     selfCheck: null,
     species,
+    picture: null,
   };
   return { readable: true, ...summary };
 }

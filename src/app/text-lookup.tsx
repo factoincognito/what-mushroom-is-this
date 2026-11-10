@@ -15,10 +15,13 @@ import {
 
 import { config } from "../config/config";
 import { AnswerView, NoticeView } from "../find/FindScreen";
+import { PictureView } from "../find/PictureView";
 import { useLanguage } from "../i18n/LanguageContext";
+import type { Strings } from "../i18n/strings";
 import { readTextLookupSave } from "../lookup/saveSetting";
 import {
   INITIAL_TEXT_LOOKUP_VIEW,
+  type LookupPicture,
   TextLookupFlow,
   type TextLookupView,
 } from "../lookup/textLookupFlow";
@@ -36,13 +39,14 @@ import type { SelfCheck } from "../store/find";
  * with text entered saves it too, the leave waiting for the save. With Save off, "Analyse"
  * analyses it here and shows the answer as a find's screen would, with the disclaimer for a
  * lookup without photos; leaving with text entered asks first, on the screen (as SPEC 3.1 does
- * for a photo).
+ * for a photo). An answer naming a species shows its representative picture from Wikimedia
+ * Commons, with its credit, or "Check again" when it waits (SPEC 3.9; PBI-2.9).
  */
 export default function TextLookupScreen() {
   const { language, strings } = useLanguage();
   const t = strings.lookup;
   const findLog = useFindLog();
-  const { analyseLookup } = useQueue();
+  const { analyseLookup, fetchLookupPicture, removePictureCopy } = useQueue();
   const formatTime = useMemo(() => formatTimeIn(language), [language]);
   const [view, setView] = useState<TextLookupView>(INITIAL_TEXT_LOOKUP_VIEW);
   const [flow] = useState(
@@ -51,6 +55,8 @@ export default function TextLookupScreen() {
         {
           findLog,
           analyseLookup,
+          fetchPicture: fetchLookupPicture,
+          removePictureCopy,
           readSaveSetting: () => readTextLookupSave(deviceStore),
           location: { permission: locationPermission, source: deviceLocationSource },
           appConfig: config,
@@ -175,12 +181,21 @@ export default function TextLookupScreen() {
           {t[view.message]}
         </Text>
       )}
+      {view.outcome?.kind === "answer" && view.outcome.answer.result === "match" && (
+        <LookupPictureView
+          picture={view.outcome.picture}
+          speciesName={view.outcome.answer.names[language]}
+          strings={strings}
+          onCheckAgain={() => void flow.checkAgain()}
+        />
+      )}
       {view.outcome?.kind === "answer" && (
         <AnswerView
           answer={view.outcome.answer}
           // An unsaved lookup's answer is from its text alone, and its self-check is not made
-          // until PBI-2.10: it is shown as one whose check waits (SPEC 3.9).
-          selfCheck={UNSAVED_CHECK}
+          // until PBI-2.10: it is shown as one whose check waits, or as one without a picture
+          // when there is none (SPEC 3.9).
+          selfCheck={view.outcome.picture?.state === "none" ? NO_PICTURE_CHECK : UNSAVED_CHECK}
           subject="described"
           language={language}
           strings={strings}
@@ -216,6 +231,55 @@ export default function TextLookupScreen() {
 
 /** The self-check an unsaved lookup's answer is shown with. */
 const UNSAVED_CHECK: SelfCheck = { state: "waiting" };
+/** The self-check of an unsaved lookup's answer that has no picture (SPEC 3.9). */
+const NO_PICTURE_CHECK: SelfCheck = { state: "no-picture" };
+
+type LookupPictureViewProps = {
+  readonly picture: LookupPicture | null;
+  readonly speciesName: string;
+  readonly strings: Strings;
+  readonly onCheckAgain: () => void;
+};
+
+/**
+ * An unsaved lookup's representative picture (SPEC 3.9; PBI-2.9): while it is fetched, shown with
+ * its credit, or, when it waits or its fetch met an error in the app, why, with "Check again".
+ * With no picture for the answer it shows nothing: the edibility's reason says so.
+ */
+function LookupPictureView({
+  picture,
+  speciesName,
+  strings,
+  onCheckAgain,
+}: LookupPictureViewProps) {
+  const t = strings.lookup;
+  switch (picture?.state) {
+    case undefined:
+    case "none":
+      return null;
+    case "fetching":
+      return (
+        <View style={styles.row}>
+          <ActivityIndicator testID="picture-fetching" />
+          <Text style={styles.text}>{t.pictureFetching}</Text>
+        </View>
+      );
+    case "shown":
+      return <PictureView picture={picture.picture} speciesName={speciesName} strings={strings} />;
+    case "waits":
+    case "error":
+      return (
+        <View style={styles.section}>
+          <Text accessibilityLiveRegion="polite" style={styles.text}>
+            {picture.state === "waits" ? t.pictureWaits : t.pictureError}
+          </Text>
+          <Pressable accessibilityRole="button" onPress={onCheckAgain} style={styles.button}>
+            <Text style={styles.buttonText}>{t.checkAgain}</Text>
+          </Pressable>
+        </View>
+      );
+  }
+}
 
 function openSettings(): void {
   Linking.openSettings().catch(() => undefined);

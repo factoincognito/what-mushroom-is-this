@@ -1,5 +1,5 @@
 import { Link, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -19,6 +19,7 @@ import {
   matchBasis,
   selfCheckReason,
 } from "../find/display";
+import { PictureCredit } from "../find/PictureView";
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Language } from "../i18n/languages";
 import type { Strings } from "../i18n/strings";
@@ -62,7 +63,8 @@ type ListState =
  * opened and closed by a button; a chosen species or year that no find has any longer is dropped.
  * A find that could not be read is always listed, whatever the filters. A find without photos
  * shows the text mark in place of a photo; a find with photos shows its first (Clead's decision on
- * #63). The rest is the Log's, kept as it was:
+ * #63); a text answer's representative picture, while the find has one, takes the place of either,
+ * with its credit (PBI-2.9). The rest is the Log's, kept as it was:
  *
  * The finds, newest first as the store lists
  * them, each with its photo, date and time, the species name in the app's language and the
@@ -401,33 +403,64 @@ type FindRowProps = {
   readonly strings: Strings;
 };
 
-/** One find in the list; it opens the find's own screen. */
+/**
+ * One find in the list; it opens the find's own screen. A text answer's representative picture
+ * (SPEC 3.9; PBI-2.9) takes the place of the text mark, and of the first photo of a text find with
+ * photos whose answer is from the text alone, while it has one; its credit follows the row, apart
+ * from it, so that its links do not open the find.
+ */
 function FindRow({ find, language, strings }: FindRowProps) {
+  const { picture, analysis } = find;
+  const speciesName =
+    analysis.state === "done" && analysis.result === "match" ? analysis.names[language] : null;
+  const shownPicture = picture !== null && speciesName !== null ? picture : null;
+  let thumbnail: ReactNode;
+  if (shownPicture !== null) {
+    thumbnail = (
+      <Image
+        source={{ uri: shownPicture.uri }}
+        accessibilityLabel={fillIn(strings.find.picture.label, { name: speciesName ?? "" })}
+        style={styles.thumbnail}
+      />
+    );
+  } else if (find.photoUri !== null) {
+    thumbnail = (
+      <Image
+        source={{ uri: find.photoUri }}
+        accessibilityLabel={strings.find.photo}
+        style={styles.thumbnail}
+      />
+    );
+  } else {
+    thumbnail = (
+      <View
+        accessible
+        accessibilityLabel={strings.log.textMarkLabel}
+        style={[styles.thumbnail, styles.textMark]}
+      >
+        <Text style={styles.textMarkText}>{strings.log.textMark}</Text>
+      </View>
+    );
+  }
   return (
-    <Link href={`/find/${find.id}`} asChild>
-      <Pressable accessibilityRole="link" testID={`find-row-${find.id}`} style={styles.findRow}>
-        {find.photoUri !== null ? (
-          <Image
-            source={{ uri: find.photoUri }}
-            accessibilityLabel={strings.find.photo}
-            style={styles.thumbnail}
-          />
-        ) : (
-          // PBI-2.9's representative picture is to take the text mark's place (SPEC 3.9).
-          <View
-            accessible
-            accessibilityLabel={strings.log.textMarkLabel}
-            style={[styles.thumbnail, styles.textMark]}
-          >
-            <Text style={styles.textMarkText}>{strings.log.textMark}</Text>
+    <View style={styles.findEntry}>
+      <Link href={`/find/${find.id}`} asChild>
+        <Pressable accessibilityRole="link" testID={`find-row-${find.id}`} style={styles.findRow}>
+          {thumbnail}
+          <View style={styles.findText}>
+            <Text style={styles.note}>{formatFindTime(find.time, language)}</Text>
+            <SummaryView find={find} language={language} strings={strings} />
           </View>
-        )}
-        <View style={styles.findText}>
-          <Text style={styles.note}>{formatFindTime(find.time, language)}</Text>
-          <SummaryView find={find} language={language} strings={strings} />
-        </View>
-      </Pressable>
-    </Link>
+        </Pressable>
+      </Link>
+      {shownPicture !== null && (
+        <PictureCredit
+          picture={shownPicture}
+          strings={strings}
+          testID={`picture-credit-${find.id}`}
+        />
+      )}
+    </View>
   );
 }
 
@@ -631,6 +664,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 8,
+  },
+  findEntry: {
+    gap: 4,
   },
   findRow: {
     flexDirection: "row",

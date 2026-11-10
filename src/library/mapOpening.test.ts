@@ -83,6 +83,7 @@ function find(
           },
     selfCheck: null,
     species,
+    picture: null,
   };
 }
 

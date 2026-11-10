@@ -1,0 +1,305 @@
+{
+  "entities": {
+    "Q1101": {
+      "type": "item",
+      "id": "Q1101",
+      "claims": {
+        "P225": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P225",
+              "datavalue": { "value": "Amanita virosa", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P105": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P105",
+              "datavalue": {
+                "value": { "entity-type": "item", "id": "Q34740" },
+                "type": "wikibase-entityid"
+              }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P18": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P18",
+              "datavalue": { "value": "Not a species rank.jpg", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ]
+      },
+      "sitelinks": {
+        "a": { "site": "a" },
+        "b": { "site": "b" },
+        "c": { "site": "c" },
+        "d": { "site": "d" },
+        "e": { "site": "e" },
+        "f": { "site": "f" },
+        "g": { "site": "g" },
+        "h": { "site": "h" }
+      }
+    },
+    "Q1102": {
+      "type": "item",
+      "id": "Q1102",
+      "claims": {
+        "P225": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P225",
+              "datavalue": { "value": "Amanita virosa", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P105": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P105",
+              "datavalue": {
+                "value": { "entity-type": "item", "id": "Q7432" },
+                "type": "wikibase-entityid"
+              }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P18": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P18",
+              "datavalue": { "value": "Deprecated image.jpg", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "deprecated"
+          }
+        ]
+      },
+      "sitelinks": {
+        "a": { "site": "a" },
+        "b": { "site": "b" },
+        "c": { "site": "c" },
+        "d": { "site": "d" },
+        "e": { "site": "e" },
+        "f": { "site": "f" },
+        "g": { "site": "g" }
+      }
+    },
+    "Q1103": {
+      "type": "item",
+      "id": "Q1103",
+      "claims": {
+        "P225": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P225",
+              "datavalue": { "value": "amanita VIROSA", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P105": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P105",
+              "datavalue": {
+                "value": { "entity-type": "item", "id": "Q7432" },
+                "type": "wikibase-entityid"
+              }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P18": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P18",
+              "datavalue": { "value": "Most sitelinks.jpg", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ]
+      },
+      "sitelinks": {
+        "a": { "site": "a" },
+        "b": { "site": "b" },
+        "c": { "site": "c" },
+        "d": { "site": "d" },
+        "e": { "site": "e" }
+      }
+    },
+    "Q1104": {
+      "type": "item",
+      "id": "Q1104",
+      "claims": {
+        "P225": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P225",
+              "datavalue": { "value": "Amanita virosa", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P105": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P105",
+              "datavalue": {
+                "value": { "entity-type": "item", "id": "Q7432" },
+                "type": "wikibase-entityid"
+              }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P18": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P18",
+              "datavalue": { "value": "Fewer sitelinks.jpg", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ]
+      },
+      "sitelinks": { "a": { "site": "a" }, "b": { "site": "b" } }
+    },
+    "Q1105": {
+      "type": "item",
+      "id": "Q1105",
+      "claims": {
+        "P225": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P225",
+              "datavalue": { "value": "Amanita virosa var. alba", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P105": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P105",
+              "datavalue": {
+                "value": { "entity-type": "item", "id": "Q7432" },
+                "type": "wikibase-entityid"
+              }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P18": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P18",
+              "datavalue": { "value": "Another name.jpg", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ]
+      },
+      "sitelinks": {
+        "a": { "site": "a" },
+        "b": { "site": "b" },
+        "c": { "site": "c" },
+        "d": { "site": "d" },
+        "e": { "site": "e" },
+        "f": { "site": "f" },
+        "g": { "site": "g" },
+        "h": { "site": "h" }
+      }
+    },
+    "Q1106": {
+      "type": "item",
+      "id": "Q1106",
+      "claims": {
+        "P225": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P225",
+              "datavalue": { "value": "Amanita virosa", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "deprecated"
+          }
+        ],
+        "P105": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P105",
+              "datavalue": {
+                "value": { "entity-type": "item", "id": "Q7432" },
+                "type": "wikibase-entityid"
+              }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ],
+        "P18": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P18",
+              "datavalue": { "value": "Deprecated name.jpg", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "normal"
+          }
+        ]
+      },
+      "sitelinks": {
+        "a": { "site": "a" },
+        "b": { "site": "b" },
+        "c": { "site": "c" },
+        "d": { "site": "d" },
+        "e": { "site": "e" },
+        "f": { "site": "f" },
+        "g": { "site": "g" },
+        "h": { "site": "h" }
+      }
+    },
+    "Q1107": { "id": "Q1107", "missing": "" }
+  },
+  "success": 1
+}

@@ -57,6 +57,14 @@ export class PhotoPreparationError extends Error {
 }
 
 /**
+ * A photo prepared as `preparePhotoForAnalysis` prepares it, as the JPEG's bytes: for a copy to be
+ * kept, as a text answer's representative picture is (docs/SPEC.md 3.9; PBI-2.9).
+ */
+export type PreparedJpeg =
+  | { ok: true; bytes: Uint8Array; width: number; height: number }
+  | Extract<PreparedPhoto, { ok: false }>;
+
+/**
  * Prepares a find's photo for the model `modelId`. Only a fault of the photo itself fails the find
  * with the cause `photo`: the encoder cannot load or decode it, or the size it decodes to is not
  * whole pixels of one or more (Clead's decision for PBI-1.21). Any other error, which is not the
@@ -69,6 +77,21 @@ export async function preparePhotoForAnalysis(
   encoder: JpegEncoder,
   appConfig: AppConfig = config,
 ): Promise<PreparedPhoto> {
+  const prepared = await prepareJpegForAnalysis(photoUri, modelId, encoder, appConfig);
+  if (!prepared.ok) {
+    return prepared;
+  }
+  const { bytes, width, height } = prepared;
+  return { ok: true, imageBase64: bytesToBase64(bytes), width, height };
+}
+
+/** As `preparePhotoForAnalysis`, giving the checked JPEG's bytes in place of their base64. */
+export async function prepareJpegForAnalysis(
+  photoUri: string,
+  modelId: string,
+  encoder: JpegEncoder,
+  appConfig: AppConfig = config,
+): Promise<PreparedJpeg> {
   const quality = appConfig.analysisJpegQuality;
   if (!(typeof quality === "number" && quality > 0 && quality <= 1)) {
     throw new PhotoPreparationError(
@@ -103,13 +126,13 @@ export async function preparePhotoForAnalysis(
         failure: { cause: "segment-check", detail: `${check.reason}${marker}` },
       };
     }
-    return { ok: true, imageBase64: bytesToBase64(bytes), width: size.width, height: size.height };
+    return { ok: true, bytes, width: size.width, height: size.height };
   } finally {
     image.release();
   }
 }
 
-function photoFailure(detail: string, loaded: boolean): PreparedPhoto {
+function photoFailure(detail: string, loaded: boolean): Extract<PreparedPhoto, { ok: false }> {
   return { ok: false, loaded, failure: { cause: "photo", detail } };
 }
 

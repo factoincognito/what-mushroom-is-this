@@ -60,6 +60,8 @@ function emptyLog(): FindLog {
     completeBatch: jest.fn(async () => undefined),
     removePhoto: jest.fn(async () => ({ photoRemoved: true })),
     setAddedPhotos: jest.fn(async () => undefined),
+    setPicture: jest.fn(async () => undefined),
+    setSelfCheck: jest.fn(async () => undefined),
     get: jest.fn(async () => null),
     getStored: jest.fn(async () => null),
     list: jest.fn(async () => []),
@@ -151,6 +153,16 @@ async function renderQueue(
         analyse: async () => ({ ok: false, error: { kind: "no-credit", status: 402 } }),
         now: () => 0,
         schedule: () => () => undefined,
+        fetchPicture: async () => ({
+          kind: "picture",
+          picture: {
+            uri: "file:///cache/picture-1.jpg",
+            author: "A. Author",
+            licence: "cc0",
+            page: "https://commons.wikimedia.org/wiki/File:A.jpg",
+          },
+        }),
+        removePictureCopy: jest.fn(),
       },
       { apiAddress: "https://api.anthropic.com", timeLimitMs: 60_000 },
     );
@@ -387,6 +399,17 @@ describe("QueueProvider, what it gives the screens", () => {
     await expect(current().analysePhotoLookup(["file:///cache/a.jpg"])).resolves.toEqual(result);
     expect(analysePhotoLookup).toHaveBeenCalledWith(["file:///cache/a.jpg"]);
   });
+
+  it("fetches an unsaved lookup's picture on asking, and removes its copy (PBI-2.9)", async () => {
+    const { queue } = await renderQueue();
+    const result = { kind: "waits", cause: "network", retryAtMs: null } as const;
+    const fetchLookupPicture = jest.spyOn(queue, "fetchLookupPicture").mockResolvedValue(result);
+    await expect(current().fetchLookupPicture("Cantharellus cibarius")).resolves.toEqual(result);
+    expect(fetchLookupPicture).toHaveBeenCalledWith("Cantharellus cibarius");
+    const removePictureCopy = jest.spyOn(queue, "removePictureCopy");
+    current().removePictureCopy("file:///cache/picture-1.jpg");
+    expect(removePictureCopy).toHaveBeenCalledWith("file:///cache/picture-1.jpg");
+  });
 });
 
 describe("QueueProvider, once it is gone", () => {
@@ -490,6 +513,15 @@ describe("QueueProvider, a run that rejects (Clead's decision on #17)", () => {
     jest.spyOn(queue, "analysePhotoLookup").mockRejectedValue(new Error("ENOSPC"));
     await act(async () => {
       await expect(current().analysePhotoLookup(["file:///cache/a.jpg"])).rejects.toThrow("ENOSPC");
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("fetching an unsaved lookup's picture: stops the queue, and the screen still gets the rejection (PBI-2.9)", async () => {
+    const { queue } = await renderQueue();
+    jest.spyOn(queue, "fetchLookupPicture").mockRejectedValue(new Error("ENOSPC"));
+    await act(async () => {
+      await expect(current().fetchLookupPicture("Cantharellus cibarius")).rejects.toThrow("ENOSPC");
     });
     expect(shownState()).toEqual(INTERNAL);
   });

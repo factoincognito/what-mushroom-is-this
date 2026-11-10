@@ -10,6 +10,7 @@ import {
 import { AppState } from "react-native";
 
 import { useApiKey } from "../key/KeyContext";
+import type { PictureFetch } from "../picture/fetchPicture";
 import { FindLogProvider, useFindLog } from "../store/FindLogContext";
 import type { FindLog } from "../store/findStore";
 import { createDeviceQueue } from "./deviceQueue";
@@ -40,6 +41,10 @@ export interface QueueContextValue {
   readonly analyseLookup: (text: string) => Promise<AnalyseLookupResult>;
   /** Analyses an unsaved photo lookup at once, from its screen (docs/SPEC.md 3.9, PBI-2.13). */
   readonly analysePhotoLookup: (photoUris: readonly string[]) => Promise<AnalyseLookupResult>;
+  /** Fetches an unsaved text lookup's representative picture (docs/SPEC.md 3.9, PBI-2.9). */
+  readonly fetchLookupPicture: (latinName: string) => Promise<PictureFetch>;
+  /** Removes the copy of a picture the screen showed. */
+  readonly removePictureCopy: (uri: string) => void;
 }
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -148,6 +153,12 @@ export function QueueProvider({
           queue.stopForInternalError();
           throw error;
         }),
+      fetchLookupPicture: (latinName) =>
+        queue.fetchLookupPicture(latinName).catch((error: unknown) => {
+          queue.stopForInternalError();
+          throw error;
+        }),
+      removePictureCopy: (uri) => queue.removePictureCopy(uri),
     }),
     [state, queue],
   );
