@@ -179,10 +179,11 @@ When the queue has stopped (3.3), the Log screen says why and offers
   - any byte after the end of the image fails: phones can append further
     images there, with metadata of their own;
   - input that is not a JPEG, or is cut short or malformed, fails.
-  Not checked yet: what the phone's image encoder writes (Known unknown
-  2); if it writes something this check refuses, every analysis fails,
-  so it is checked in Adam's test session on his phone, since the encoder
-  cannot be run off a phone (#14).
+  What the phone's image encoder writes (Known unknown 2): if it writes
+  something this check refuses, every analysis fails, so it was checked
+  in Adam's test session on his phone, since the encoder cannot be run
+  off a phone (#14); his camera photos passed (PBI-1.11). Other phones
+  are not checked.
   A JPEG that fails the check is not sent; the find is marked failed.
 - The prompt asks for one answer in a fixed JSON shape:
   - the best match: its names in Swedish, English, Latin and Italian;
@@ -458,13 +459,20 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
 - When the answer to a text lookup names a species, the app shows a
   representative picture of that species from Wikimedia Commons (Adam).
   It is the picture that Wikidata gives as the image of the species'
-  item, found by its Latin name, fetched as a JPEG or PNG thumbnail at
+  item, found by its Latin name, fetched as a thumbnail at
   the smallest of Wikimedia's standard widths at or above the width the
   resize of 3.3 needs (3840 when the need is above that, and the
   original's own width when the original is narrower than the chosen
   standard width), then resized on the phone
-  (**[Clead]**; **[not checked]**: that the thumbnail URL returns such
-  widths, Known unknown 15). Its licence must be CC0, public domain
+  (**[Clead]**; Wikimedia rounds a requested width up to a standard one
+  itself, and gives the original when it is narrower, but reports the
+  width asked for, so the size is read from the picture received, Known
+  unknown 15). The thumbnail is taken in JPEG, PNG, WebP or GIF, the
+  formats the Claude API accepts, its type read from its bytes, not from
+  what Wikimedia says it is (Adam, 2026-11-10 00:10, approving Clead's
+  proposal). The same holds for the original when Wikimedia serves it in
+  place of a thumbnail, so an SVG or TIFF original gives no picture
+  (**[Clead]**). Its licence must be CC0, public domain
   without a country limit, CC BY or CC BY-SA; any other licence means no
   picture (Adam, 2026-11-09 21:27). A file under several licences is used
   when one of them is on that list, and is credited under the first of
@@ -479,7 +487,10 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
-  Commons are shown with it, as its licence requires (**[Clead]**).
+  Commons are shown with it, as its licence requires (**[Clead]**). A
+  file whose author Wikimedia does not give in machine-readable form is
+  not used: there is no picture, and the find says it could not be
+  checked (Adam, 2026-11-10 00:10, approving Clead's proposal).
 - On a saved find it is stored with the find, apart from its photos: it
   is never one of the find's photos and does not count toward the 5
   (**[Clead]**). A new answer naming another species replaces it. On an
@@ -608,10 +619,13 @@ answers to Clead's questions, 19:05).
   guidelines and OpenMapTiles ask for (PBI-2.1's findings; with the map,
   Adam's decision, 2026-11-09 21:27): OpenStreetMap,
   with a link to its copyright page, and OpenMapTiles. It may collapse to
-  an "(i)" button, and is also listed in About (**[Clead]**;
-  **[not checked]**: the default attribution of the library, Known
-  unknown 11). Requests carry the app's own User-Agent (**[Clead]**;
-  **[not checked]**: that the library sends it, Known unknown 11). No
+  an "(i)" button, and is also listed in About (**[Clead]**; the
+  library's default "(i)" button lists the style's attributions, which
+  for OpenFreeMap are these, Known unknown 11; **[not checked]** on a
+  phone). The library's own logo is shown, as it is by default (Adam,
+  2026-11-10 00:10, approving Clead's proposal). Requests carry the app's
+  own User-Agent (**[Clead]**; the library's default on Android names the
+  app, Known unknown 11; **[not checked]** on iOS). No
   offline areas are downloaded; the map uses what its cache holds
   (**[Clead]**). The library's location engine is its default, not
   Google's (**[Clead]**). OpenFreeMap's tiles may come through Cloudflare
@@ -625,7 +639,9 @@ answers to Clead's questions, 19:05).
 2. What `expo-image-manipulator` keeps of a photo's metadata (the segment
    check of 3.3 guards the result either way). The phone's own encoder
    writes the JPEG, so this can be checked only on a phone, in Adam's test
-   session (Crog, #14).
+   session (Crog, #14). Settled for Adam's phone: his camera photos were
+   analysed in his test session, so they passed the segment check
+   (PBI-1.11, 2026-11-09).
 3. How the database and photos are excluded from iOS backups under Expo,
    and the Android data extraction rules (3.6). Android settled in #21;
    iOS needs native code (PBI-1.23). Android lint's `FullBackupContent`
@@ -656,6 +672,8 @@ answers to Clead's questions, 19:05).
    thinks, which on the current models it always may (PBI-1.14). If not, a
    find times out, stays waiting and is sent again at each run; the time
    limit is then the setting to change (Clead-role reviewer on #15).
+   Settled: in Adam's test session analyses took under 30 seconds and none
+   timed out (PBI-1.11, 2026-11-09).
 10. Whether the phone's position fixes arrive on Android while the camera
     app is in front: `expo-location` stops its updates when the app goes
     to the background (the Clead-role reviewer's reading of its source for
@@ -670,12 +688,25 @@ answers to Clead's questions, 19:05).
     OpenFreeMap's tiles. Per the findings, OpenFreeMap needs no key and
     charges no fee; its terms allow apps, and offline downloads within
     limits; it has no SLA.
-    Left for the build:
-    - whether it builds on SDK 57;
-    - whether it sends telemetry;
-    - the licence of the style;
-    - the default cache size and attribution;
-    - its User-Agent on Android.
+    Checked on 2026-11-09 for the build (product office, the same
+    document, section 5):
+    - the app's Expo, React Native and React versions are within version
+      11.5.1's peer ranges; it ships an Expo config plugin; whether it
+      builds on SDK 57 is left for the build;
+    - no telemetry found in MapLibre Android 13.6.1 or the library's own
+      source; iOS not inspected;
+    - the styles: code BSD-3-Clause, design CC BY 4.0 (Positron also
+      CARTO, CC BY 3.0, which would need its own credit), fonts SIL OFL
+      1.1, sprites CC0;
+    - on Android the cache is 50 MB by default, and the "(i)" button and
+      the MapLibre logo are on by default; iOS's defaults not checked;
+    - the Android User-Agent names the app by default, and the app can
+      set its own; iOS not checked;
+    - the vulkan flavour of MapLibre Android 13.6.1 declares the location
+      permissions and `ACCESS_WIFI_STATE`; the opengl flavour, the
+      plugin's default, was not checked. PBI-2.8 checks the merged
+      manifest, where the app's block of `ACCESS_WIFI_STATE` must still
+      hold.
 12. Phase 2's request with several photos and text (3.9). Per the Claude
     API's "Vision" page, read for PBI-2.1 on 2026-11-09:
     - 100 images per request on models with a 200k context window, and 600
@@ -707,20 +738,40 @@ answers to Clead's questions, 19:05).
     - the lookup: the Wikidata item by P225 (taxon name), its image, P18,
       then the Commons file's thumbnail URL, author, licence and page
       (**[Clead]**); a check that the item's rank, P105, is species
-      (**[Clead]**, still open);
+      (**[Clead]**; it does not settle the homonyms found, below);
     - thumbnails at Wikimedia's standard widths only, since other widths
       are rate-limited (**[Clead]**);
     - a User-Agent that names the app, its version and the repository's
       URL, as Wikimedia's policy asks (**[Clead]**: the form);
     - requests one at a time, within limits of a few hundred an hour per
       phone (**[Clead]**).
-    Left for the build:
-    - Wikimedia's policy pages, read again on the original sites (PBI-2.1
-      read some of them only through copies);
-    - the metadata field names;
-    - whether `fetch` on Android sends the User-Agent unchanged;
-    - the thumbnail formats;
-    - species with the same name;
-    - how often a species has a picture.
+    Checked on 2026-11-09 for the build (product office,
+    `library/designs/what-mushroom-is-this/phase-2-checks.md`, section 5):
+    - Wikimedia's policies, read on the original sites. Its rate limits
+      are now 10 requests a minute by IP alone and 200 a minute with a
+      User-Agent that follows its policy; "a few hundred an hour per
+      phone" is within them. Clients may not hide Wikimedia as the source;
+    - the calls and the metadata field names;
+    - `fetch` in Expo SDK 57 sends the app's User-Agent unchanged on
+      Android, from the sources, not run on a phone; ASCII only; iOS not
+      checked;
+    - JPEG, PNG, WebP and GIF originals give thumbnails of their own
+      format, SVG gives PNG and TIFF gives JPEG; an original narrower
+      than the width asked for is served as it is, in its own format;
+      Wikimedia's stated type and width are not always those served;
+    - among the 11,574 fungus species items with an English Wikipedia
+      article and an Index Fungorum ID, 19 share their Latin name with
+      another item, all fungi of the same genus, which rank and parent do
+      not tell apart; the second mostly has no picture. Within that set
+      no name was shared with an item outside the fungi; fungus items
+      outside the set were not checked, and the search by name covers all
+      of Wikidata;
+    - about a third of fungus species with an English Wikipedia article
+      have a picture; 20 of 20 common Nordic species sampled do.
+    Open for PBI-2.9 (**[Clead]** to settle in its PR): which item when a
+    name has several, also outside the fungi; which picture when an item
+    has several; reading a file's licences and a public-domain mark's country limit from the
+    file page, since the metadata gives one licence and only "pd"; and
+    naming Wikimedia Commons as the source.
     Before release, the IP lawyer's review covers resizing under CC
     2.x/3.0 and sending pictures to Anthropic (policy rule 6).
