@@ -161,7 +161,10 @@ the role that did not write it.
   - `isConfidenceLevel` is exported but used only in `answer.ts` (note 2);
   - the Log reads the confidence from the row's columns, the Find screen from the answer's JSON; nothing finds a damaged file where the two differ, as before #52 for the level (note 3);
   - SPEC 3.3's list still says "a confidence: low, medium or high"; 3.9 holds for Phase 2, but 3.3 read alone misleads.
-  Spec 3.3, 3.9.
+  - SPEC Known unknowns 7 and 10 still say they are checked in, or point to, Adam's Phase 1 test session, which tested neither (PBI-1.11); they move to PBI-2.11 (Crog's note on #56);
+  - SPEC 3.9's "so an SVG or TIFF original gives no picture" means only an original served in place of a thumbnail, and one line of Known unknown 15 is past the file's wrap width (Crog's notes on #56, round 3).
+  Spec 3.3, 3.9, 4.
+- **[LATER] PBI-2.15** (Clead's decision 3 on #57, 2026-11-10; SPEC 3.9 "Answers", #58) — The store records what an answer was based on (from the text alone, or from photos), so that "no mushroom" and "cannot tell" use the wording for a description or for a photo by the analysis that gave them, as the disclaimer of an answer naming a species already does. Today the store can tell the basis only for an answer naming a species (by its self-check); a schema change, with a migration from version 2. Spec 3.9, 3.6.
 - **[LATER] PBI-2.14** (the Clead-role reviewer's non-blocking notes on #54, rounds 1 and 2, and Crog's loose ends on #54) — Follow-ups that need no phone:
   - a stored text over 2,000 characters, reachable only through a damaged file, is read as readable; the queue picks it, the request builder throws, and every run stops with an internal error (note 1);
   - the text field's `maxLength` counts UTF-16 units, while the counter, the flow and the store count code points (note 2);
