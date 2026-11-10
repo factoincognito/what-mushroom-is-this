@@ -1083,6 +1083,136 @@ describe("leaving an unsaved photo lookup (SPEC 3.9, Lookups; PBI-2.13)", () => 
   });
 });
 
+describe("removing a photo from an unsaved photo lookup (Clead's decision on #61)", () => {
+  it("asks first, on the screen; Keep removes nothing", async () => {
+    const { flow, removed, last } = setUpLookup();
+    await flow.start();
+    await flow.takePhoto();
+    flow.askToRemove(2);
+    expect(last()).toMatchObject({ confirming: "removeHeld", removing: 2, held: 2 });
+    flow.keepPhoto();
+    expect(last()).toMatchObject({ confirming: null, removing: null, held: 2 });
+    expect(removed).toEqual([]);
+  });
+
+  it("once confirmed, removes the photo and the app's copy of it only, keeps the others in order, and drops the answer shown", async () => {
+    const { flow, removed, analysed, last } = setUpLookup();
+    await flow.start();
+    await flow.takePhoto();
+    await flow.takePhoto();
+    await flow.analyse();
+    expect(last().outcome).not.toBeNull();
+    flow.askToRemove(2);
+    expect(flow.discardPending()).toBe(true);
+    expect(removed).toEqual(["file:///cache/camera-2.jpg"]);
+    expect(last()).toMatchObject({
+      confirming: null,
+      removing: null,
+      held: 2,
+      heldPhotos: ["file:///cache/camera-1.jpg", "file:///cache/camera-3.jpg"],
+      outcome: null,
+      offerSave: false,
+      canAddMore: true,
+    });
+    await flow.analyse();
+    expect(analysed.at(-1)).toEqual(["file:///cache/camera-1.jpg", "file:///cache/camera-3.jpg"]);
+  });
+
+  it("keeps the lookup's time and position when its first photo is removed, for when Save is turned on", async () => {
+    const location = new FakeLocation();
+    const { flow, log } = setUpLookup({ location, cancelCamera: 1 });
+    await flow.start();
+    location.send(59.66, 17.1, 9);
+    await flow.takePhoto();
+    location.send(59.0, 17.0, 3);
+    await flow.takePhoto();
+    flow.askToRemove(1);
+    flow.discardPending();
+    await flow.setSave(true);
+    expect(log.added).toEqual([
+      {
+        photoUri: "file:///cache/camera-2.jpg",
+        time: phoneTimeNow(new Date(NOW_MS + 60_000)),
+        position: { latitude: 59.66, longitude: 17.1, accuracyM: 9, source: "fix" },
+      },
+    ]);
+    expect(log.photosAdded).toEqual([]);
+  });
+
+  it("may remove the last photo too: the lookup then holds none, offers no analysis, and is left without a question", async () => {
+    const { flow, removed, analysed, last } = setUpLookup();
+    await flow.start();
+    flow.askToRemove(1);
+    flow.discardPending();
+    expect(removed).toEqual(["file:///cache/camera-1.jpg"]);
+    expect(last()).toMatchObject({ held: 0, heldPhotos: [], holdsLeave: false });
+    await flow.analyse();
+    expect(analysed).toEqual([]);
+    expect(flow.askToLeave()).toBe(false);
+    flow.close();
+    expect(removed).toEqual(["file:///cache/camera-1.jpg"]);
+  });
+
+  it("takes the next photo after the last was removed as the lookup's first, with its own time", async () => {
+    const { flow, log } = setUpLookup();
+    await flow.start();
+    flow.askToRemove(1);
+    flow.discardPending();
+    await flow.takePhoto();
+    await flow.setSave(true);
+    expect(log.added).toEqual([
+      expect.objectContaining({
+        photoUri: "file:///cache/camera-2.jpg",
+        time: phoneTimeNow(new Date(NOW_MS + 2 * 60_000)),
+      }),
+    ]);
+  });
+
+  it("removes each copy once: the one removed is not removed again when the screen is left", async () => {
+    const { flow, removed } = setUpLookup();
+    await flow.start();
+    await flow.takePhoto();
+    flow.askToRemove(1);
+    flow.discardPending();
+    flow.askToLeave();
+    flow.discardPending();
+    flow.close();
+    expect(removed).toEqual(["file:///cache/camera-1.jpg", "file:///cache/camera-2.jpg"]);
+  });
+
+  it.each([0, 2, 1.5, Number.NaN])(
+    "asks nothing for a photo it does not hold (%s)",
+    async (number) => {
+      const { flow, last } = setUpLookup();
+      await flow.start();
+      flow.askToRemove(number);
+      expect(last()).toMatchObject({ confirming: null, removing: null, held: 1 });
+    },
+  );
+
+  it("asks nothing while the analysis runs, or another question is open", async () => {
+    const { flow, holdAnalysis, release, last } = setUpLookup();
+    await flow.start();
+    holdAnalysis.on = true;
+    const analysing = flow.analyse();
+    await settle();
+    flow.askToRemove(1);
+    expect(last()).toMatchObject({ confirming: null });
+    release();
+    await analysing;
+    flow.askToLeave();
+    flow.askToRemove(1);
+    expect(last()).toMatchObject({ confirming: "leaveLookup", removing: null });
+  });
+
+  it("is not offered on a saved lookup, whose photos the find's screen removes", async () => {
+    const { flow, last } = setUpLookup({ saveAtStart: true });
+    await flow.start();
+    flow.askToRemove(1);
+    expect(last()).toMatchObject({ confirming: null, removing: null, heldPhotos: [] });
+  });
+});
+
 describe("the position of a photo lookup (SPEC 3.9: asked for when the camera opens, whether or not Save is on)", () => {
   it("is asked for from the start with Save off", async () => {
     const location = new FakeLocation();

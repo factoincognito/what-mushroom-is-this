@@ -446,6 +446,72 @@ describe("an unsaved photo lookup (Save off)", () => {
   });
 });
 
+describe("removing a photo from an unsaved photo lookup (Clead's decision on #61)", () => {
+  function heldPhoto(number: number, count: number) {
+    return screen.getByLabelText(
+      en.newFind.heldPhoto.replace("{number}", String(number)).replace("{count}", String(count)),
+    );
+  }
+
+  it("shows the photos held, asks first on the screen, and removes only the app's copy of the one chosen, dropping the answer shown", async () => {
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await openUnsaved();
+    await press(en.newFind.takePhoto);
+    expect(heldPhoto(1, 2)).toHaveProp("source", { uri: shots[0]?.uri });
+    expect(heldPhoto(2, 2)).toHaveProp("source", { uri: shots[1]?.uri });
+    await press(en.newFind.analyse);
+    expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+    await press(en.find.removePhoto.replace("{number}", "1"));
+    expect(
+      screen.getByText(en.newFind.removeHeldConfirm.replace("{number}", "1")),
+    ).toBeOnTheScreen();
+    await press(en.find.removePhotoCancel);
+    expect(shots.map((shot) => shot.exists)).toEqual([true, true]);
+    await press(en.find.removePhoto.replace("{number}", "1"));
+    await press(en.find.removePhotoYes);
+    expect(shots.map((shot) => shot.exists)).toEqual([false, true]);
+    expect(heldPhoto(1, 1)).toHaveProp("source", { uri: shots[1]?.uri });
+    expect(screen.queryByText(CHANTERELLE.generalInformation.en)).not.toBeOnTheScreen();
+    expect(
+      screen.getByText(en.newFind.heldCount.replace("{count}", "1").replace("{max}", "5")),
+    ).toBeOnTheScreen();
+    expect(mockLog.finds.size).toBe(0);
+  });
+
+  it("after a photo fails the metadata check, that photo can be removed and the rest analysed", async () => {
+    await openUnsaved();
+    await press(en.newFind.takePhoto);
+    jest.mocked(preparePhotoForAnalysis).mockImplementation(async (uri) =>
+      uri === shots[1]?.uri
+        ? {
+            ok: false,
+            loaded: true,
+            failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+          }
+        : { ok: true, imageBase64: btoa(uri), width: 1, height: 1 },
+    );
+    await press(en.newFind.analyse);
+    expect(await screen.findByTestId("lookup-notice")).toBeOnTheScreen();
+    await press(en.find.removePhoto.replace("{number}", "2"));
+    await press(en.find.removePhotoYes);
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await press(en.newFind.analyse);
+    expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+    expect(sentPhotos()).toEqual([shots[0]?.uri]);
+  });
+
+  it("may remove the last photo: no Analyse is offered, and the screen is left without a question", async () => {
+    const app = await openUnsaved();
+    await press(en.find.removePhoto.replace("{number}", "1"));
+    await press(en.find.removePhotoYes);
+    expect(shots[0]?.exists).toBe(false);
+    expect(screen.queryByRole("button", { name: en.newFind.analyse })).not.toBeOnTheScreen();
+    await goBack();
+    expect(app.pathname()).toBe("/");
+    expect(screen.queryByText(en.newFind.leaveLookupConfirm)).not.toBeOnTheScreen();
+  });
+});
+
 describe("the photo lookup's starting value in Settings (SPEC 3.9)", () => {
   it("is on, beside the text lookup's, and turning it off there makes the next New find start with Save off, leaving the text lookup's alone", async () => {
     const app = renderRouter(APP_DIR, { initialUrl: "/settings" });

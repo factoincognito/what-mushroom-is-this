@@ -151,6 +151,7 @@ describe("the strings of the new find", () => {
       "newFind.findUnavailable",
       "newFind.heldCount",
       "newFind.heldMaxReached",
+      "newFind.heldPhoto",
       "newFind.leaveCancel",
       "newFind.leaveConfirm",
       "newFind.leaveLookupConfirm",
@@ -162,6 +163,7 @@ describe("the strings of the new find", () => {
       "newFind.photoCount",
       "newFind.pickFailed",
       "newFind.pickFromGallery",
+      "newFind.removeHeldConfirm",
       "newFind.retrySave",
       "newFind.save",
       "newFind.saveFailed",
@@ -178,9 +180,12 @@ describe("the strings of the new find", () => {
   it.each(LANGUAGES)(
     "fill in the count and the most of the photos an unsaved lookup holds, in %s (PBI-2.13)",
     (language) => {
-      const { heldCount } = STRINGS[language].newFind;
+      const { heldCount, heldPhoto, removeHeldConfirm } = STRINGS[language].newFind;
       expect(heldCount).toContain("{count}");
       expect(heldCount).toContain("{max}");
+      expect(heldPhoto).toContain("{number}");
+      expect(heldPhoto).toContain("{count}");
+      expect(removeHeldConfirm).toContain("{number}");
     },
   );
 
@@ -191,6 +196,7 @@ describe("the strings of the new find", () => {
     expect(t.leaveLookupConfirm).toMatch(/lookup/);
     expect(t.discardPhotosConfirm).toMatch(/photos/);
     expect(t.leavePhotosConfirm).toMatch(/photos/);
+    expect(t.removeHeldConfirm).toMatch(/lookup\? Only the app's copy is removed/);
   });
 });
 
