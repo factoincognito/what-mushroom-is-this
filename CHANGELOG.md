@@ -30,7 +30,7 @@ All notable changes to What mushroom is this? are documented here.
   #40, #42).
 - Phase 2's specification, approved by Adam: text lookup, several photos
   per find, a 1–100 confidence, the Library with a map, a Wikimedia
-  picture and a self-check for text lookups (#47, #50, #56).
+  picture and a self-check for text lookups (#47, #50, #56, #58, #62).
 - The store at schema version 2, with a migration that keeps every
   Phase 1 find (#49).
 
@@ -75,6 +75,9 @@ All notable changes to What mushroom is this? are documented here.
   find's screen, all sent in one labelled request with the find's text;
   a photo can be removed, and photos added to an analysed find wait for
   a new analysis while the find keeps its answer (#57).
+- A "Save" switch on a new photo lookup, on by default from Settings: an
+  unsaved photo lookup is analysed on its screen and nothing of it is
+  kept (#61).
 
 ## Project created
 

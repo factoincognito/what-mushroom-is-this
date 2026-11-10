@@ -120,14 +120,14 @@ the role that did not write it.
   - a new batch on an analysed find, with its three states;
   - removing a photo.
   Spec 3.9.
-- **[NOW] PBI-2.13** (in the night shift) (moved out of PBI-2.4 by Clead, 2026-11-10: it depends on PBI-2.5's batches, and with it #54 was too large to review) — The photo lookup's "Save" switch:
+- **[DONE] PBI-2.13** (done 2026-11-10 in #61, `7eb8080`, Clead-role review approved round 2; Clead's decisions on it: the switch on a new photo lookup only, not to be turned off once saved, and a photo removable from an unsaved lookup, the last one included, SPEC lines in #62; the review's notes are in PBI-2.16) (in the night shift) (moved out of PBI-2.4 by Clead, 2026-11-10: it depends on PBI-2.5's batches, and with it #54 was too large to review) — The photo lookup's "Save" switch:
   - the switch on a new photo lookup, on by default;
   - its starting value in Settings, beside the text lookup's;
   - unsaved photo lookups: held on the screen, analysed on "Analyse", their copies removed when the screen is left, with the three error groups as for an unsaved text lookup;
   - a lookup saved after its first photo was taken keeps that photo's time and position.
   Spec 3.9.
 - **[NEXT] PBI-2.6** (the picker as Known unknown 13 has it, after PBI-2.1) — Photos from the phone's files, images only, without position or time of their own. Spec 3.9, Known unknown 13.
-- **[NEXT] PBI-2.7** — The Library's list, replacing the Log:
+- **[NOW] PBI-2.7** (in the night shift, #63; Clead's decisions: no list/map switch until PBI-2.8; a find with photos shows its first photo in the list, the text mark only a find without photos) — The Library's list, replacing the Log:
   - the species, years and months filters;
   - unreadable finds always listed;
   - the text mark;
@@ -165,19 +165,24 @@ the role that did not write it.
   - SPEC 3.9's "so an SVG or TIFF original gives no picture" means only an original served in place of a thumbnail, and one line of Known unknown 15 is past the file's wrap width (Crog's notes on #56, round 3).
   Spec 3.3, 3.9, 4.
 - **[LATER] PBI-2.15** (Clead's decision 3 on #57, 2026-11-10; SPEC 3.9 "Answers", #58) — The store records what an answer was based on (from the text alone, or from photos), so that "no mushroom" and "cannot tell" use the wording for a description or for a photo by the analysis that gave them, as the disclaimer of an answer naming a species already does. Today the store can tell the basis only for an answer naming a species (by its self-check); a schema change, with a migration from version 2. Spec 3.9, 3.6.
-- **[LATER] PBI-2.16** (the Clead-role reviewer's non-blocking notes on #57, Crog's loose ends on #57) — Follow-ups that need no phone:
+- **[LATER] PBI-2.16** (the Clead-role reviewers' non-blocking notes on #57 and #61, Crog's loose ends on #57 and #61, and Crog's notes on #62) — Follow-ups that need no phone:
   - a stored find with more than 5 photos, reachable only through a damaged file, is read as readable; the queue picks it, the request builder throws, and every run stops with an internal error (note 1);
   - a find with one photo whose photo fails gets a message that neither numbers the photo nor says a text find can remove it (note 2);
   - a photo removed while its find is being analysed leaves an answer that covers a photo the find no longer holds; the spec does not say what then (note 3);
   - the in-memory find log's comparison test has no case that adds a photo after one was removed (note 4);
   - the Find screen shows the generic analysis error when it cannot complete a batch left open (note 5);
-  - `FindStore.add` has no caller in the app, but the queue's context still wraps it; the "Add photos" header title is not tested; SPEC 3.1's New find still describes one photo (Crog).
+  - `FindStore.add` has no caller in the app, but the queue's context still wraps it; the "Add photos" header title is not tested; SPEC 3.1's New find still describes one photo (Crog);
+  - SPEC 3.9 Batches does not say that removing a find's photo asks first, which the app does since #57; nor what happens to a photo removed, or added, while an analysis runs or after an answer on an unsaved lookup (Crog's notes on #62);
+  - the picker's copies of photos saved to a find are never removed from the cache, since PBI-1.6, and copies of camera photos kept and then discarded with "Save" on stay too (Crog on #61; reviewer's note 3 on #61, round 2);
+  - the cache-path guard does not decode percent-encoded `..`, unreachable since the addresses come only from the picker; whether the picker's addresses on Android start with the cache path is not checked, and if not, copies are silently left (note 2 on #61);
+  - with "Save" off and a gallery photo first, the position tracker runs until the screen closes (note 4 on #61);
+  - no screen test shows an unsaved photo lookup's answer below 70 as "unknown"; one `devicePicker` test may build a `//` address; no test pins the old tracker's stop before its restart (notes 6 and 7 on #61, note 1 of round 2).
   Spec 3.1, 3.9.
 - **[LATER] PBI-2.14** (the Clead-role reviewer's non-blocking notes on #54, rounds 1 and 2, and Crog's loose ends on #54) — Follow-ups that need no phone:
   - a stored text over 2,000 characters, reachable only through a damaged file, is read as readable; the queue picks it, the request builder throws, and every run stops with an internal error (note 1);
   - the text field's `maxLength` counts UTF-16 units, while the counter, the flow and the store count code points (note 2);
   - a text find whose match has no self-check, reachable only through a damaged file, shows the answer's edibility; the rule relies only on the stored self-check (note 4);
-  - after an unsaved lookup's answer of the wrong shape, the Log shows the queue's stop message "That find is marked failed", though no find was (Crog);
+  - after an unsaved lookup's answer of the wrong shape, the Log shows the queue's stop message "That find is marked failed", though no find was (Crog); since #61 also after an unsaved photo lookup's;
   - `FindStore.get`, the Phase 1 view, has no caller left in app code (Crog);
   - lines the tests do not reach: `settings.tsx` 96, 175 and 266, `text-lookup.tsx` 214 (the link to Settings), and the flow's close while the location is being asked (Crog).
   Not taken up: the look-alikes' edibilities and the general information stay shown while a text answer's check waits (note 5). 3.9's "unknown" is the matched species' edibility; the look-alikes carry their own, and the poisonous ones are a warning (Clead, 2026-11-10).
