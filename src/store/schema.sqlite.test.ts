@@ -721,6 +721,25 @@ describe("the ID of a new find at the largest readable ID, on a real SQLite (PBI
     setHighWaterMark(LARGEST);
     await expect(store.add(newFind(2_000))).resolves.toBe(1);
   });
+
+  it("is one past the highest readable ID, not in a gap below it, when the high-water mark is 2^53 − 1", async () => {
+    const first = await store.add(newFind(1_000));
+    const middle = await store.add(newFind(2_000));
+    const last = await store.add(newFind(3_000));
+    await store.delete(middle);
+    setHighWaterMark(LARGEST);
+    const id = await store.add(newFind(4_000));
+    // The gap the deleted find left would put the new find before older ones, in the queue's
+    // "oldest first" by ID (PBI-1.7) and in the list.
+    expect(id).toBe(last + 1);
+    expect(storedIds()).toEqual([first, last, id].map(String));
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id }),
+      expect.objectContaining({ readable: true, id: last }),
+      expect.objectContaining({ readable: true, id: first }),
+    ]);
+    await expect(store.oldestWaiting()).resolves.toBe(first);
+  });
 });
 
 describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
