@@ -31,7 +31,7 @@ All notable changes to What mushroom is this? are documented here.
 - Phase 2's specification, approved by Adam: text lookup, several photos
   per find, a 1–100 confidence, the Library with a map, a Wikimedia
   picture and a self-check for text lookups (#47, #50, #56, #58, #62,
-  #69, #72, #76, #78, #82).
+  #69, #72, #76, #78, #82, #85).
 - The store at schema version 2, with a migration that keeps every
   Phase 1 find (#49).
 
@@ -102,6 +102,10 @@ All notable changes to What mushroom is this? are documented here.
   Phase 1 level cannot be written as a new answer; a find whose stored
   confidence and answer disagree is shown as one that cannot be read
   (#81).
+- The store at schema version 3: each answer records whether it came from
+  the text alone or from photos, and "no mushroom" and "cannot tell" speak
+  of the description or the photo accordingly; the migration fills this
+  in only where the stored data proves it (#84).
 
 ## Project created
 
