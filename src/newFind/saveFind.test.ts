@@ -5,8 +5,11 @@ import {
   type SaveDeps,
   saveCameraFind,
   saveGalleryFind,
+  saveTakenFind,
   saveTextFind,
   type TextSaveDeps,
+  takenByCamera,
+  takenFromGallery,
 } from "./saveFind";
 
 const NOW = new Date(Date.UTC(2026, 10, 9, 10, 15, 0));
@@ -277,5 +280,165 @@ describe("saveTextFind (SPEC 3.9: the time of saving, the position as for a came
     await expect(saveTextFind(" ", tracker, deps)).rejects.toMatchObject({ code: "invalid-input" });
     expect(tracker.stops).toBe(0);
     expect(tracker.firstFixAsked).toBe(0);
+  });
+});
+
+/**
+ * An unsaved photo lookup's first photo keeps its time and position for the find the lookup may
+ * become when Save is turned on later (docs/SPEC.md 3.9, Lookups; PBI-2.13).
+ */
+describe("takenByCamera", () => {
+  it("is the moment the photo was taken, with the best fix the tracker has, waiting for none", async () => {
+    tracker.now = FIX;
+    const taken = await takenByCamera(tracker, () => NOW);
+    expect(taken.time).toEqual(phoneTimeNow(NOW));
+    expect(taken.position()).toEqual(FIX);
+    expect(taken.later).toBeNull();
+    expect(tracker.firstFixAsked).toBe(0);
+  });
+
+  it("without a position, waits for the first fix that comes, and has it once it came", async () => {
+    let comes: (position: Position | null) => void = () => undefined;
+    tracker.first = new Promise((resolve) => {
+      comes = resolve;
+    });
+    const taken = await takenByCamera(tracker, () => NOW);
+    expect(taken.position()).toBeNull();
+    expect(tracker.firstFixAsked).toBe(1);
+    comes(FIX);
+    await expect(taken.later).resolves.toEqual(FIX);
+    expect(taken.position()).toEqual(FIX);
+  });
+
+  it("stays without a position when no fix comes in time, or waiting for it fails", async () => {
+    tracker.firstFix = () => Promise.reject(new Error("location service died"));
+    const taken = await takenByCamera(tracker, () => NOW);
+    await expect(taken.later).resolves.toBeNull();
+    expect(taken.position()).toBeNull();
+  });
+
+  it("has no position when the tracker cannot give one", async () => {
+    tracker.positionNow = async () => {
+      throw new Error("location service died");
+    };
+    const taken = await takenByCamera(tracker, () => NOW);
+    expect(taken.position()).toBeNull();
+    await expect(taken.later).resolves.toBeNull();
+  });
+
+  it("has no position, and waits for none, without the location permission", async () => {
+    const taken = await takenByCamera(null, () => NOW);
+    expect(taken.position()).toBeNull();
+    expect(taken.later).toBeNull();
+  });
+});
+
+describe("takenFromGallery", () => {
+  it("is the time and position the photo's metadata holds, marked as the photo's", () => {
+    const taken = takenFromGallery(
+      {
+        uri: "file:///cache/picked.jpg",
+        exif: {
+          DateTimeOriginal: "2026:09:14 15:42:07",
+          OffsetTimeOriginal: "+02:00",
+          GPSLatitude: 59.64,
+          GPSLatitudeRef: "N",
+          GPSLongitude: 17.08,
+          GPSLongitudeRef: "E",
+        },
+      },
+      () => NOW,
+    );
+    expect(taken.time).toEqual({
+      takenAtMs: Date.UTC(2026, 8, 14, 13, 42, 7),
+      utcOffsetMinutes: 120,
+      source: "photo",
+    });
+    expect(taken.position()).toEqual({
+      latitude: 59.64,
+      longitude: 17.08,
+      accuracyM: null,
+      source: "photo",
+    });
+    expect(taken.later).toBeNull();
+  });
+
+  it("is the moment it was picked, without a position, when the metadata holds neither", () => {
+    const taken = takenFromGallery({ uri: "content://media/1", exif: null }, () => NOW);
+    expect(taken.time).toEqual(phoneTimeNow(NOW));
+    expect(taken.position()).toBeNull();
+  });
+});
+
+describe("saveTakenFind", () => {
+  const LATER = new Date(NOW.getTime() + 90_000);
+
+  it("saves the find with the time and position of its first photo, not the moment of saving", async () => {
+    tracker.now = FIX;
+    const taken = await takenByCamera(tracker, () => NOW);
+    const saved = await saveTakenFind("file:///cache/a.jpg", taken, { store, now: () => LATER });
+    expect(saved).toEqual({ id: 42, positionLater: null });
+    expect(store.added).toEqual([
+      { photoUri: "file:///cache/a.jpg", time: phoneTimeNow(NOW), position: FIX },
+    ]);
+  });
+
+  it("saves the fix that came after the photo was taken, before the save", async () => {
+    tracker.first = Promise.resolve(FIX);
+    const taken = await takenByCamera(tracker, () => NOW);
+    await taken.later;
+    const saved = await saveTakenFind("file:///cache/a.jpg", taken, deps);
+    expect(saved.positionLater).toBeNull();
+    expect(store.added[0]?.position).toEqual(FIX);
+    expect(store.positions).toEqual([]);
+  });
+
+  it("saves without a position while the photo still waits for its fix, then adds the fix when it comes", async () => {
+    let comes: (position: Position | null) => void = () => undefined;
+    tracker.first = new Promise((resolve) => {
+      comes = resolve;
+    });
+    const taken = await takenByCamera(tracker, () => NOW);
+    const saved = await saveTakenFind("file:///cache/a.jpg", taken, deps);
+    expect(store.added[0]?.position).toBeNull();
+    comes(FIX);
+    await expect(saved.positionLater).resolves.toEqual(FIX);
+    expect(store.positions).toEqual([[42, FIX]]);
+  });
+
+  it("adds no position when none comes in time", async () => {
+    let comes: (position: Position | null) => void = () => undefined;
+    tracker.first = new Promise((resolve) => {
+      comes = resolve;
+    });
+    const taken = await takenByCamera(tracker, () => NOW);
+    const saved = await saveTakenFind("file:///cache/a.jpg", taken, deps);
+    comes(null);
+    await expect(saved.positionLater).resolves.toBeNull();
+    expect(store.positions).toEqual([]);
+  });
+
+  it("gives up the later fix quietly when the store refuses it, for example after a delete", async () => {
+    let comes: (position: Position | null) => void = () => undefined;
+    tracker.first = new Promise((resolve) => {
+      comes = resolve;
+    });
+    store.setPositionError = new StoreError("not-found", "no find has the ID 42");
+    const taken = await takenByCamera(tracker, () => NOW);
+    const saved = await saveTakenFind("file:///cache/a.jpg", taken, deps);
+    comes(FIX);
+    await expect(saved.positionLater).resolves.toBeNull();
+  });
+
+  it("passes the store's error on, so the save can be tried again with the same time and position", async () => {
+    tracker.now = FIX;
+    const taken = await takenByCamera(tracker, () => NOW);
+    store.addError = new Error("database is locked");
+    await expect(saveTakenFind("file:///cache/a.jpg", taken, deps)).rejects.toThrow("locked");
+    store.addError = null;
+    await saveTakenFind("file:///cache/a.jpg", taken, { store, now: () => LATER });
+    expect(store.added).toEqual([
+      { photoUri: "file:///cache/a.jpg", time: phoneTimeNow(NOW), position: FIX },
+    ]);
   });
 });

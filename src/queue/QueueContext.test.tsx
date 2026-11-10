@@ -379,6 +379,14 @@ describe("QueueProvider, what it gives the screens", () => {
     await expect(current().analyseLookup("A yellow funnel.")).resolves.toEqual(result);
     expect(analyseLookup).toHaveBeenCalledWith("A yellow funnel.");
   });
+
+  it("analyses an unsaved photo lookup on asking (PBI-2.13)", async () => {
+    const { queue } = await renderQueue();
+    const result = { ok: false, notice: { kind: "paused", cause: "server" } } as const;
+    const analysePhotoLookup = jest.spyOn(queue, "analysePhotoLookup").mockResolvedValue(result);
+    await expect(current().analysePhotoLookup(["file:///cache/a.jpg"])).resolves.toEqual(result);
+    expect(analysePhotoLookup).toHaveBeenCalledWith(["file:///cache/a.jpg"]);
+  });
 });
 
 describe("QueueProvider, once it is gone", () => {
@@ -473,6 +481,17 @@ describe("QueueProvider, a run that rejects (Clead's decision on #17)", () => {
     jest.spyOn(queue, "analyseLookup").mockRejectedValue(new RangeError("bad"));
     await act(async () => {
       await expect(current().analyseLookup("A yellow funnel.")).rejects.toBeInstanceOf(RangeError);
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("analysing an unsaved photo lookup: stops the queue, and the screen still gets the rejection (PBI-2.13)", async () => {
+    const { queue } = await renderQueue();
+    jest.spyOn(queue, "analysePhotoLookup").mockRejectedValue(new Error("ENOSPC"));
+    await act(async () => {
+      await expect(current().analysePhotoLookup(["file:///cache/a.jpg"])).rejects.toThrow(
+        "ENOSPC",
+      );
     });
     expect(shownState()).toEqual(INTERNAL);
   });

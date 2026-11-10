@@ -136,16 +136,25 @@ describe("the strings of the new find", () => {
       "newFind.addTitle",
       "newFind.analyse",
       "newFind.analyseFailed",
+      "newFind.analysing",
+      "newFind.analysisError",
       "newFind.asking",
       "newFind.cameraBlocked",
       "newFind.cameraDenied",
       "newFind.discardCancel",
       "newFind.discardConfirm",
       "newFind.discardPhoto",
+      "newFind.discardPhotos",
+      "newFind.discardPhotosCancel",
+      "newFind.discardPhotosConfirm",
       "newFind.discardYes",
       "newFind.findUnavailable",
+      "newFind.heldCount",
+      "newFind.heldMaxReached",
       "newFind.leaveCancel",
       "newFind.leaveConfirm",
+      "newFind.leaveLookupConfirm",
+      "newFind.leavePhotosConfirm",
       "newFind.leaveYes",
       "newFind.locationDenied",
       "newFind.maxReached",
@@ -154,12 +163,31 @@ describe("the strings of the new find", () => {
       "newFind.pickFailed",
       "newFind.pickFromGallery",
       "newFind.retrySave",
+      "newFind.save",
       "newFind.saveFailed",
+      "newFind.saveHint",
+      "newFind.savePhotosFailed",
       "newFind.saved",
       "newFind.saving",
       "newFind.takePhoto",
       "newFind.title",
+      "newFind.turnSaveOn",
     ]);
+  });
+
+  it.each(LANGUAGES)("fill in the count and the most of the photos an unsaved lookup holds, in %s (PBI-2.13)", (language) => {
+    const { heldCount } = STRINGS[language].newFind;
+    expect(heldCount).toContain("{count}");
+    expect(heldCount).toContain("{max}");
+  });
+
+  it("say in English that an unsaved lookup's photos are held on the screen only, and the plural questions speak of the photos (PBI-2.13)", () => {
+    const t = STRINGS.en.newFind;
+    expect(t.saveHint).toMatch(/Save off/);
+    expect(t.heldCount).toMatch(/on this screen only/);
+    expect(t.leaveLookupConfirm).toMatch(/lookup/);
+    expect(t.discardPhotosConfirm).toMatch(/photos/);
+    expect(t.leavePhotosConfirm).toMatch(/photos/);
   });
 });
 
@@ -367,6 +395,7 @@ describe("the strings of the text lookup (PBI-2.4)", () => {
     ]);
     expect(paths.filter((path) => path.startsWith("settings.lookups."))).toEqual([
       "settings.lookups.heading",
+      "settings.lookups.photoSave",
       "settings.lookups.saveFailed",
       "settings.lookups.textSave",
     ]);
