@@ -675,7 +675,9 @@ describe("an unsaved lookup's self-check (SPEC 3.9; PBI-2.10)", () => {
     await lookUp(new TypeError("Network request failed"));
     expect(screen.getByText(en.lookup.checkWaits)).toBeOnTheScreen();
     expect(screen.getByText(en.queue.paused.network)).toBeOnTheScreen();
-    expect(within(screen.getByTestId("match-edibility")).getByText(shown("unknown"))).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId("match-edibility")).getByText(shown("unknown")),
+    ).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: en.lookup.turnSaveOn })).not.toBeOnTheScreen();
     fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
     await fireEvent.press(screen.getByRole("button", { name: en.lookup.checkAgain }));
@@ -711,7 +713,9 @@ describe("an unsaved lookup's self-check (SPEC 3.9; PBI-2.10)", () => {
   });
 
   it("an error in the app while checking: says so, and offers Check again", async () => {
-    jest.mocked(preparePhotoForAnalysis).mockRejectedValueOnce(new Error("No space left on device"));
+    jest
+      .mocked(preparePhotoForAnalysis)
+      .mockRejectedValueOnce(new Error("No space left on device"));
     jest.mocked(fetchDevicePicture).mockResolvedValueOnce({ kind: "picture", picture: PICTURE });
     fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
     await openLookup();

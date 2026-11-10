@@ -84,7 +84,11 @@ function setup() {
       analyses.push(input);
       const images = input.imagesBase64 ?? [];
       events.push(
-        images.length === 0 ? "analyse text" : images[0] === PICTURE_B64 ? "check" : "analyse photos",
+        images.length === 0
+          ? "analyse text"
+          : images[0] === PICTURE_B64
+            ? "check"
+            : "analyse photos",
       );
       return replies.shift() ?? ok(MATCH);
     },
@@ -254,7 +258,11 @@ describe("the check's error groups in a run (docs/SPEC.md 3.9)", () => {
   it.each([
     ["no network", "network", { kind: "stays-waiting", cause: "network", status: null }],
     ["the time limit", "time-out", { kind: "stays-waiting", cause: "time-out", status: null }],
-    ["a fault on Anthropic's side", "server", { kind: "stays-waiting", cause: "server", status: 529 }],
+    [
+      "a fault on Anthropic's side",
+      "server",
+      { kind: "stays-waiting", cause: "server", status: 529 },
+    ],
   ] as const)(
     "%s: the check waits and the run ends, as a waiting find's does; the next run runs the check, not the text analysis, and goes on",
     async (_name, cause, error) => {
@@ -333,14 +341,8 @@ describe("the check's error groups in a run (docs/SPEC.md 3.9)", () => {
   });
 
   it.each([
-    [
-      "a 400",
-      { kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" },
-    ],
-    [
-      "a 413",
-      { kind: "find-failed", reason: "request-too-large", status: 413, queue: "goes-on" },
-    ],
+    ["a 400", { kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" }],
+    ["a 413", { kind: "find-failed", reason: "request-too-large", status: 413, queue: "goes-on" }],
     [
       "a refusal",
       { kind: "find-failed", reason: "refused", detail: "refusal", status: 200, queue: "goes-on" },

@@ -16,9 +16,13 @@
  *   whose fetch met an error in the app, offers "Check again". The app's copy is removed when the
  *   answer it belongs to is no longer shown (the text changed, "Analyse" again) or the screen is
  *   left; a picture that comes for an answer no longer shown is removed at once.
+ * - Once the picture is shown, its self-check runs at once (docs/SPEC.md 3.9; PBI-2.10), through
+ *   the queue's `checkLookupPicture`: shown, not stored. A check that waits (a pause, or a stop of
+ *   the queue), or that met an error in the app, offers "Check again", which runs the check alone;
+ *   one that failed does not. A check that ends for an answer no longer shown is dropped.
  */
 
-import type { Answer } from "../analysis/answer";
+import type { Answer, SpeciesNames } from "../analysis/answer";
 import type { AppConfig } from "../config/config";
 import {
   ensurePermission,
@@ -32,7 +36,8 @@ import {
   type PositionTracker,
   startPositionTracker,
 } from "../position/positionTracker";
-import type { AnalyseLookupResult, QueueNotice } from "../queue/queue";
+import type { AnalyseLookupResult, CheckLookupResult, QueueNotice } from "../queue/queue";
+import type { SelfCheck, SelfCheckOutcome } from "../store/find";
 import type { FindLog } from "../store/findStore";
 
 /** An unsaved lookup's representative picture (docs/SPEC.md 3.9; PBI-2.9). */
@@ -45,14 +50,43 @@ export type LookupPicture =
   /** The fetch met an error in the app, which is not shown. */
   | { state: "error" };
 
+/** An unsaved lookup's self-check on its picture (docs/SPEC.md 3.9; PBI-2.10). */
+export type LookupCheck =
+  | { state: "checking" }
+  | { state: "done"; outcome: SelfCheckOutcome }
+  /** It waits: a pause, or the queue stopped; "Check again" runs it again. */
+  | { state: "waits"; notice: CheckWaitNotice }
+  /** It met an error in the app, which is not shown. */
+  | { state: "error" };
+
+/** The notice a self-check waits with. */
+export type CheckWaitNotice = Extract<CheckLookupResult, { ok: false }>["notice"];
+
 /**
  * What an unsaved lookup's analysis came to: the answer, with its picture when it names a species
- * (null otherwise), a notice, or an error in the app.
+ * (null otherwise) and the check on that picture once it is shown (null before, and without one),
+ * a notice, or an error in the app.
  */
 export type TextLookupOutcome =
-  | { kind: "answer"; answer: Answer; picture: LookupPicture | null }
+  | { kind: "answer"; answer: Answer; picture: LookupPicture | null; check: LookupCheck | null }
   | { kind: "notice"; notice: QueueNotice }
   | { kind: "error" };
+
+/**
+ * The self-check an unsaved lookup's answer is shown with (docs/SPEC.md 3.9): its outcome once it
+ * has one; "no picture" when there is none for the answer; waiting while the picture is fetched or
+ * waits, and while the check runs, waits or met an error. Null for an outcome that is not an
+ * answer naming a species, which has no check.
+ */
+export function lookupSelfCheck(outcome: TextLookupOutcome | null): SelfCheck | null {
+  if (outcome?.kind !== "answer" || outcome.answer.result !== "match") {
+    return null;
+  }
+  if (outcome.picture?.state === "none") {
+    return { state: "no-picture" };
+  }
+  return outcome.check?.state === "done" ? outcome.check.outcome : { state: "waiting" };
+}
 
 export interface TextLookupView {
   /**
@@ -103,6 +137,8 @@ export interface TextLookupDeps {
   fetchPicture: (latinName: string) => Promise<PictureFetch>;
   /** Removes the app's copy of a picture shown. */
   removePictureCopy: (uri: string) => void;
+  /** The queue's self-check of the picture shown, against the answer's species. */
+  checkPicture: (pictureUri: string, matched: SpeciesNames) => Promise<CheckLookupResult>;
   /** The Save switch's starting value from Settings (`readTextLookupSave`); it never rejects. */
   readSaveSetting: () => Promise<boolean>;
   location: { permission: PermissionAsker; source: LocationSource };
@@ -213,6 +249,7 @@ export class TextLookupFlow {
             kind: "answer",
             answer: result.answer,
             picture: result.answer.result === "match" ? { state: "fetching" } : null,
+            check: null,
           }
         : { kind: "notice", notice: result.notice };
     } catch {
@@ -232,22 +269,31 @@ export class TextLookupFlow {
 
   /**
    * "Check again" (docs/SPEC.md 3.9): fetches the answer's picture again when it waited, or its
-   * fetch met an error in the app. Does nothing otherwise.
+   * fetch met an error in the app, and then checks it; runs the check again on the picture shown
+   * when the check waited, or met an error in the app. Does nothing otherwise.
    */
   async checkAgain(): Promise<void> {
     const { outcome } = this.view;
-    if (
-      this.view.phase !== "ready" ||
-      outcome?.kind !== "answer" ||
-      (outcome.picture?.state !== "waits" && outcome.picture?.state !== "error")
-    ) {
+    if (this.view.phase !== "ready" || outcome?.kind !== "answer") {
       return;
     }
-    this.show({ outcome: { ...outcome, picture: { state: "fetching" } } });
-    await this.fetchPicture();
+    if (outcome.picture?.state === "waits" || outcome.picture?.state === "error") {
+      this.show({ outcome: { ...outcome, picture: { state: "fetching" } } });
+      await this.fetchPicture();
+      return;
+    }
+    if (
+      outcome.picture?.state === "shown" &&
+      (outcome.check?.state === "waits" || outcome.check?.state === "error")
+    ) {
+      await this.runCheck();
+    }
   }
 
-  /** Fetches the picture of the answer shown, and shows what came of it while it is still shown. */
+  /**
+   * Fetches the picture of the answer shown, and shows what came of it while it is still shown;
+   * a picture shown is then checked at once.
+   */
   private async fetchPicture(): Promise<void> {
     const { outcome } = this.view;
     if (outcome?.kind !== "answer" || outcome.answer.result !== "match") {
@@ -277,6 +323,42 @@ export class TextLookupFlow {
       return;
     }
     this.show({ outcome: { ...shown, picture } });
+    if (picture.state === "shown") {
+      await this.runCheck();
+    }
+  }
+
+  /**
+   * Runs the self-check on the picture shown, against the answer's species (docs/SPEC.md 3.9), and
+   * shows what came of it while that answer and picture are still shown.
+   */
+  private async runCheck(): Promise<void> {
+    const { outcome } = this.view;
+    if (
+      outcome?.kind !== "answer" ||
+      outcome.answer.result !== "match" ||
+      outcome.picture?.state !== "shown"
+    ) {
+      return;
+    }
+    const token = this.pictureToken;
+    const { uri } = outcome.picture.picture;
+    this.show({ outcome: { ...outcome, check: { state: "checking" } } });
+    let check: LookupCheck;
+    try {
+      const result = await this.deps.checkPicture(uri, outcome.answer.names);
+      check = result.ok
+        ? { state: "done", outcome: result.outcome }
+        : { state: "waits", notice: result.notice };
+    } catch {
+      check = { state: "error" };
+    }
+    const shown = this.view.outcome;
+    if (token !== this.pictureToken || this.closed || shown?.kind !== "answer") {
+      // The answer and the picture it was for are no longer shown.
+      return;
+    }
+    this.show({ outcome: { ...shown, check } });
   }
 
   /** The answer's picture is no longer shown: a fetch under way is stale, and a copy is removed. */

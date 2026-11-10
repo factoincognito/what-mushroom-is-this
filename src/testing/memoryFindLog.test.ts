@@ -184,7 +184,7 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
   [
     "the list gives each find's species by its current answer, the text answer's too, and none without an answer naming one (PBI-2.7)",
     async (log) => {
-      const waiting =await log.add({ ...photoFind, time: { ...time, takenAtMs: 1_000 } });
+      const waiting = await log.add({ ...photoFind, time: { ...time, takenAtMs: 1_000 } });
       const named = await log.add({ ...photoFind, time: { ...time, takenAtMs: 2_000 } });
       await log.setAnswer(named, analysed, await sentAll(log, named));
       const failed = await log.add({ ...photoFind, time: { ...time, takenAtMs: 3_000 } });

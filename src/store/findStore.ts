@@ -100,8 +100,10 @@ export interface FindStore {
   /**
    * The ID of the find saved first that waits for the queue, its batch complete, or null when none
    * waits: a waiting find, an analysed one whose photos added since its answer wait
-   * (docs/SPEC.md 3.9, Batches; PBI-2.5), or one whose answer from its text alone waits for its
-   * representative picture: its self-check waits and it has none (3.9, Fetching it; PBI-2.9). The
+   * (docs/SPEC.md 3.9, Batches; PBI-2.5), one whose answer from its text alone waits for its
+   * representative picture: its self-check waits and it has none (3.9, Fetching it; PBI-2.9), or
+   * one whose self-check waits on its picture and that holds no photo (3.9, the self-check;
+   * PBI-2.10: a check still waiting on a find that got photos is skipped). The
    * queue's "oldest first" is the order of saving, the
    * find's ID, not the time taken (3.4), and the queue does not take a find while its batch is
    * open (3.9). A waiting find whose
@@ -283,14 +285,16 @@ const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, resul
   ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /**
  * The find saved first after a given ID that waits for the queue, its batch complete: a waiting
- * find, an analysed one whose photos added since its answer wait (PBI-2.5), or one whose self-check
- * waits without a picture, so its picture waits (PBI-2.9); among the IDs the store can read: one
- * past 2^53 could not be passed over, since JavaScript cannot hold it to ask for the next
- * (PBI-1.26).
+ * find, an analysed one whose photos added since its answer wait (PBI-2.5), one whose self-check
+ * waits without a picture, so its picture waits (PBI-2.9), or one whose self-check waits on its
+ * picture and that holds no photo, so its check waits (PBI-2.10; a check still waiting on a find
+ * that got photos is skipped); among the IDs the store can read: one past 2^53 could not be passed
+ * over, since JavaScript cannot hold it to ask for the next (PBI-1.26).
  */
 const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds
   WHERE (state = 'waiting' OR (state = 'done' AND (added_photos = 'waiting'
-  OR (self_check = 'waiting' AND picture_file IS NULL)))) AND batch_open = 0
+  OR (self_check = 'waiting' AND (picture_file IS NULL OR ${PHOTO_COUNT} = 0)))))
+  AND batch_open = 0
   AND finds.id > ? AND finds.id <= ${Number.MAX_SAFE_INTEGER} ORDER BY finds.id ASC LIMIT 1`;
 /**
  * The IDs the store cannot read, those `SAFE_ID` gives back as NULL: `deleteUnreadable` matches

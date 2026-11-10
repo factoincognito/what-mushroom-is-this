@@ -284,6 +284,8 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
     await stale.queue.trigger();
     expect(stale.events.slice(2)).toEqual([
       `picture Cantharellus cibarius ${MODEL}`,
+      // The check on the picture, at once (PBI-2.10).
+      "analyse photos",
       "analyse photos",
     ]);
 

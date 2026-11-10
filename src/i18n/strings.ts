@@ -222,8 +222,17 @@ export type Strings = {
     readonly pictureWaits: string;
     /** It could not be fetched for an error in the app; the error itself is not shown. */
     readonly pictureError: string;
-    /** Fetches it again, after it waited or the error (docs/SPEC.md 3.9: "Check again"). */
+    /**
+     * Fetches it again, after it waited or the error, or runs its self-check again, after the check
+     * waited or met an error (docs/SPEC.md 3.9: "Check again").
+     */
     readonly checkAgain: string;
+    /** An unsaved lookup's self-check on the picture (PBI-2.10): it runs. */
+    readonly checking: string;
+    /** It waits (a pause, or the queue stopped); the notice follows. */
+    readonly checkWaits: string;
+    /** It met an error in the app; the error itself is not shown. */
+    readonly checkError: string;
   };
   /**
    * The analysis queue (docs/SPEC.md 3.3, 3.4): a message for each error class and stop. `{time}`,
@@ -392,9 +401,11 @@ export type Strings = {
     readonly description: string;
     /**
      * Why the edibility of an answer from the text alone is shown as unknown, for each state of its
-     * self-check but "agreed" (docs/SPEC.md 3.9). `{matched}` and `{named}` are the two species.
+     * self-check but "agreed", and that the check agreed (docs/SPEC.md 3.9; PBI-2.10). `{matched}`
+     * and `{named}` are the two species.
      */
     readonly selfCheck: {
+      readonly agreed: string;
       readonly waiting: string;
       readonly disagreed: string;
       readonly noSpecies: string;
@@ -699,6 +710,9 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "Bilden av arten gick inte att hämta från Wikimedia Commons just nu, så kontrollen väntar.",
       pictureError: "Bilden av arten kunde inte hämtas på grund av ett fel i appen.",
       checkAgain: "Kontrollera igen",
+      checking: "Kontrollerar matchningen mot bilden av arten …",
+      checkWaits: "Kontrollen mot bilden av arten gick inte att göra just nu, så den väntar.",
+      checkError: "Kontrollen mot bilden av arten kunde inte göras på grund av ett fel i appen.",
     },
     queue: {
       analyseNow: "Analysera nu",
@@ -830,6 +844,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "Beskrivningen säger inte tillräckligt för att avgöra vilken art det är.",
       description: "Din beskrivning",
       selfCheck: {
+        agreed: "En kontroll mot en bild av arten bekräftade matchningen.",
         waiting:
           "Ätligheten visas som okänd tills en kontroll mot en bild av arten bekräftar matchningen. Kontrollen har inte gjorts ännu.",
         disagreed:
@@ -1057,6 +1072,11 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       pictureError:
         "The picture of the species could not be fetched because of an error in the app.",
       checkAgain: "Check again",
+      checking: "Checking the match against the picture of the species…",
+      checkWaits:
+        "The check on the picture of the species could not be made just now, so it waits.",
+      checkError:
+        "The check on the picture of the species could not be made because of an error in the app.",
     },
     queue: {
       analyseNow: "Analyse now",
@@ -1185,6 +1205,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       cannotTellDescribed: "The description does not say enough to tell which species it is.",
       description: "Your description",
       selfCheck: {
+        agreed: "A check on a picture of the species agreed with this match.",
         waiting:
           "The edibility is shown as unknown until a check on a picture of the species agrees with this match. The check has not been made yet.",
         disagreed:
@@ -1417,6 +1438,11 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       pictureError:
         "Non è stato possibile recuperare l'immagine della specie per un errore nell'app.",
       checkAgain: "Controlla di nuovo",
+      checking: "Controllo della corrispondenza sull'immagine della specie…",
+      checkWaits:
+        "Non è stato possibile fare ora il controllo sull'immagine della specie, quindi è in attesa.",
+      checkError:
+        "Non è stato possibile fare il controllo sull'immagine della specie per un errore nell'app.",
     },
     queue: {
       analyseNow: "Analizza ora",
@@ -1552,6 +1578,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "La descrizione non dice abbastanza per stabilire di quale specie si tratti.",
       description: "La tua descrizione",
       selfCheck: {
+        agreed: "Un controllo su un'immagine della specie ha confermato questa corrispondenza.",
         waiting:
           "La commestibilità è indicata come sconosciuta finché un controllo su un'immagine della specie non conferma questa corrispondenza. Il controllo non è ancora stato fatto.",
         disagreed:

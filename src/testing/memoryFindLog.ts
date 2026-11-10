@@ -19,6 +19,7 @@
  * (the store would keep a copy of its own), only beside a self-check that waits and has none; the
  * check's "no picture" only on one that waits without it, its other outcomes only with it; the
  * queue's pick takes a find whose check waits without a picture; and the list gives the picture.
+ * The pick also takes a find whose check waits on its picture and that holds no photo (PBI-2.10).
  */
 
 import { config } from "../config/config";
@@ -340,7 +341,8 @@ export function memoryFindLog(): MemoryFindLog {
             (find.analysis.state === "waiting" ||
               (find.analysis.state === "done" &&
                 (find.addedPhotos === "waiting" ||
-                  (find.selfCheck?.state === "waiting" && find.picture === null)))) &&
+                  (find.selfCheck?.state === "waiting" &&
+                    (find.picture === null || find.photos.length === 0))))) &&
             !unreadable.has(find.id),
         );
       return waiting.length === 0 ? null : Math.min(...waiting.map((find) => find.id));

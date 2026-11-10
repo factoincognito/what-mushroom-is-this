@@ -256,7 +256,12 @@ describe("the text (SPEC 3.9: up to the configured length)", () => {
     await t.flow.start();
     t.flow.setText(SHORT);
     await t.flow.analyse();
-    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN, check: AGREED });
+    expect(t.view().outcome).toEqual({
+      kind: "answer",
+      answer: MATCH,
+      picture: SHOWN,
+      check: AGREED,
+    });
     t.flow.setText(`${SHORT} White.`);
     expect(t.view().outcome).toBeNull();
     // Its picture goes with it (docs/SPEC.md 3.9: shown, not stored).
@@ -404,7 +409,12 @@ describe("an unsaved lookup (Save off)", () => {
       });
       await t.flow.analyse();
       expect(t.lookups).toEqual([SHORT, SHORT]);
-      expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN, check: AGREED });
+      expect(t.view().outcome).toEqual({
+        kind: "answer",
+        answer: MATCH,
+        picture: SHOWN,
+        check: AGREED,
+      });
     },
   );
 
@@ -588,7 +598,12 @@ describe("an unsaved lookup's representative picture (docs/SPEC.md 3.9; PBI-2.9)
     release();
     await analysing;
     expect(t.pictureNames).toEqual(["Cantharellus cibarius"]);
-    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN, check: AGREED });
+    expect(t.view().outcome).toEqual({
+      kind: "answer",
+      answer: MATCH,
+      picture: SHOWN,
+      check: AGREED,
+    });
     expect(t.added).toEqual([]);
   });
 
@@ -639,7 +654,12 @@ describe("an unsaved lookup's representative picture (docs/SPEC.md 3.9; PBI-2.9)
     await t.flow.checkAgain();
     expect(t.pictureNames).toEqual(["Cantharellus cibarius", "Cantharellus cibarius"]);
     expect(t.lookups).toEqual([SHORT]);
-    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN, check: AGREED });
+    expect(t.view().outcome).toEqual({
+      kind: "answer",
+      answer: MATCH,
+      picture: SHOWN,
+      check: AGREED,
+    });
   });
 
   it("an error in the app while fetching it: says so, and Check again tries again", async () => {
@@ -655,7 +675,12 @@ describe("an unsaved lookup's representative picture (docs/SPEC.md 3.9; PBI-2.9)
       check: null,
     });
     await t.flow.checkAgain();
-    expect(t.view().outcome).toEqual({ kind: "answer", answer: MATCH, picture: SHOWN, check: AGREED });
+    expect(t.view().outcome).toEqual({
+      kind: "answer",
+      answer: MATCH,
+      picture: SHOWN,
+      check: AGREED,
+    });
   });
 
   it("Check again does nothing while a picture is shown, or none was found", async () => {
@@ -864,11 +889,31 @@ describe("lookupSelfCheck (the self-check an unsaved lookup's answer is shown wi
   it.each([
     ["no outcome", null, null],
     ["a notice", { kind: "notice", notice: { kind: "paused", cause: "network" } }, null],
-    ["an answer naming no species", { kind: "answer", answer: { result: "no_mushroom" }, picture: null, check: null }, null],
-    ["a picture fetched", { kind: "answer", answer: MATCH, picture: { state: "fetching" }, check: null }, { state: "waiting" }],
-    ["a picture that waits", { kind: "answer", answer: MATCH, picture: { state: "waits", cause: "network" }, check: null }, { state: "waiting" }],
-    ["a picture whose fetch met an error", { kind: "answer", answer: MATCH, picture: { state: "error" }, check: null }, { state: "waiting" }],
-    ["no picture", { kind: "answer", answer: MATCH, picture: { state: "none" }, check: null }, { state: "no-picture" }],
+    [
+      "an answer naming no species",
+      { kind: "answer", answer: { result: "no_mushroom" }, picture: null, check: null },
+      null,
+    ],
+    [
+      "a picture fetched",
+      { kind: "answer", answer: MATCH, picture: { state: "fetching" }, check: null },
+      { state: "waiting" },
+    ],
+    [
+      "a picture that waits",
+      { kind: "answer", answer: MATCH, picture: { state: "waits", cause: "network" }, check: null },
+      { state: "waiting" },
+    ],
+    [
+      "a picture whose fetch met an error",
+      { kind: "answer", answer: MATCH, picture: { state: "error" }, check: null },
+      { state: "waiting" },
+    ],
+    [
+      "no picture",
+      { kind: "answer", answer: MATCH, picture: { state: "none" }, check: null },
+      { state: "no-picture" },
+    ],
   ] as const)("for %s", (_name, outcome, expected) => {
     expect(lookupSelfCheck(outcome)).toEqual(expected);
   });
