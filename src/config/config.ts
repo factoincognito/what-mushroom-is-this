@@ -136,8 +136,8 @@ export const config: AppConfig = Object.freeze({
   // docs/SPEC.md 3.9: Clead's limits, kept as configuration as the spec says.
   mapPositionFixWaitMs: 5_000,
   mapLastKnownPositionMaxAgeMs: 2 * 60_000,
-  // docs/SPEC.md 3.9 gives no value. Proposed by Crog in PBI-2.8: about the extent of Sweden, for
-  // Clead to confirm.
+  // docs/SPEC.md 3.9: Clead's configuration. About the extent of Sweden; proposed by Crog in
+  // PBI-2.8 and accepted by Clead in the fix round on #68.
   mapDefaultArea: Object.freeze([10.9, 55.3, 24.2, 69.1] as const),
   mapUserAgentContact: "https://github.com/factoincognito/what-mushroom-is-this",
 });
