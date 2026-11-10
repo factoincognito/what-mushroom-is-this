@@ -7,8 +7,8 @@ const appJson: { expo: { name: string; version: string } } = JSON.parse(
 
 describe("mapUserAgent: the app's own User-Agent for the map's requests (SPEC 3.9)", () => {
   it("names the app, its version and the repository's address, from the app's config", () => {
-    expect(mapUserAgent({ name: "Washroom", version: "0.1.0" })).toBe(
-      "Washroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this)",
+    expect(mapUserAgent({ name: "Wushroom", version: "0.1.0" })).toBe(
+      "Wushroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this)",
     );
   });
 
@@ -22,12 +22,12 @@ describe("mapUserAgent: the app's own User-Agent for the map's requests (SPEC 3.
     ["no config", null],
     ["no config at all", undefined],
     ["a config without a name", { version: "0.1.0" }],
-    ["a config without a version", { name: "Washroom" }],
+    ["a config without a version", { name: "Wushroom" }],
     ["an empty name", { name: "", version: "0.1.0" }],
     ["a name that is not a string", { name: 7, version: "0.1.0" }],
-    ["a name with a space, which a product token cannot hold", { name: "Wash room", version: "1" }],
-    ["a name with a slash", { name: "Wash/room", version: "1" }],
-    ["a version with a character outside ASCII", { name: "Washroom", version: "0.1.0é" }],
+    ["a name with a space, which a product token cannot hold", { name: "Wush room", version: "1" }],
+    ["a name with a slash", { name: "Wush/room", version: "1" }],
+    ["a version with a character outside ASCII", { name: "Wushroom", version: "0.1.0é" }],
   ])("is null for %s, so the library's own User-Agent stays", (_name, expoConfig) => {
     expect(mapUserAgent(expoConfig)).toBeNull();
   });
@@ -40,20 +40,20 @@ describe("setMapUserAgent", () => {
 
   it("sets the header on every request of the map library, by one fixed transform ID", () => {
     const requests = manager();
-    expect(setMapUserAgent(requests, { name: "Washroom", version: "0.1.0" })).toBe(true);
+    expect(setMapUserAgent(requests, { name: "Wushroom", version: "0.1.0" })).toBe(true);
     expect(requests.addHeader).toHaveBeenCalledTimes(1);
     expect(requests.addHeader).toHaveBeenCalledWith({
       id: MAP_USER_AGENT_ID,
       name: "User-Agent",
-      value: "Washroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this)",
+      value: "Wushroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this)",
     });
     expect(requests.addHeader.mock.calls[0]?.[0]).not.toHaveProperty("match");
   });
 
   it("sets it again under the same ID, which replaces the earlier one in place", () => {
     const requests = manager();
-    setMapUserAgent(requests, { name: "Washroom", version: "0.1.0" });
-    setMapUserAgent(requests, { name: "Washroom", version: "0.1.0" });
+    setMapUserAgent(requests, { name: "Wushroom", version: "0.1.0" });
+    setMapUserAgent(requests, { name: "Wushroom", version: "0.1.0" });
     const ids = requests.addHeader.mock.calls.map(([options]) => options.id);
     expect(ids).toEqual([MAP_USER_AGENT_ID, MAP_USER_AGENT_ID]);
   });
@@ -70,6 +70,6 @@ describe("setMapUserAgent", () => {
         throw new Error("native module missing");
       }),
     };
-    expect(setMapUserAgent(requests, { name: "Washroom", version: "0.1.0" })).toBe(false);
+    expect(setMapUserAgent(requests, { name: "Wushroom", version: "0.1.0" })).toBe(false);
   });
 });

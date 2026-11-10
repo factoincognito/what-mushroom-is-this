@@ -30,9 +30,9 @@ beforeEach(() => {
 describe("devicePictureDeps (PBI-2.9)", () => {
   it("names the app as app.json does, in the User-Agent", () => {
     expect(devicePictureDeps().userAgent).toBe(
-      "Washroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
+      "Wushroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
     );
-    expect(devicePictureDeps({ name: "Washroom" }).userAgent).toBeNull();
+    expect(devicePictureDeps({ name: "Wushroom" }).userAgent).toBeNull();
   });
 
   it("saves a copy in the cache, with the extension given, and removes it again", async () => {
@@ -115,7 +115,7 @@ describe("devicePictureDeps (PBI-2.9)", () => {
       method: "GET",
       headers: {
         "User-Agent":
-          "Washroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
+          "Wushroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
       },
     });
   });

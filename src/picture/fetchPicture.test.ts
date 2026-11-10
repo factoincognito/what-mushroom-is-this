@@ -23,7 +23,7 @@ import {
 } from "./fetchPicture";
 
 const NOW = Date.UTC(2026, 10, 10, 9, 0, 0);
-const UA = "Washroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch";
+const UA = "Wushroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch";
 const NAME = "Cantharellus cibarius";
 const HIGH_TIER_MODEL = "claude-opus-5-5";
 
