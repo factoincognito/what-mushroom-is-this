@@ -347,7 +347,71 @@ describe("the licence texts", () => {
       "com.google.android.gms:play-services-tasks",
       "org.maplibre.gl:android-plugin-annotation-v9",
       "org.maplibre.gl:android-plugin-scalebar-v9",
+      "org.maplibre.gl:maplibre-android-gestures",
     ]);
+  });
+
+  /**
+   * The Maven libraries MapLibre Android 13.6.1 itself asks for, as its `api` and
+   * `implementation` dependencies: `platform/android/MapLibreAndroid/build.gradle.kts` with the
+   * versions of `platform/android/gradle/libs.versions.toml`, at the tag `android-v13.6.1`
+   * (commit c7506d6) of https://github.com/maplibre/maplibre-native, read on 2026-11-10 (the
+   * Clead-role review of #68, fix 1). Those files are not in `node_modules`, so the list is kept
+   * here; the published 13.6.1 POM was not read and may differ.
+   */
+  const MAPLIBRE_ANDROID_OWN: readonly [string, string][] = [
+    ["org.maplibre.gl:android-sdk-geojson", "6.0.1"],
+    ["org.maplibre.gl:maplibre-android-gestures", "0.0.4"],
+    ["org.maplibre.gl:android-sdk-turf", "6.0.1"],
+    ["androidx.annotation:annotation", "1.8.2"],
+    ["androidx.fragment:fragment", "1.8.9"],
+    ["com.squareup.okhttp3:okhttp", "4.12.0"],
+    ["com.jakewharton.timber:timber", "5.0.1"],
+    ["androidx.interpolator:interpolator", "1.0.0"],
+    ["org.jetbrains.kotlinx:kotlinx-coroutines-core", "1.10.2"],
+  ];
+
+  it.each(MAPLIBRE_ANDROID_OWN)(
+    "name %s %s, which MapLibre Android 13.6.1's own build file asks for (PBI-2.8)",
+    (name, version) => {
+      const record = readFileSync(join(ROOT, "THIRD-PARTY-NOTICES.md"), "utf8");
+      const entry = NOTICES.libraries.find((candidate) => candidate.name === name);
+      // A library recorded at that version has its row; one recorded at another version, or not
+      // read yet, is named with this version in the record's text.
+      if (entry?.version !== version) {
+        expect(record).toContain(`\`${name}\` ${version}`);
+      }
+    },
+  );
+
+  it.each<[string, string, string, string | null]>([
+    ["org.maplibre.gl:maplibre-android-gestures", "0.0.4", "BSD-2-Clause", null],
+    ["com.jakewharton.timber:timber", "5.0.1", "Apache-2.0", "Apache-2.0"],
+    ["androidx.interpolator:interpolator", "1.0.0", "Apache-2.0", "Apache-2.0"],
+  ])(
+    "give %s %s, which MapLibre Android builds in, the licence read for it, %s (PBI-2.8)",
+    (name, version, licence, textId) => {
+      expect(library(name)).toMatchObject({ version, licence, textId });
+    },
+  );
+
+  it("name android-sdk-geojson 6.0.1 as not read yet, for PBI-1.24, and list it as no library (PBI-2.8)", () => {
+    const record = readFileSync(join(ROOT, "THIRD-PARTY-NOTICES.md"), "utf8");
+    expect(NOTICES.libraries.map((entry) => entry.name)).not.toContain(
+      "org.maplibre.gl:android-sdk-geojson",
+    );
+    expect(record).toMatch(/`org\.maplibre\.gl:android-sdk-geojson` 6\.0\.1[^\n]*not read yet/);
+  });
+
+  it("say which deeper dependencies are not named yet, for PBI-1.24: OkHttp's own, and those of the plugins and turf (PBI-2.8)", () => {
+    const record = readFileSync(join(ROOT, "THIRD-PARTY-NOTICES.md"), "utf8");
+    const native = record.slice(
+      record.indexOf("### The native libraries `@maplibre/maplibre-react-native` builds in"),
+      record.indexOf("\n## Map data"),
+    );
+    expect(native).toContain("Okio");
+    expect(native).toMatch(/plugins[^.]*turf[^.]*not (yet )?named/);
+    expect(native).toContain("PBI-1.24");
   });
 
   it("leave no library's licence unread (Clead's reads for PBI-2.8)", () => {

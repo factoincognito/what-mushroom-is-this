@@ -52,6 +52,10 @@ describe("config", () => {
     expect(config.mapLastKnownPositionMaxAgeMs).toBe(120_000);
   });
 
+  it("holds the map's default area, about the extent of Sweden, as Clead accepted it (PBI-2.8)", () => {
+    expect(config.mapDefaultArea).toEqual([10.9, 55.3, 24.2, 69.1]);
+  });
+
   it("holds the map's default area as west, south, east and north, a valid box (PBI-2.8)", () => {
     const [west, south, east, north] = config.mapDefaultArea;
     expect(config.mapDefaultArea).toHaveLength(4);
