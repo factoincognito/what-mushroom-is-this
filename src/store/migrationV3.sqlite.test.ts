@@ -397,6 +397,94 @@ describe("the migration to schema version 3, on a version 2 database (PBI-2.15)"
     });
   });
 
+  /**
+   * Rows that break a version 2 CHECK, so only a damaged file holds them, and that the version 2
+   * store reads (the review's probe on main): an answer's columns on a waiting or a failed find,
+   * which the store reads by its state; and an answer whose JSON names a species while its result
+   * column says no mushroom, which the store reads by its JSON. Each with what the store reads.
+   */
+  function damagedReadableRows() {
+    const answerColumns = { ...done({ result: "no_mushroom" }), added_photos: null };
+    const matchAsNoMushroom = { ...done(match), result: "no_mushroom" };
+    const read = {
+      done: { analysis: { state: "done", answer: match }, answerBasis: "photos", selfCheck: null },
+    };
+    return {
+      "a waiting find with an answer's columns set": {
+        id: insert({ ...photoFind(["r1.jpg"], 1_000), ...answerColumns, state: "waiting" }, true),
+        read: { analysis: { state: "waiting" }, answerBasis: null },
+      },
+      "a failed find with an answer's columns set": {
+        id: insert(
+          {
+            ...photoFind(["r2.jpg"], 2_000),
+            ...answerColumns,
+            state: "failed",
+            failure_cause: "request",
+            failure_detail: "status 400",
+          },
+          true,
+        ),
+        read: {
+          analysis: { state: "failed", failure: { cause: "request", detail: "status 400" } },
+          answerBasis: null,
+        },
+      },
+      "a text find that never had a photo, its JSON a match and its result column no mushroom": {
+        id: insert({ ...textFind([], 0, 3_000), ...matchAsNoMushroom }, true),
+        read: read.done,
+      },
+      "the same with one photo": {
+        id: insert({ ...textFind(["r3.jpg"], 1, 4_000), ...matchAsNoMushroom }, true),
+        read: read.done,
+      },
+    };
+  }
+
+  it.each([
+    "a waiting find with an answer's columns set",
+    "a failed find with an answer's columns set",
+    "a text find that never had a photo, its JSON a match and its result column no mushroom",
+    "the same with one photo",
+  ] as const)(
+    "keeps readable, in getStored and the list, a damaged row the version 2 store reads: %s (review of #84, fix 1)",
+    async (name) => {
+      await versionTwo();
+      const { id, read } = damagedReadableRows()[name];
+      const store = await open();
+      await expect(store.getStored(id)).resolves.toMatchObject(read);
+      const list = await store.list();
+      expect(list).toHaveLength(4);
+      expect(list.find((entry) => entry.id === id)).toMatchObject({ readable: true });
+    },
+  );
+
+  it("keeps a damaged waiting row with an answer's columns set the queue's pick, as on version 2 (review of #84, fix 1)", async () => {
+    await versionTwo();
+    const rows = damagedReadableRows();
+    const store = await open();
+    await expect(store.oldestWaiting()).resolves.toBe(
+      rows["a waiting find with an answer's columns set"].id,
+    );
+    // The list's summary of the match read as no mushroom keeps its result column, as on version 2.
+    expect((await store.list())[0]).toMatchObject({
+      id: rows["the same with one photo"].id,
+      analysis: { state: "done", result: "no_mushroom" },
+    });
+  });
+
+  it("leaves every migrated row within the version 3 CHECKs (review of #84, note 2)", async () => {
+    await versionTwo();
+    const { finds } = versionTwoFinds();
+    await open();
+    expect(sqlite.prepare("PRAGMA integrity_check").all()).toEqual([{ integrity_check: "ok" }]);
+    // The check sees a row that breaks a CHECK version 3 added, so the "ok" above is not empty.
+    damage("UPDATE finds SET answer_basis = NULL WHERE id = ?", finds.photoMatch);
+    expect(sqlite.prepare("PRAGMA integrity_check").all()).not.toEqual([
+      { integrity_check: "ok" },
+    ]);
+  });
+
   it("keeps AUTOINCREMENT's high-water mark, so the ID of a find deleted in version 2 is not given again", async () => {
     await versionTwo();
     const kept = insert(photoFind(["a.jpg"], 1_000));

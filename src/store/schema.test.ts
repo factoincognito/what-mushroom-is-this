@@ -292,9 +292,10 @@ describe("schema version 3 (PBI-2.15)", () => {
   });
 
   it("copies the finds past the CHECKs, so a damaged row is kept as it is, and turns the CHECKs on again", () => {
-    expect(v3.indexOf("PRAGMA ignore_check_constraints = ON;")).toBeLessThan(
-      v3.indexOf("INSERT INTO finds_v3"),
-    );
+    // Found, and before the copy (review of #84, note 1: -1 for a missing line is less too).
+    const off = v3.indexOf("PRAGMA ignore_check_constraints = ON;");
+    expect(off).toBeGreaterThanOrEqual(0);
+    expect(off).toBeLessThan(v3.indexOf("INSERT INTO finds_v3"));
     expect(v3.trim().endsWith("PRAGMA ignore_check_constraints = OFF;")).toBe(true);
   });
 
@@ -311,9 +312,9 @@ describe("schema version 3 (PBI-2.15)", () => {
     );
   });
 
-  it("fills the basis only where the stored data proves it, and leaves it empty otherwise", () => {
+  it("fills the basis only where the stored data proves it, and leaves it empty otherwise, judging the answer by the columns the store reads it by (review of #84, fix 1)", () => {
     expect(v3).toContain(
-      "CASE WHEN answer_json IS NULL THEN NULL WHEN text IS NULL THEN 'photos' WHEN self_check IS NOT NULL THEN 'text' WHEN result = 'match' THEN 'photos' WHEN batches = 0 THEN 'text' END",
+      "CASE WHEN state IS NOT 'done' THEN NULL WHEN text IS NULL THEN 'photos' WHEN self_check IS NOT NULL THEN 'text' WHEN (CASE WHEN json_valid(answer_json) THEN json_extract(answer_json, '$.result') END) = 'match' THEN 'photos' WHEN batches = 0 THEN 'text' END",
     );
   });
 
