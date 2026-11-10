@@ -263,7 +263,10 @@ export type Strings = {
       readonly keyNotScoped: string;
       readonly noCredit: string;
       readonly modelUnknown: string;
+      /** An answer not of the shape, or not from the API, that marked a find failed. */
       readonly answer: string;
+      /** The same when no find was marked failed: an unsaved lookup, a kept answer, a self-check. */
+      readonly answerNoFindFailed: string;
       /** A run failed inside the app; the error itself is not shown. */
       readonly internalError: string;
       /** `{status}`: the answer's HTTP status. */
@@ -324,8 +327,9 @@ export type Strings = {
       /** Claude declined to analyse a description, for a lookup without photos. */
       readonly refusedDescribed: string;
       /**
-       * A failure of one of a find's several photos (docs/SPEC.md 3.9, Batches): `{number}` is the
-       * photo's number, `{reason}` the sentence of its failure.
+       * A failure of one of a find's several photos, or of the one photo of a text find, which can
+       * be removed (docs/SPEC.md 3.9, Batches): `{number}` is the photo's number, `{reason}` the
+       * sentence of its failure.
        */
       readonly numbered: string;
     };
@@ -407,6 +411,11 @@ export type Strings = {
     readonly selfCheck: {
       readonly agreed: string;
       readonly waiting: string;
+      /**
+       * A waiting check on a find that has photos, which is not run: it waits until the photos are
+       * analysed or removed (docs/SPEC.md 3.9; Clead's decision on #78).
+       */
+      readonly waitingOnPhotos: string;
       readonly disagreed: string;
       readonly noSpecies: string;
       readonly failed: string;
@@ -657,9 +666,9 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       fileNotImage:
         "Filen gick inte att läsa in som en bild, så den lades inte till. Välj en annan fil.",
       cameraDenied:
-        "Appen får inte använda kameran, så den kan inte ta något foto. Du kan välja ett foto i galleriet i stället.",
+        "Appen får inte använda kameran, så den kan inte ta något foto. Du kan välja ett foto i galleriet eller bland filerna i stället.",
       cameraBlocked:
-        "Appen får inte använda kameran. Du kan tillåta det i telefonens inställningar eller välja ett foto i galleriet.",
+        "Appen får inte använda kameran. Du kan tillåta det i telefonens inställningar, eller välja ett foto i galleriet eller bland filerna.",
       locationDenied:
         "Appen får inte använda telefonens plats, så ett foto från kameran sparas utan position. Du kan tillåta det i telefonens inställningar.",
       openSettings: "Öppna telefonens inställningar",
@@ -744,6 +753,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         modelUnknown: "Claude-API:t känner inte till modellen. Välj en annan i Inställningar.",
         answer:
           "Ett svar hade inte den väntade formen, eller kom inte från Claude-API:t (till exempel en inloggningssida för wifi). Det fyndet är markerat som misslyckat. Tryck på Analysera nu för att fortsätta.",
+        answerNoFindFailed:
+          "Ett svar hade inte den väntade formen, eller kom inte från Claude-API:t (till exempel en inloggningssida för wifi). Tryck på Analysera nu för att fortsätta.",
         internalError:
           "Något gick fel i appen under analysen. Fynden finns kvar. Tryck på Analysera nu för att försöka igen.",
         other:
@@ -847,6 +858,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         agreed: "En kontroll mot en bild av arten bekräftade matchningen.",
         waiting:
           "Ätligheten visas som okänd tills en kontroll mot en bild av arten bekräftar matchningen. Kontrollen har inte gjorts ännu.",
+        waitingOnPhotos:
+          "Ätligheten visas som okänd tills en kontroll mot en bild av arten bekräftar matchningen. Kontrollen väntar tills fyndets foton har analyserats eller tagits bort.",
         disagreed:
           "Ätligheten visas som okänd: en kontroll mot en bild av {matched} angav en annan art, {named}.",
         noSpecies:
@@ -1019,9 +1032,9 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       fileNotImage:
         "The file could not be loaded as an image, so it was not added. Pick another file.",
       cameraDenied:
-        "The app may not use the camera, so it cannot take a photo. You can pick a photo from the gallery instead.",
+        "The app may not use the camera, so it cannot take a photo. You can pick a photo from the gallery or the files instead.",
       cameraBlocked:
-        "The app may not use the camera. You can allow it in the phone's settings, or pick a photo from the gallery.",
+        "The app may not use the camera. You can allow it in the phone's settings, or pick a photo from the gallery or the files.",
       locationDenied:
         "The app may not use the phone's location, so a photo from the camera is saved without a position. You can allow it in the phone's settings.",
       openSettings: "Open the phone's settings",
@@ -1107,6 +1120,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         modelUnknown: "The Claude API does not know the model. Choose another in Settings.",
         answer:
           "An answer did not have the expected form, or did not come from the Claude API (for example a Wi-Fi sign-in page). That find is marked failed. Tap Analyse now to go on.",
+        answerNoFindFailed:
+          "An answer did not have the expected form, or did not come from the Claude API (for example a Wi-Fi sign-in page). Tap Analyse now to go on.",
         internalError:
           "Something went wrong inside the app during the analysis. The finds are kept. Tap Analyse now to try again.",
         other: "The Claude API answered with status {status}. Tap Analyse now to try again.",
@@ -1208,6 +1223,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         agreed: "A check on a picture of the species agreed with this match.",
         waiting:
           "The edibility is shown as unknown until a check on a picture of the species agrees with this match. The check has not been made yet.",
+        waitingOnPhotos:
+          "The edibility is shown as unknown until a check on a picture of the species agrees with this match. The check waits until the find's photos are analysed or removed.",
         disagreed:
           "The edibility is shown as unknown: a check on a picture of {matched} named another species, {named}.",
         noSpecies:
@@ -1383,9 +1400,9 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       fileNotImage:
         "Non è stato possibile caricare il file come immagine, quindi non è stato aggiunto. Scegli un altro file.",
       cameraDenied:
-        "L'app non può usare la fotocamera, quindi non può scattare foto. Puoi invece scegliere una foto dalla galleria.",
+        "L'app non può usare la fotocamera, quindi non può scattare foto. Puoi invece scegliere una foto dalla galleria o dai file.",
       cameraBlocked:
-        "L'app non può usare la fotocamera. Puoi consentirlo nelle impostazioni del telefono, oppure scegliere una foto dalla galleria.",
+        "L'app non può usare la fotocamera. Puoi consentirlo nelle impostazioni del telefono, oppure scegliere una foto dalla galleria o dai file.",
       locationDenied:
         "L'app non può usare la posizione del telefono, quindi una foto dalla fotocamera viene salvata senza posizione. Puoi consentirlo nelle impostazioni del telefono.",
       openSettings: "Apri le impostazioni del telefono",
@@ -1475,6 +1492,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         modelUnknown: "L'API di Claude non conosce il modello. Scegline un altro in Impostazioni.",
         answer:
           "Una risposta non aveva la forma prevista, oppure non veniva dall'API di Claude (ad esempio una pagina di accesso al Wi-Fi). Quel ritrovamento è segnato come non riuscito. Tocca Analizza ora per continuare.",
+        answerNoFindFailed:
+          "Una risposta non aveva la forma prevista, oppure non veniva dall'API di Claude (ad esempio una pagina di accesso al Wi-Fi). Tocca Analizza ora per continuare.",
         internalError:
           "Qualcosa è andato storto nell'app durante l'analisi. I ritrovamenti sono conservati. Tocca Analizza ora per riprovare.",
         other:
@@ -1581,6 +1600,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         agreed: "Un controllo su un'immagine della specie ha confermato questa corrispondenza.",
         waiting:
           "La commestibilità è indicata come sconosciuta finché un controllo su un'immagine della specie non conferma questa corrispondenza. Il controllo non è ancora stato fatto.",
+        waitingOnPhotos:
+          "La commestibilità è indicata come sconosciuta finché un controllo su un'immagine della specie non conferma questa corrispondenza. Il controllo resta in attesa finché le foto del ritrovamento non sono state analizzate o rimosse.",
         disagreed:
           "La commestibilità è indicata come sconosciuta: un controllo su un'immagine di {matched} ha indicato un'altra specie, {named}.",
         noSpecies:

@@ -1650,9 +1650,7 @@ describe("all of a find's photos in one request (SPEC 3.9, Batches; PBI-2.5)", (
     t.log.addTextFind(2, DESCRIPTION, { state: "waiting" }, [
       { uri: "file:///photos/2-1.jpg", batch: 1 },
     ]);
-    t.setPreparation(
-      photosByName({ "1-1": refused, "2-1": badSize("invalid-size: 0 x 0") }),
-    );
+    t.setPreparation(photosByName({ "1-1": refused, "2-1": badSize("invalid-size: 0 x 0") }));
     await t.queue.trigger();
     expect(t.log.changes).toEqual([
       "markFailed 1 segment-check: photo 1: forbidden-segment 0xFFE1",

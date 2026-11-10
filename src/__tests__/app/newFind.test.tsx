@@ -619,7 +619,7 @@ describe("the camera permission", () => {
     expect(ImagePicker.launchCameraAsync).toHaveBeenCalledTimes(1);
   });
 
-  it("when refused, keeps the camera closed, says so and still offers the gallery", async () => {
+  it("when refused, keeps the camera closed, says so, naming the gallery and the files, and still offers both (PBI-2.16, #66)", async () => {
     jest
       .mocked(ImagePicker.getCameraPermissionsAsync)
       .mockResolvedValue(wrong(permission("denied")));
@@ -630,7 +630,13 @@ describe("the camera permission", () => {
     expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
     expect(screen.getByText(STRINGS.en.newFind.cameraDenied)).toBeOnTheScreen();
     expect(
+      screen.getByText(/pick a photo from the gallery or the files instead/),
+    ).toBeOnTheScreen();
+    expect(
       screen.getByRole("button", { name: STRINGS.en.newFind.pickFromGallery }),
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByRole("button", { name: STRINGS.en.newFind.pickFromFiles }),
     ).toBeOnTheScreen();
   });
 
@@ -642,6 +648,7 @@ describe("the camera permission", () => {
     await openNewFind();
     expect(ImagePicker.requestCameraPermissionsAsync).not.toHaveBeenCalled();
     expect(screen.getByText(STRINGS.en.newFind.cameraBlocked)).toBeOnTheScreen();
+    expect(screen.getByText(/or pick a photo from the gallery or the files\./)).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole("button", { name: STRINGS.en.newFind.openSettings }));
     expect(openSettings).toHaveBeenCalledTimes(1);
     openSettings.mockRestore();

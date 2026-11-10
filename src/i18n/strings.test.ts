@@ -201,6 +201,21 @@ describe("the strings of the self-check (SPEC 3.9; PBI-2.10)", () => {
   });
 });
 
+describe("the Swedish texts that end in an ellipsis (PBI-2.16, #75)", () => {
+  // The space before it after a whole word is kept, in "checking" as in the others: an open point
+  // for the Swedish speaker's check, not decided here.
+  it("all have a space before it, the check's too", () => {
+    const ending = leaves(STRINGS.sv).filter(
+      (leaf): leaf is string => typeof leaf === "string" && leaf.endsWith("…"),
+    );
+    expect(ending).toContain(STRINGS.sv.lookup.checking);
+    expect(ending.length).toBeGreaterThan(1);
+    for (const text of ending) {
+      expect(text).toMatch(/\S …$/);
+    }
+  });
+});
+
 describe("the camera refusal (PBI-2.16, #66)", () => {
   it.each([
     ["sv", /i galleriet eller bland filerna/],

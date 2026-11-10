@@ -5,6 +5,7 @@ import type { AnalyseLookupResult, CheckLookupResult } from "../queue/queue";
 import type { NewTextFind, Position } from "../store/find";
 import {
   INITIAL_TEXT_LOOKUP_VIEW,
+  lookupFieldMaxLength,
   lookupSelfCheck,
   TextLookupFlow,
   type TextLookupView,
@@ -240,6 +241,19 @@ describe("the text (SPEC 3.9: up to the configured length)", () => {
     await t.flow.start();
     t.flow.setText("🍄".repeat(25));
     expect(t.view().text).toBe("🍄".repeat(20));
+  });
+
+  it("gives the text field a limit in UTF-16 units that every text of the configured length fits in (PBI-2.14, note 2)", async () => {
+    // The field's own limit counts UTF-16 units; a code point takes one or two.
+    const limit = lookupFieldMaxLength(20);
+    expect(limit).toBe(40);
+    expect("🍄".repeat(20)).toHaveLength(limit);
+    expect("a".repeat(20).length).toBeLessThanOrEqual(limit);
+    // What the field lets through beyond the configured length, the flow cuts.
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText("a".repeat(limit));
+    expect(t.view().text).toBe("a".repeat(20));
   });
 
   it("does not analyse or save an empty text, and says so", async () => {

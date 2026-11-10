@@ -294,7 +294,31 @@ describe("the edibility of an answer from text alone, until its self-check agree
     ["failed", { state: "failed" }, STRINGS.en.find.selfCheck.failed],
     ["no-picture", { state: "no-picture" }, STRINGS.en.find.selfCheck.noPicture],
   ] as const)("says why while the check is %s", (_, check, reason) => {
-    expect(selfCheckReason(check, matched, "en", STRINGS.en)).toBe(reason);
+    expect(selfCheckReason(check, matched, "en", STRINGS.en, false)).toBe(reason);
+  });
+
+  it.each(["sv", "en", "it"] as const)(
+    "says in %s that a waiting check on a find with photos waits until they are analysed or removed, not that it has not been made yet (Clead's decision on #78)",
+    (language) => {
+      const t = STRINGS[language].find.selfCheck;
+      const waiting = { state: "waiting" } as const;
+      const reason = selfCheckReason(waiting, matched, language, STRINGS[language], true);
+      expect(reason).toBe(t.waitingOnPhotos);
+      expect(reason).not.toBe(t.waiting);
+      expect(selfCheckReason(waiting, matched, language, STRINGS[language], false)).toBe(t.waiting);
+    },
+  );
+
+  it.each([
+    ["agreed", { state: "agreed" }],
+    ["disagreed", { state: "disagreed", names: named }],
+    ["could not name a species", { state: "no-species" }],
+    ["failed", { state: "failed" }],
+    ["had no picture", { state: "no-picture" }],
+  ] as const)("says the same of a check that %s whether or not the find has photos", (_, check) => {
+    const reason = selfCheckReason(check, matched, "en", STRINGS.en, true);
+    expect(reason).toBe(selfCheckReason(check, matched, "en", STRINGS.en, false));
+    expect(reason).not.toBeNull();
   });
 
   it.each(["sv", "en", "it"] as const)(
@@ -305,6 +329,7 @@ describe("the edibility of an answer from text alone, until its self-check agree
         matched,
         language,
         STRINGS[language],
+        false,
       );
       expect(reason).toBe(
         fillIn(STRINGS[language].find.selfCheck.disagreed, {
@@ -320,7 +345,13 @@ describe("the edibility of an answer from text alone, until its self-check agree
   it.each(["sv", "en", "it"] as const)(
     "says in %s that the check agreed, once it did (SPEC 3.9: the find says the check agreed)",
     (language) => {
-      const text = selfCheckReason({ state: "agreed" }, matched, language, STRINGS[language]);
+      const text = selfCheckReason(
+        { state: "agreed" },
+        matched,
+        language,
+        STRINGS[language],
+        false,
+      );
       expect(text).toBe(STRINGS[language].find.selfCheck.agreed);
       expect(text?.toLowerCase()).not.toContain(
         STRINGS[language].find.edibilities.unknown.toLowerCase(),
@@ -329,6 +360,7 @@ describe("the edibility of an answer from text alone, until its self-check agree
   );
 
   it("says nothing for an answer from photos, which has no check", () => {
-    expect(selfCheckReason(null, matched, "en", STRINGS.en)).toBeNull();
+    expect(selfCheckReason(null, matched, "en", STRINGS.en, false)).toBeNull();
+    expect(selfCheckReason(null, matched, "en", STRINGS.en, true)).toBeNull();
   });
 });

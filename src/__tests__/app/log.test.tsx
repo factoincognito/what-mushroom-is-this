@@ -485,6 +485,29 @@ describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
     expect(row.queryByText(en.disclaimer)).toBeNull();
   });
 
+  it.each(["waiting", "not-analysed"] as const)(
+    "says that its waiting check waits until its photos are analysed or removed, while they are %s, not that the check has not been made yet (Clead's decision on #78)",
+    async (addedPhotos) => {
+      mockLog.finds.set(1, {
+        ...textFind(1, 0, done(CHANTERELLE)),
+        photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+        addedPhotos,
+      });
+      // A text find without photos, its check waiting too: the check has not been made yet.
+      mockLog.finds.set(2, textFind(2, 1, done(CHANTERELLE)));
+      await startApp();
+      const row = within(await screen.findByTestId("find-row-1"));
+      expect(
+        row.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+      ).toBeOnTheScreen();
+      expect(row.queryByText(en.find.selfCheck.waiting)).toBeNull();
+      expect(row.getByText(en.find.selfCheck.waitingOnPhotos)).toBeOnTheScreen();
+      const withoutPhotos = within(screen.getByTestId("find-row-2"));
+      expect(withoutPhotos.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
+      expect(withoutPhotos.queryByText(/waits until the find's photos/)).toBeNull();
+    },
+  );
+
   it("an answer from photos keeps 3.5's disclaimer once the text find's photos are all removed (Clead's decision 3 on #57)", async () => {
     mockLog.finds.set(1, textFind(1, 0, done(CHANTERELLE), null));
     await startApp();
@@ -1163,6 +1186,49 @@ describe("the filters while the app runs (SPEC 3.9)", () => {
     await openFilters();
     expect(screen.getByRole("checkbox", { name: "Chanterelle" })).toBeOnTheScreen();
     jest.mocked(mockLog.list).mockRestore();
+  });
+});
+
+describe("the stop for an answer not of the shape, in the Library (PBI-2.14; PBI-2.16)", () => {
+  /** A status-200 answer that is not from the API, such as a Wi-Fi sign-in page. */
+  const SIGN_IN_PAGE = {
+    status: 200,
+    headers: { get: () => null },
+    text: async () => "<html>Sign in</html>",
+  };
+
+  it("says that find is marked failed after a run that marked a waiting find failed", async () => {
+    mockLog.finds.set(1, find(1, 0, { state: "waiting" }));
+    fetchMock.mockResolvedValueOnce(SIGN_IN_PAGE);
+    Object.defineProperty(AppState, "currentState", { value: "active", configurable: true });
+    await startApp();
+    expect(await screen.findByText(en.queue.stopped.answer)).toBeOnTheScreen();
+    expect(mockLog.finds.get(1)?.analysis.state).toBe("failed");
+    expect(screen.getByRole("button", { name: en.queue.analyseNow })).toBeOnTheScreen();
+  });
+
+  it("says only that an answer did not fit after a run that marked no find failed: an analysed find's new photos got it, and the find keeps its answer", async () => {
+    mockLog.finds.set(1, {
+      ...textFind(1, 0, done(CHANTERELLE), null),
+      text: null,
+      photos: [
+        { uri: "file:///photos/1.jpg", batch: 1 },
+        { uri: "file:///photos/2.jpg", batch: 2 },
+      ],
+      addedPhotos: "waiting",
+    });
+    fetchMock.mockResolvedValueOnce(SIGN_IN_PAGE);
+    Object.defineProperty(AppState, "currentState", { value: "active", configurable: true });
+    await startApp();
+    // The queue has stopped: "analyse now" is offered.
+    expect(await screen.findByRole("button", { name: en.queue.analyseNow })).toBeOnTheScreen();
+    expect(mockLog.finds.get(1)).toMatchObject({
+      analysis: { state: "done" },
+      addedPhotos: "not-analysed",
+    });
+    expect(screen.queryByText(/marked failed/)).not.toBeOnTheScreen();
+    expect(screen.queryByText(en.queue.stopped.answer)).not.toBeOnTheScreen();
+    expect(screen.getByText(en.queue.stopped.answerNoFindFailed)).toBeOnTheScreen();
   });
 });
 

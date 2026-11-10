@@ -73,7 +73,8 @@ function stopMessage(stop: QueueStop, strings: Strings, formatTime: FormatTime):
     case "model-unknown":
       return t.modelUnknown;
     case "answer":
-      return t.answer;
+      // "That find is marked failed" only when one was (PBI-2.14, PBI-2.16).
+      return stop.findMarkedFailed ? t.answer : t.answerNoFindFailed;
     case "internal-error":
       return t.internalError;
     case "other":
@@ -88,8 +89,9 @@ function stopMessage(stop: QueueStop, strings: Strings, formatTime: FormatTime):
  * message or file path reaches the user. A form the app does not know gets the cause's general
  * sentence. Details already stored in these forms are read the same way. For a lookup without
  * photos, a refusal names the description, not the photo (PBI-2.4). A photo's failure on a find
- * with several photos names the photo: its detail is `photo <n>: <detail>` (`queue.ts`), and the
- * message gives the number and the sentence of the rest (docs/SPEC.md 3.9, Batches; PBI-2.5).
+ * with several photos, or on a text find with one, which can be removed, names the photo: its
+ * detail is `photo <n>: <detail>` (`queue.ts`), and the message gives the number, the sentence of
+ * the rest, and that the photo can be removed (docs/SPEC.md 3.9, Batches; PBI-2.5, PBI-2.16).
  */
 export function failureMessage(
   failure: FindFailure,
@@ -135,7 +137,7 @@ export function failureMessage(
   }
 }
 
-/** `queue.ts`: a photo's failure on a find with several photos, numbered from 1. */
+/** `queue.ts`: a photo's failure that names the photo, numbered from 1. */
 const NUMBERED_PHOTO = /^photo ([1-9][0-9]*): (.+)$/s;
 const REQUEST_WRONG = /^request-wrong \(status \d+\)$/;
 const REQUEST_TOO_LARGE = /^request-too-large \(status \d+\)$/;

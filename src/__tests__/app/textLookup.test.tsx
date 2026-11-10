@@ -106,6 +106,16 @@ const BAD_REQUEST = reply(
   JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "bad" } }),
 );
 
+/** An answer from the API whose text is not the answer's JSON, so it does not fit the shape. */
+const NOT_OF_THE_SHAPE = reply(
+  200,
+  JSON.stringify({
+    type: "message",
+    content: [{ type: "text", text: "It looks like a chanterelle." }],
+    stop_reason: "end_turn",
+  }),
+);
+
 const permission = (status: "granted" | "denied" | "undetermined", canAskAgain = true) => ({
   status,
   granted: status === "granted",
@@ -280,7 +290,31 @@ describe("opening the text lookup (SPEC 3.9, Lookups)", () => {
         en.lookup.count.replace("{count}", String(DESCRIPTION.length)).replace("{max}", "2000"),
       ),
     ).toBeOnTheScreen();
-    expect(screen.getByLabelText(en.lookup.input)).toHaveProp("maxLength", 2000);
+  });
+
+  /**
+   * Types as the phone's field would give it: the field lets through at most its `maxLength`,
+   * counted in UTF-16 units, which the test renderer does not apply by itself.
+   */
+  async function typeOnThePhone(text: string): Promise<void> {
+    const input = screen.getByLabelText(en.lookup.input);
+    await fireEvent.changeText(input, text.slice(0, input.props.maxLength));
+  }
+  const counted = (count: number) =>
+    en.lookup.count.replace("{count}", String(count)).replace("{max}", "2000");
+
+  it("takes a description up to the limit also when each character takes two UTF-16 units, so the field stops where the counter does (PBI-2.14, note 2)", async () => {
+    await openLookup();
+    await typeOnThePhone("🍄".repeat(2001));
+    expect(screen.getByText(counted(2000))).toBeOnTheScreen();
+    expect(screen.getByLabelText(en.lookup.input)).toHaveProp("value", "🍄".repeat(2000));
+  });
+
+  it("still keeps no more than the limit of a longer description in plain letters", async () => {
+    await openLookup();
+    await typeOnThePhone("a".repeat(2001));
+    expect(screen.getByText(counted(2000))).toBeOnTheScreen();
+    expect(screen.getByLabelText(en.lookup.input)).toHaveProp("value", "a".repeat(2000));
   });
 
   it("does not analyse an empty description, and says so", async () => {
@@ -381,6 +415,23 @@ describe("an unsaved lookup (Save off)", () => {
     await goBack();
     expect(app.pathname()).toBe("/");
     expect(await screen.findByText(en.queue.stopped.keyRefused)).toBeOnTheScreen();
+  });
+
+  it("an answer not of the shape: shows the failure and stops the queue, and the Library then says only that an answer did not fit, since no find was marked failed (PBI-2.14)", async () => {
+    fetchMock.mockResolvedValueOnce(NOT_OF_THE_SHAPE);
+    const app = await openLookup();
+    await describe_(DESCRIPTION);
+    await analyse();
+    expect(await screen.findByText(en.queue.failed.answer.shape)).toBeOnTheScreen();
+    expect(mockLog.finds.size).toBe(0);
+    await describe_("");
+    await goBack();
+    expect(app.pathname()).toBe("/");
+    // The queue has stopped: the Library offers "analyse now".
+    expect(await screen.findByRole("button", { name: en.queue.analyseNow })).toBeOnTheScreen();
+    expect(screen.queryByText(/marked failed/)).not.toBeOnTheScreen();
+    expect(screen.queryByText(en.queue.stopped.answer)).not.toBeOnTheScreen();
+    expect(screen.getByText(en.queue.stopped.answerNoFindFailed)).toBeOnTheScreen();
   });
 
   it("asks before leaving with a description entered, on the screen; Stay keeps it, and the second answer leaves with nothing saved", async () => {
@@ -702,6 +753,19 @@ describe("an unsaved lookup's self-check (SPEC 3.9; PBI-2.10)", () => {
     expect(screen.getByText(en.queue.stopped.keyRefused)).toBeOnTheScreen();
     expect(screen.getByRole("link", { name: en.queue.openSettings })).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: en.lookup.checkAgain })).toBeOnTheScreen();
+  });
+
+  it("a check answer not of the shape stops the queue: the check waits with a message that says only that an answer did not fit, since no find was marked failed (PBI-2.16, #75)", async () => {
+    await lookUp(NOT_OF_THE_SHAPE);
+    const check = within(screen.getByTestId("lookup-check"));
+    expect(check.getByText(en.lookup.checkWaits)).toBeOnTheScreen();
+    expect(check.getByRole("button", { name: en.lookup.checkAgain })).toBeOnTheScreen();
+    expect(screen.queryByText(/marked failed/)).not.toBeOnTheScreen();
+    expect(check.getByText(en.queue.stopped.answerNoFindFailed)).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId("match-edibility")).getByText(shown("unknown")),
+    ).toBeOnTheScreen();
+    expect(mockLog.finds.size).toBe(0);
   });
 
   it("a 400 marks the check failed: the find says it could not be checked, with no Check again", async () => {

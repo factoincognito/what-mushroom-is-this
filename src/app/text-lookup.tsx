@@ -23,6 +23,7 @@ import {
   INITIAL_TEXT_LOOKUP_VIEW,
   type LookupCheck,
   type LookupPicture,
+  lookupFieldMaxLength,
   lookupSelfCheck,
   TextLookupFlow,
   type TextLookupView,
@@ -111,7 +112,9 @@ export default function TextLookupScreen() {
         value={view.text}
         onChangeText={(text) => flow.setText(text)}
         editable={!busy && view.phase !== "saved"}
-        maxLength={config.lookupTextMaxLength}
+        // In UTF-16 units, so that it never stops a text short of the limit, which the flow counts
+        // in code points and cuts to (PBI-2.14, note 2).
+        maxLength={lookupFieldMaxLength(config.lookupTextMaxLength)}
         multiline
         style={styles.input}
       />
@@ -206,6 +209,7 @@ export default function TextLookupScreen() {
           // An unsaved lookup's answer is from its text alone: it is shown with what its
           // self-check came to, as waiting until it has an outcome (SPEC 3.9).
           selfCheck={lookupSelfCheck(view.outcome)}
+          hasPhotos={false}
           subject="described"
           language={language}
           strings={strings}

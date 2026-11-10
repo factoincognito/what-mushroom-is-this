@@ -525,11 +525,21 @@ describe("the stop for an answer not of the shape (PBI-2.14; PBI-2.16, #75)", ()
       expect(message).toBe(STRINGS[language].queue.stopped.answerNoFindFailed);
       expect(message).not.toMatch(marked[language]);
       expect(message).toContain(STRINGS[language].queue.analyseNow);
-      // The rest is the same as when a find was marked failed: what the answer was, and what to do.
-      const withFind = stopped(true, language);
-      expect(withFind.startsWith(message.slice(0, message.indexOf(")") + 2))).toBe(true);
+      // The rest is the same as when a find was marked failed: what the answer was, and what to
+      // do. Only the sentence about the find is gone.
+      const sentences = (text: string) => text.split(/(?<=\.) /);
+      const withFind = sentences(stopped(true, language));
+      expect(withFind.filter((sentence) => !marked[language].test(sentence))).toEqual(
+        sentences(message),
+      );
+      expect(withFind).toHaveLength(sentences(message).length + 1);
     },
   );
+
+  it("needs no setting either way, so neither message links to Settings", () => {
+    expect(stopNeedsSettings({ reason: "answer", findMarkedFailed: true })).toBe(false);
+    expect(stopNeedsSettings({ reason: "answer", findMarkedFailed: false })).toBe(false);
+  });
 });
 
 describe("the message for a key not scoped to a workspace (Clead's decision on #18, note 4)", () => {
