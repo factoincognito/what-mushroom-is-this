@@ -293,6 +293,7 @@ describe("the Save switch on New find (SPEC 3.9, Lookups)", () => {
       time: { takenAtMs: Date.UTC(2026, 8, 14, 13, 42), utcOffsetMinutes: 120, source: "saved" },
       position: null,
       analysis: { state: "waiting" },
+      answerBasis: null,
       addedPhotos: null,
       picture: null,
       selfCheck: null,

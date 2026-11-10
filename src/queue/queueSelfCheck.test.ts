@@ -142,6 +142,7 @@ function checkWaits(t: Setup, id: number): StoredFind {
     time,
     position: null,
     analysis: { state: "done", answer: MATCH, model: MODEL, analysedAtMs: 500 },
+    answerBasis: "text",
     addedPhotos: "analysed",
     picture: PICTURE,
     selfCheck: { state: "waiting" },

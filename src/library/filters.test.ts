@@ -50,22 +50,25 @@ function entry(
   utcOffsetMinutes = 60,
   analysis?: SummaryAnalysis,
 ): ListedFind {
+  const shown: SummaryAnalysis =
+    analysis ??
+    (species === null
+      ? { state: "waiting" }
+      : {
+          state: "done",
+          result: "match",
+          names: { sv: species.sv, en: species.en, it: species.it },
+          edibility: "edible",
+          confidence: 90,
+        });
   const summary: FindSummary = {
     id,
     photoUri: `file:///photos/${id}.jpg`,
     time: { takenAtMs: Date.parse(iso), utcOffsetMinutes, source: "saved" },
     position: null,
-    analysis:
-      analysis ??
-      (species === null
-        ? { state: "waiting" }
-        : {
-            state: "done",
-            result: "match",
-            names: { sv: species.sv, en: species.en, it: species.it },
-            edibility: "edible",
-            confidence: 90,
-          }),
+    analysis: shown,
+    // A photo find's answer is from its photo (PBI-2.15).
+    answerBasis: shown.state === "done" ? "photos" : null,
     selfCheck: null,
     species,
     picture: null,

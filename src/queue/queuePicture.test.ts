@@ -309,6 +309,7 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
       time,
       position: null,
       analysis: { state: "done", answer: { result: "cannot_tell" }, model: MODEL, analysedAtMs: 1 },
+      answerBasis: "text",
       addedPhotos: "analysed",
       picture: null,
       selfCheck: { state: "waiting" },

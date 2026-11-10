@@ -826,7 +826,10 @@ describe("a find that is not there or cannot be read", () => {
 
 const DESCRIPTION = "A yellow funnel with false gills, in moss under spruce.";
 
-/** A text find without photos (SPEC 3.9), as the store holds it. */
+/**
+ * A text find without photos (SPEC 3.9), as the store holds it: an answer it has is from its text
+ * alone, unless another basis is given (PBI-2.15).
+ */
 function aTextFind(analysis: StoredFind["analysis"], change: Partial<StoredFind> = {}): StoredFind {
   return {
     id: 1,
@@ -836,6 +839,7 @@ function aTextFind(analysis: StoredFind["analysis"], change: Partial<StoredFind>
     time: { ...TAKEN, source: "saved" },
     position: { latitude: 59.6995, longitude: 17.1234, accuracyM: 12.4, source: "fix" },
     analysis,
+    answerBasis: analysis.state === "done" ? "text" : null,
     addedPhotos: analysis.state === "done" ? "analysed" : null,
     picture: null,
     selfCheck: null,
@@ -1136,6 +1140,7 @@ describe("the edibility of an answer from text alone, until its self-check agree
       1,
       aTextFind(done(CHANTERELLE), {
         photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+        answerBasis: "photos",
         selfCheck: null,
       }),
     );
@@ -1271,6 +1276,100 @@ describe("the disclaimer follows what the answer shown was based on (Clead's dec
   });
 });
 
+describe("no mushroom and cannot tell follow what the answer was based on (SPEC 3.9, Answers; PBI-2.15)", () => {
+  const results = [
+    ["no_mushroom", en.find.noMushroomDescribed, en.find.noMushroom],
+    ["cannot_tell", en.find.cannotTellDescribed, en.find.cannotTell],
+  ] as const;
+
+  it.each(results)(
+    "an answer %s from the text alone keeps the words of a description once the find has photos, through the find log",
+    async (result, described, photo) => {
+      const id = await mockLog.addText({
+        text: DESCRIPTION,
+        time: { ...TAKEN, source: "saved" },
+        position: null,
+      });
+      await mockLog.setAnswer(
+        id,
+        { answer: { result }, model: "m", analysedAtMs: 1 },
+        { photoUris: [] },
+      );
+      await mockLog.addPhoto(id, "file:///photos/a.jpg");
+      await mockLog.completeBatch(id);
+      await startApp(`/find/${id}`);
+      expect(await screen.findByText(described)).toBeOnTheScreen();
+      expect(screen.queryByText(photo)).not.toBeOnTheScreen();
+      expect(screen.getByLabelText(en.find.photo)).toBeOnTheScreen();
+    },
+  );
+
+  it.each(results)(
+    "an answer %s from photos keeps the words of a photo once the text find's photos are all removed, through the find log",
+    async (result, described, photo) => {
+      const id = await mockLog.addText({
+        text: DESCRIPTION,
+        time: { ...TAKEN, source: "saved" },
+        position: null,
+      });
+      await mockLog.addPhoto(id, "file:///photos/a.jpg");
+      await mockLog.completeBatch(id);
+      await mockLog.setAnswer(
+        id,
+        { answer: { result }, model: "m", analysedAtMs: 1 },
+        { photoUris: ["file:///photos/a.jpg"] },
+      );
+      await mockLog.removePhoto(id, 1);
+      await startApp(`/find/${id}`);
+      expect(await screen.findByText(photo)).toBeOnTheScreen();
+      expect(screen.queryByText(described)).not.toBeOnTheScreen();
+      expect(screen.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+    },
+  );
+
+  it.each(results)(
+    "an answer %s whose basis the store does not hold (stored before schema version 3) speaks of a photo when the find has photos",
+    async (result, described, photo) => {
+      mockLog.finds.set(
+        1,
+        aTextFind(done({ result }), {
+          photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+          answerBasis: null,
+        }),
+      );
+      await startApp();
+      expect(await screen.findByText(photo)).toBeOnTheScreen();
+      expect(screen.queryByText(described)).not.toBeOnTheScreen();
+    },
+  );
+
+  it.each(results)(
+    "an answer %s whose basis the store does not hold speaks of a description when the find has no photo",
+    async (result, described, photo) => {
+      mockLog.finds.set(1, aTextFind(done({ result }), { answerBasis: null }));
+      await startApp();
+      expect(await screen.findByText(described)).toBeOnTheScreen();
+      expect(screen.queryByText(photo)).not.toBeOnTheScreen();
+    },
+  );
+
+  it.each(["sv", "it"] as const)(
+    "says no mushroom in %s in the words of a description for an answer from the text alone on a find with photos",
+    async (lang) => {
+      phoneIn(lang);
+      mockLog.finds.set(
+        1,
+        aTextFind(done({ result: "no_mushroom" }), {
+          photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+          addedPhotos: "waiting",
+        }),
+      );
+      await startApp();
+      expect(await screen.findByText(STRINGS[lang].find.noMushroomDescribed)).toBeOnTheScreen();
+    },
+  );
+});
+
 describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
   /** A photo find with `count` photos, the first in batch 1 and the rest in batch 2. */
   function withPhotos(count: number, change: Partial<StoredFind> = {}): StoredFind {
@@ -1281,6 +1380,7 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
         uri: `file:///photos/${i + 1}.jpg`,
         batch: i === 0 ? 1 : 2,
       })),
+      answerBasis: "photos",
       ...change,
     };
   }

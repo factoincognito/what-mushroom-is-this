@@ -85,6 +85,8 @@ class FakeLog implements QueueLog {
       time: { takenAtMs: NOW - id, utcOffsetMinutes: 60, source: "saved" },
       position: null,
       analysis,
+      // As an analysis of all the find holds would give it (PBI-2.15).
+      answerBasis: analysis.state !== "done" ? null : photos.length > 0 ? "photos" : "text",
       addedPhotos: analysis.state === "done" ? "analysed" : null,
       picture: null,
       selfCheck: null,

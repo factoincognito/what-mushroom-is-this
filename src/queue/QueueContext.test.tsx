@@ -48,6 +48,7 @@ const WAITING: StoredFind = {
   time: NEW_FIND.time,
   position: null,
   analysis: { state: "waiting" },
+  answerBasis: null,
   addedPhotos: null,
   picture: null,
   selfCheck: null,

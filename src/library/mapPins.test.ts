@@ -50,6 +50,7 @@ function summary(
             edibility: "edible",
             confidence: 90,
           },
+    answerBasis: species === null ? null : "photos",
     selfCheck: null,
     species,
     picture: null,

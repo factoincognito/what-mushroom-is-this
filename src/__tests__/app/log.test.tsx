@@ -266,7 +266,8 @@ describe("the Log screen's list (SPEC 3.1)", () => {
 
 /**
  * A text find without photos (SPEC 3.9), as the store holds it. An answer naming a species is from
- * the text alone, so the store starts its self-check, waiting, unless another state is given.
+ * the text alone, so the store starts its self-check, waiting, unless another state is given; one
+ * given as none is an answer from photos (PBI-2.15). An answer naming no species is from the text.
  */
 function textFind(
   id: number,
@@ -277,6 +278,8 @@ function textFind(
     ? { state: "waiting" }
     : null,
 ): StoredFind {
+  const fromPhotos =
+    analysis.state === "done" && analysis.answer.result === "match" && selfCheck === null;
   return {
     id,
     text: "A yellow funnel with false gills.",
@@ -285,6 +288,7 @@ function textFind(
     time: { takenAtMs: BASE + daysLater * DAY, utcOffsetMinutes: 120, source: "saved" },
     position: null,
     analysis,
+    answerBasis: analysis.state !== "done" ? null : fromPhotos ? "photos" : "text",
     addedPhotos: analysis.state === "done" ? "analysed" : null,
     picture: null,
     selfCheck,
@@ -490,6 +494,54 @@ describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
     expect(row.queryByText(en.disclaimerDescribed)).toBeNull();
   });
 
+  it.each([
+    ["no_mushroom", en.find.noMushroomDescribed, en.find.noMushroom],
+    ["cannot_tell", en.find.cannotTellDescribed, en.find.cannotTell],
+  ] as const)(
+    "an answer %s from the text alone keeps the words of a description once the find has photos (PBI-2.15)",
+    async (result, described, photo) => {
+      mockLog.finds.set(1, {
+        ...textFind(1, 0, done({ result })),
+        photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+        addedPhotos: "waiting",
+      });
+      await startApp();
+      const row = within(await screen.findByTestId("find-row-1"));
+      expect(row.getByLabelText(en.find.photo)).toBeOnTheScreen();
+      expect(row.getByText(described)).toBeOnTheScreen();
+      expect(row.queryByText(photo)).toBeNull();
+    },
+  );
+
+  it.each([
+    ["no_mushroom", en.find.noMushroomDescribed, en.find.noMushroom],
+    ["cannot_tell", en.find.cannotTellDescribed, en.find.cannotTell],
+  ] as const)(
+    "an answer %s from photos keeps the words of a photo once the text find's photos are all removed (PBI-2.15)",
+    async (result, described, photo) => {
+      mockLog.finds.set(1, { ...textFind(1, 0, done({ result })), answerBasis: "photos" });
+      await startApp();
+      const row = within(await screen.findByTestId("find-row-1"));
+      expect(row.queryByLabelText(en.find.photo)).toBeNull();
+      expect(row.getByText(photo)).toBeOnTheScreen();
+      expect(row.queryByText(described)).toBeNull();
+    },
+  );
+
+  it("an answer whose basis the store does not hold (stored before schema version 3) follows whether the find has photos (PBI-2.15)", async () => {
+    mockLog.finds.set(1, {
+      ...textFind(1, 0, done({ result: "no_mushroom" })),
+      photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+      answerBasis: null,
+    });
+    mockLog.finds.set(2, { ...textFind(2, 1, done({ result: "cannot_tell" })), answerBasis: null });
+    await startApp();
+    const withPhoto = within(await screen.findByTestId("find-row-1"));
+    expect(withPhoto.getByText(en.find.noMushroom)).toBeOnTheScreen();
+    const withoutPhoto = within(screen.getByTestId("find-row-2"));
+    expect(withoutPhoto.getByText(en.find.cannotTellDescribed)).toBeOnTheScreen();
+  });
+
   it("has a link to the text lookup", async () => {
     const app = await startApp();
     await fireEvent.press(await screen.findByRole("link", { name: en.log.textLookup }));
@@ -584,6 +636,7 @@ describe("a find the store cannot read, in the list (PBI-1.16)", () => {
         time,
         position: null,
         analysis: { state: "waiting" },
+        answerBasis: null,
         selfCheck: null,
         species: null,
         picture: null,

@@ -96,14 +96,14 @@ function insertFailed(cause: string): void {
     .run(`f-${cause}.jpg`, cause);
 }
 
-/** Inserts a done match straight into the table, with the edibility given. */
+/** Inserts a done match straight into the table, with the edibility given, from its photo. */
 function insertMatch(edibility: string): void {
   sqlite
     .prepare(
       `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state,
-        answer_json, model, analysed_at_ms, added_photos, result, name_sv, name_en, name_it,
-        edibility, confidence) VALUES (1, 0, 'saved', ${PHOTO}, 'done', '{}', 'm', 1,
-        'analysed', 'match', 's', 'e', 'i', ?, 'high')`,
+        answer_json, model, analysed_at_ms, answer_basis, added_photos, result, name_sv, name_en,
+        name_it, edibility, confidence) VALUES (1, 0, 'saved', ${PHOTO}, 'done', '{}', 'm', 1,
+        'photos', 'analysed', 'match', 's', 'e', 'i', ?, 'high')`,
     )
     .run(`m-${edibility}.jpg`, edibility);
 }
@@ -171,8 +171,9 @@ function insertTimes(takenAtMs: bigint | number, analysedAtMs: bigint | number |
         ? `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state)
             VALUES (?, 0, 'saved', ${PHOTO}, 'waiting')`
         : `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state,
-            answer_json, model, analysed_at_ms, added_photos, result) VALUES (?, 0, 'saved',
-            ${PHOTO}, 'done', '{"result":"no_mushroom"}', 'm', ?, 'analysed', 'no_mushroom')`,
+            answer_json, model, analysed_at_ms, answer_basis, added_photos, result) VALUES (?, 0,
+            'saved', ${PHOTO}, 'done', '{"result":"no_mushroom"}', 'm', ?, 'photos', 'analysed',
+            'no_mushroom')`,
     )
     .run(...(analysedAtMs === null ? [takenAtMs, "t.jpg"] : [takenAtMs, "t.jpg", analysedAtMs]));
 }
@@ -182,10 +183,9 @@ function stateOf(id: number): unknown {
 }
 
 describe("the current schema on a real SQLite", () => {
-  it("is accepted by SQLite, at user_version 2 (PBI-2.2)", () => {
-    expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({
-      user_version: MIGRATIONS.length,
-    });
+  it("is accepted by SQLite, at user_version 3 (PBI-2.2, PBI-2.15)", () => {
+    expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+    expect(MIGRATIONS).toHaveLength(3);
   });
 
   it("is a STRICT table (PBI-1.16)", () => {
@@ -326,6 +326,8 @@ describe("the store's statements on a real SQLite", () => {
         photoUri: "file:///photos/p1.jpg",
         time: { takenAtMs: 1_000, utcOffsetMinutes: 60, source: "saved" },
         position: null,
+        // What the answer was based on: the find's photo (PBI-2.15).
+        answerBasis: "photos",
         selfCheck: null,
         // The Latin name, from the stored answer, for the Library's species filter (PBI-2.7).
         species: match.names,

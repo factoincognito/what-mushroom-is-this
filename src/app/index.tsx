@@ -12,11 +12,11 @@ import {
 } from "react-native";
 
 import {
+  answerSubject,
   checkedEdibility,
   edibilityText,
   fillIn,
   formatFindTime,
-  matchBasis,
   selfCheckReason,
 } from "../find/display";
 import { PictureCredit } from "../find/PictureView";
@@ -466,7 +466,8 @@ function FindRow({ find, language, strings }: FindRowProps) {
 
 function SummaryView({ find, language, strings }: FindRowProps) {
   const { analysis } = find;
-  const described = find.photoUri === null;
+  // The answer's wording follows what it was based on (SPEC 3.9, Answers; PBI-2.15).
+  const described = answerSubject(find.answerBasis, find.photoUri !== null) === "described";
   switch (analysis.state) {
     case "waiting":
       return <Text style={styles.text}>{strings.log.waiting}</Text>;
@@ -498,9 +499,7 @@ function SummaryView({ find, language, strings }: FindRowProps) {
           {reason !== null && <Text style={styles.note}>{reason}</Text>}
           {/* The disclaimer follows what the answer was based on (Clead's decision 3 on #57). */}
           <Text style={styles.note}>
-            {matchBasis(find.selfCheck) === "described"
-              ? strings.disclaimerDescribed
-              : strings.disclaimer}
+            {described ? strings.disclaimerDescribed : strings.disclaimer}
           </Text>
         </>
       );

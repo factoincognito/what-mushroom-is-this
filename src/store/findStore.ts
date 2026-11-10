@@ -28,8 +28,11 @@ import type { FindDatabase } from "./database";
 import {
   ADDED_PHOTOS_STATES,
   type AddedPhotosState,
+  ANSWER_BASES,
   type Analysis,
   type AnalysisSent,
+  type AnswerBasis,
+  basisOf,
   checkFailure,
   checkId,
   checkNewFind,
@@ -117,9 +120,12 @@ export interface FindStore {
    * send (one added while it ran), and analysed otherwise. It drops the find's representative
    * picture and self-check (the picture's file goes at the next opening), and starts a new
    * self-check, waiting, when the analysis sent no photo and the answer names a species of a find
-   * with text, so the answer is from the text alone (docs/SPEC.md 3.9). A find whose photos
-   * cannot be read is refused as `corrupt`, and nothing is stored. The answer is one from the API,
-   * so its confidence is a number (PBI-2.12).
+   * with text, so the answer is from the text alone (docs/SPEC.md 3.9). It records what the answer
+   * was based on: the text alone when the analysis sent no photo, photos otherwise (PBI-2.15); an
+   * analysis that sent no photo of a find without text, which no analysis can be, is refused as
+   * `wrong-state`, and nothing is stored. A find whose photos cannot be read is refused as
+   * `corrupt`, and nothing is stored. The answer is one from the API, so its confidence is a number
+   * (PBI-2.12).
    */
   setAnswer(id: number, analysed: NewAnalysedAnswer, sent: AnalysisSent): Promise<void>;
   replaceAnswer(id: number, analysed: NewAnalysedAnswer, sent: AnalysisSent): Promise<void>;
@@ -289,9 +295,9 @@ const PHOTO_COUNT = "(CASE WHEN json_valid(photos) THEN json_array_length(photos
 const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source,
   latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES},
   ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model,
-  ${safeTime("analysed_at_ms")}, added_photos, picture_file, picture_author, picture_licence,
-  picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it,
-  confidence, confidence_score`;
+  ${safeTime("analysed_at_ms")}, answer_basis, added_photos, picture_file, picture_author,
+  picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la,
+  check_name_it, confidence, confidence_score`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
 /**
  * The finds, the latest taken first, by the stored time and ID (`finds.`, not the columns read),
@@ -331,11 +337,11 @@ const STORED_ID = /^(0|-?[1-9][0-9]{0,18})$/;
  * self-check waits only when the number of photos sent is 0, the answer is a match and the find
  * has text, so the answer is from the text alone (docs/SPEC.md 3.9). The confidence is written
  * to both of its columns, the level's left empty, so that a new answer to a Phase 1 find drops
- * its level (PBI-2.3).
+ * its level (PBI-2.3). What the answer was based on is written with it (PBI-2.15).
  */
 const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL,
   answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?,
-  name_it = ?, edibility = ?, confidence = ?, confidence_score = ?,
+  name_it = ?, edibility = ?, confidence = ?, confidence_score = ?, answer_basis = ?,
   added_photos = CASE WHEN EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(finds.photos)
     THEN finds.photos ELSE '[]' END) WHERE json_extract(value, '$.file') NOT IN
     (SELECT value FROM json_each(?))) THEN 'waiting' ELSE 'analysed' END,
@@ -436,7 +442,8 @@ export async function createFindStore(
    * Stores an answer with what its analysis sent. The find's photos are read only to name the
    * photos sent; the UPDATE itself compares those names with the photos the find holds then, so a
    * photo added after the read, too, is seen as not sent (review of #49, fix 1). A URI sent that
-   * names no photo the find holds is of a photo removed since, and covers nothing.
+   * names no photo the find holds is of a photo removed since, and covers nothing; the answer is
+   * still one from photos. The text read stays as read: it is set only when the find is saved.
    */
   async function answer(
     id: number,
@@ -447,14 +454,25 @@ export async function createFindStore(
     checkId(id);
     checkSent(sent);
     const { columns, result } = answerColumns(analysed);
-    const row = await db.getFirstAsync(PHOTOS_OF, [id]);
-    if (row === null) {
+    const found = await db.getFirstAsync(PHOTOS_OF, [id]);
+    if (found === null) {
       throw new StoreError("not-found", `no find has the ID ${id}`);
     }
-    const byUri = new Map(readPhotoNames(record(row)).map((name) => [photos.uriOf(name), name]));
+    const row = record(found);
+    const basis = basisOf(sent);
+    if (basis === "text" && row.text === null) {
+      throw new StoreError("wrong-state", `find ${id} has no text to analyse alone`);
+    }
+    const byUri = new Map(readPhotoNames(row).map((name) => [photos.uriOf(name), name]));
     const sentNames = sent.photoUris.flatMap((uri) => byUri.get(uri) ?? []);
     // The answer's result once more, for the self-check.
-    await update(id, sql, [...columns, JSON.stringify(sentNames), sent.photoUris.length, result]);
+    await update(id, sql, [
+      ...columns,
+      basis,
+      JSON.stringify(sentNames),
+      sent.photoUris.length,
+      result,
+    ]);
   }
 
   /** Copies a file in, then runs `save` with its name; removes the copy when `save` fails. */
@@ -900,6 +918,7 @@ function readStored(row: Row, photos: PhotoFiles): StoredFind {
     time: readTime(row),
     position: readPosition(row),
     analysis,
+    answerBasis: readAnswerBasis(row, analysis, text, batches, selfCheck),
     addedPhotos,
     picture: readPicture(row, selfCheck, photos),
     selfCheck,
@@ -961,6 +980,41 @@ function readSelfCheck(row: Row, analysis: Analysis, text: string | null): SelfC
       it: nonEmptyTextOf(row, "check_name_it"),
     },
   };
+}
+
+/**
+ * What the answer was based on, checked against the find's other columns as schema version 3's
+ * CHECKs keep them (PBI-2.15), so a find that only a damaged file can hold is one the store cannot
+ * read: none without an answer; the text alone only on a find with text, and, for an answer naming
+ * a species, exactly when it has a self-check, which the store starts for such an answer alone;
+ * and none on an answer only where the migration to version 3 could not prove it: an answer naming
+ * no species, on a text find that has had a photo.
+ */
+function readAnswerBasis(
+  row: Row,
+  analysis: Analysis,
+  text: string | null,
+  batches: number,
+  selfCheck: SelfCheck | null,
+): AnswerBasis | null {
+  if (analysis.state !== "done") {
+    return none(row, "answer_basis");
+  }
+  const named = analysis.answer.result === "match";
+  if (row.answer_basis === null) {
+    if (text === null || named || batches === 0) {
+      throw corrupt("an answer is stored without what it was based on, which the store records");
+    }
+    return null;
+  }
+  const basis = enumOf(row, "answer_basis", ANSWER_BASES);
+  if (basis === "text" && text === null) {
+    throw corrupt("an answer from the text alone is stored on a find without text");
+  }
+  if (named && (basis === "text") !== (selfCheck !== null)) {
+    throw corrupt("an answer naming a species has a self-check that does not fit its basis");
+  }
+  return basis;
 }
 
 function noCheckNames(row: Row): void {
@@ -1058,6 +1112,7 @@ function readSummary(row: Row, find: StoredFind): FindSummary {
     time: find.time,
     position: find.position,
     analysis: readSummaryAnalysis(row),
+    answerBasis: find.answerBasis,
     selfCheck: find.selfCheck,
     species: speciesOf(find.analysis),
     picture: find.picture,

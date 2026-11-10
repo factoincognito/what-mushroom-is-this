@@ -13,7 +13,14 @@ import {
 } from "../analysis/answer";
 import type { Language } from "../i18n/languages";
 import type { Strings } from "../i18n/strings";
-import type { FindTime, Position, PositionSource, SelfCheck, TimeSource } from "../store/find";
+import type {
+  AnswerBasis,
+  FindTime,
+  Position,
+  PositionSource,
+  SelfCheck,
+  TimeSource,
+} from "../store/find";
 
 /** The widest UTC offset ISO 8601 allows, in minutes, as the store keeps it. */
 const MAX_OFFSET_MINUTES = 18 * 60;
@@ -178,15 +185,25 @@ export function checkedEdibility(
 }
 
 /**
- * What an answer naming a species was based on, for its disclaimer (Clead's decision 3 on #57):
- * the description alone when it has a self-check, since the store starts one exactly when the
- * analysis sent no photo, the answer is a match and the find has text, and keeps it until the
- * next answer (`findStore.ts`, `ANSWER_COLUMNS`); photos, with or without text, otherwise. It
- * holds whatever photos the find has gained or lost since. For "no mushroom" and "cannot tell"
- * the store keeps no such mark, so their wording still follows whether the find has photos.
+ * What an answer's wording speaks of, its disclaimer and its "no mushroom" and "cannot tell" (SPEC
+ * 3.9, Answers; Clead's decision 3 on #57; PBI-2.15): the description for an answer from the text
+ * alone, a photo for an answer from photos, whatever photos the find has gained or lost since. An
+ * answer whose basis the store does not hold (stored before schema version 3, where the stored
+ * data could not prove it) follows whether the find has photos, as every answer naming no species
+ * did before.
  */
-export function matchBasis(selfCheck: SelfCheck | null): "described" | "photo" {
-  return selfCheck === null ? "photo" : "described";
+export function answerSubject(
+  basis: AnswerBasis | null,
+  hasPhotos: boolean,
+): "described" | "photo" {
+  switch (basis) {
+    case "text":
+      return "described";
+    case "photos":
+      return "photo";
+    case null:
+      return hasPhotos ? "photo" : "described";
+  }
 }
 
 /**

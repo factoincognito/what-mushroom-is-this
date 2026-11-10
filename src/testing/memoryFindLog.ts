@@ -27,6 +27,7 @@ import {
   type AnalysedAnswer,
   type Analysis,
   type AnalysisSent,
+  basisOf,
   checkId,
   checkNewPicture,
   checkSelfCheckOutcome,
@@ -71,6 +72,8 @@ export function storedOf(find: Find | StoredFind): StoredFind {
     time,
     position,
     analysis,
+    // A find without text: its answer is from its photo (PBI-2.15).
+    answerBasis: analysis.state === "done" ? "photos" : null,
     addedPhotos: analysis.state === "done" ? "analysed" : null,
     picture: null,
     selfCheck: null,
@@ -100,6 +103,7 @@ function summaryOf(stored: StoredFind): FindSummary {
     time: stored.time,
     position: stored.position,
     analysis: summary,
+    answerBasis: stored.answerBasis,
     selfCheck: stored.selfCheck,
     species: speciesOf(analysis),
     picture: stored.picture,
@@ -163,7 +167,9 @@ export function memoryFindLog(): MemoryFindLog {
    * self-check waits when the analysis sent no photo, the answer names a species and the find has
    * text, so the answer is from the text alone (docs/SPEC.md 3.9), and is none otherwise; the
    * picture goes; the photos added since wait when the find holds one the analysis did not send.
-   * A find given as Phase 1's view has no text, so its answer never has a check.
+   * A find given as Phase 1's view has no text, so its answer never has a check. The answer's
+   * basis is recorded, and an analysis of the text alone of a find without text refused, as the
+   * store does (PBI-2.15).
    */
   function answer(
     id: number,
@@ -171,6 +177,10 @@ export function memoryFindLog(): MemoryFindLog {
     analysed: AnalysedAnswer,
     sent: AnalysisSent,
   ): void {
+    const basis = basisOf(sent);
+    if (basis === "text" && stored(id).text === null) {
+      throw new StoreError("wrong-state", `find ${id} has no text to analyse alone`);
+    }
     change(id, from, { state: "done", ...analysed });
     const find = stored(id);
     const fromTextAlone =
@@ -180,6 +190,7 @@ export function memoryFindLog(): MemoryFindLog {
       id,
       {
         ...find,
+        answerBasis: basis,
         addedPhotos: notSent ? "waiting" : "analysed",
         picture: null,
         selfCheck: fromTextAlone ? { state: "waiting" } : null,
@@ -300,6 +311,7 @@ export function memoryFindLog(): MemoryFindLog {
         time: find.time,
         position: find.position,
         analysis: { state: "waiting" },
+        answerBasis: null,
         addedPhotos: null,
         picture: null,
         selfCheck: null,
