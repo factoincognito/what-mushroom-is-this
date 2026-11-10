@@ -420,7 +420,10 @@ function AnalysisView({
       return (
         <View style={styles.section}>
           <Text style={styles.text}>{t.failed}</Text>
-          <Text style={styles.text}>{failureMessage(analysis.failure, strings, subject)}</Text>
+          {/* A photo the failure names that was removed since is not named (decision on #89). */}
+          <Text style={styles.text}>
+            {failureMessage(analysis.failure, strings, subject, find.photos.length)}
+          </Text>
         </View>
       );
     case "done":

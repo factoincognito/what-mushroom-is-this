@@ -292,29 +292,67 @@ describe("opening the text lookup (SPEC 3.9, Lookups)", () => {
     ).toBeOnTheScreen();
   });
 
+  const field = () => screen.getByLabelText(en.lookup.input);
+
   /**
-   * Types as the phone's field would give it: the field lets through at most its `maxLength`,
-   * counted in UTF-16 units, which the test renderer does not apply by itself.
+   * Puts `inserted` into the field, at its end or at the place `at`, as the phone's field would
+   * take it: the field lets its text grow to at most its `maxLength`, counted in UTF-16 units, and
+   * refuses the rest of what is typed or pasted; when it is full it refuses all of it, and the
+   * screen hears nothing. The test renderer does not apply `maxLength` by itself.
    */
-  async function typeOnThePhone(text: string): Promise<void> {
-    const input = screen.getByLabelText(en.lookup.input);
-    await fireEvent.changeText(input, text.slice(0, input.props.maxLength));
+  async function putInOnThePhone(inserted: string, at?: number): Promise<void> {
+    const held: string = field().props.value;
+    const place = at ?? held.length;
+    const taken = inserted.slice(0, Math.max(0, field().props.maxLength - held.length));
+    if (taken !== "") {
+      await fireEvent.changeText(field(), held.slice(0, place) + taken + held.slice(place));
+    }
   }
   const counted = (count: number) =>
     en.lookup.count.replace("{count}", String(count)).replace("{max}", "2000");
 
   it("takes a description up to the limit also when each character takes two UTF-16 units, so the field stops where the counter does (PBI-2.14, note 2)", async () => {
     await openLookup();
-    await typeOnThePhone("🍄".repeat(2001));
+    await putInOnThePhone("🍄".repeat(2001));
     expect(screen.getByText(counted(2000))).toBeOnTheScreen();
-    expect(screen.getByLabelText(en.lookup.input)).toHaveProp("value", "🍄".repeat(2000));
+    expect(field()).toHaveProp("value", "🍄".repeat(2000));
+    // The field is full at its own count too: 2,000 emoji are 4,000 UTF-16 units.
+    expect(field()).toHaveProp("maxLength", 4000);
+    await putInOnThePhone("🍄");
+    expect(field()).toHaveProp("value", "🍄".repeat(2000));
   });
 
-  it("still keeps no more than the limit of a longer description in plain letters", async () => {
+  it("takes no more than the limit of a description in plain letters, and the field is then full (Clead's decision on #89)", async () => {
     await openLookup();
-    await typeOnThePhone("a".repeat(2001));
+    await putInOnThePhone("a".repeat(2001));
     expect(screen.getByText(counted(2000))).toBeOnTheScreen();
-    expect(screen.getByLabelText(en.lookup.input)).toHaveProp("value", "a".repeat(2000));
+    expect(field()).toHaveProp("value", "a".repeat(2000));
+    // At the limit the field takes no more: its own limit is the length of the text it holds.
+    expect(field()).toHaveProp("maxLength", 2000);
+  });
+
+  it("refuses a character put in before the end of a description at the limit, so nothing of the description is cut (Clead's decision on #89)", async () => {
+    const full = "a".repeat(1000) + "z".repeat(1000);
+    await openLookup();
+    await putInOnThePhone(full);
+    await putInOnThePhone("b", 1000);
+    expect(field()).toHaveProp("value", full);
+    expect(screen.getByText(counted(2000))).toBeOnTheScreen();
+    // A pasted word is refused whole, too.
+    await putInOnThePhone("chanterelle ", 0);
+    expect(field()).toHaveProp("value", full);
+  });
+
+  it("leaves room in the field for the last character also when it takes two UTF-16 units", async () => {
+    await openLookup();
+    await putInOnThePhone("a".repeat(1999));
+    expect(field()).toHaveProp("maxLength", 2001);
+    await putInOnThePhone("🍄");
+    expect(screen.getByText(counted(2000))).toBeOnTheScreen();
+    expect(field()).toHaveProp("value", `${"a".repeat(1999)}🍄`);
+    expect(field()).toHaveProp("maxLength", 2001);
+    await putInOnThePhone("b", 0);
+    expect(field()).toHaveProp("value", `${"a".repeat(1999)}🍄`);
   });
 
   it("does not analyse an empty description, and says so", async () => {

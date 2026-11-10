@@ -112,9 +112,9 @@ export default function TextLookupScreen() {
         value={view.text}
         onChangeText={(text) => flow.setText(text)}
         editable={!busy && view.phase !== "saved"}
-        // In UTF-16 units, so that it never stops a text short of the limit, which the flow counts
-        // in code points and cuts to (PBI-2.14, note 2).
-        maxLength={lookupFieldMaxLength(config.lookupTextMaxLength)}
+        // In UTF-16 units, by the text held: never short of the limit, which the flow counts in
+        // code points, and full at it (PBI-2.14, note 2; Clead's decision on #89).
+        maxLength={lookupFieldMaxLength(view.text, config.lookupTextMaxLength)}
         multiline
         style={styles.input}
       />

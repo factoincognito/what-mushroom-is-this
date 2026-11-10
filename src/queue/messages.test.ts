@@ -439,6 +439,31 @@ describe("failureMessage: a failure that names one of the find's photos (SPEC 3.
     };
     expect(failureMessage(failure, STRINGS.en)).toBe(STRINGS.en.queue.failed.request.unknown);
   });
+
+  it.each(LANGUAGES)(
+    "gives in %s the reason alone, without the photo's number or the advice to remove it, once the find holds no photo of that number (Clead's decision on #89)",
+    (language) => {
+      const t = STRINGS[language];
+      const removed = /remove that photo|ta bort det fotot|rimuovere quella foto/;
+      // The only photo of a text find failed and was removed: the find holds none.
+      const only: FindFailure = { cause: "photo", detail: "photo 1: load-failed" };
+      expect(failureMessage(only, t, "described", 0)).toBe(t.queue.failed.photo.loadFailed);
+      expect(failureMessage(only, t, "described", 0)).not.toMatch(removed);
+      // The last of three failed and was removed: the find holds two.
+      const last: FindFailure = { cause: "segment-check", detail: "photo 3: trailing-data" };
+      expect(failureMessage(last, t, "photo", 2)).toBe(t.queue.failed.segmentCheck.trailingData);
+    },
+  );
+
+  it("still names a photo the find holds, and every photo when told nothing of what the find holds", () => {
+    const t = STRINGS.en.queue.failed;
+    const failure: FindFailure = { cause: "photo", detail: "photo 2: load-failed" };
+    const numbered = t.numbered.replace("{number}", "2").replace("{reason}", t.photo.loadFailed);
+    expect(failureMessage(failure, STRINGS.en, "photo", 2)).toBe(numbered);
+    expect(failureMessage(failure, STRINGS.en, "photo", 5)).toBe(numbered);
+    expect(failureMessage(failure, STRINGS.en, "photo")).toBe(numbered);
+    expect(numbered).toMatch(/remove that photo/);
+  });
 });
 
 describe("the placeholders of the queue's strings", () => {

@@ -1621,6 +1621,45 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(screen.queryByText(INTERNAL)).not.toBeOnTheScreen();
   });
 
+  it("recovers as the message says: once the failed photo is removed, the find gives the reason without the advice to remove it, and Analyse again answers from the text (Clead's decision on #89)", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind({ state: "waiting" }, { photos: [{ uri: "file:///photos/1.jpg", batch: 1 }] }),
+    );
+    jest.mocked(preparePhotoForAnalysis).mockResolvedValueOnce(NOT_LOADED);
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
+    expect(await screen.findByText(numberedLoadFailure)).toBeOnTheScreen();
+    const removePhoto1 = fillIn(en.find.removePhoto, { number: "1" });
+    await fireEvent.press(screen.getByRole("button", { name: removePhoto1 }));
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
+    // Between the removal and the new analysis: the find is still failed, for the photo it held,
+    // and says why in the plain sentence, with no photo to remove named.
+    expect(await screen.findByText(en.queue.failed.photo.loadFailed)).toBeOnTheScreen();
+    expect(screen.getByText(en.find.failed)).toBeOnTheScreen();
+    expect(screen.queryByText(numberedLoadFailure)).not.toBeOnTheScreen();
+    expect(screen.queryByText(/remove that photo/)).not.toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: removePhoto1 })).not.toBeOnTheScreen();
+    expect(screen.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+    expect(await mockLog.getStored(1)).toMatchObject({
+      photos: [],
+      analysis: { state: "failed", failure: { cause: "photo", detail: "photo 1: load-failed" } },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    // "Analyse again" sends the description alone, and its answer takes the failure's place.
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await fireEvent.press(screen.getByRole("button", { name: en.find.analyseAgain }));
+    expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.messages[0].content[0]).toEqual({ type: "text", text: DESCRIPTION });
+    expect(JSON.stringify(body)).not.toContain('"image"');
+    expect(preparePhotoForAnalysis).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(en.find.failed)).not.toBeOnTheScreen();
+    expect(screen.queryByText(en.queue.failed.photo.loadFailed)).not.toBeOnTheScreen();
+    expect(screen.queryByText(numberedLoadFailure)).not.toBeOnTheScreen();
+    expect(mockLog.finds.get(1)?.analysis.state).toBe("done");
+  });
+
   it("does not tell the user to remove the one photo of a find without text, which cannot be removed", async () => {
     mockLog.finds.set(1, withPhotos(1, { analysis: { state: "waiting" }, addedPhotos: null }));
     jest.mocked(preparePhotoForAnalysis).mockResolvedValueOnce(NOT_LOADED);

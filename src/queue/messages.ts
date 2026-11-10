@@ -92,11 +92,17 @@ function stopMessage(stop: QueueStop, strings: Strings, formatTime: FormatTime):
  * with several photos, or on a text find with one, which can be removed, names the photo: its
  * detail is `photo <n>: <detail>` (`queue.ts`), and the message gives the number, the sentence of
  * the rest, and that the photo can be removed (docs/SPEC.md 3.9, Batches; PBI-2.5, PBI-2.16).
+ *
+ * `photosHeld` is the number of photos the find holds now, for a failure read from the store
+ * later: once the find holds no photo of the number named (the photo was removed), the message is
+ * the sentence of the rest alone, with no number and no advice to remove a photo that is not
+ * there (Clead's decision on #89). Without it, every photo named is taken as held.
  */
 export function failureMessage(
   failure: FindFailure,
   strings: Strings,
   subject: LookupSubject = "photo",
+  photosHeld: number = Number.POSITIVE_INFINITY,
 ): string {
   const t = strings.queue.failed;
   const { detail } = failure;
@@ -108,7 +114,9 @@ export function failureMessage(
     numbered[2] !== undefined
   ) {
     const reason = failureMessage({ cause: failure.cause, detail: numbered[2] }, strings, subject);
-    return fill(t.numbered, { number: numbered[1], reason });
+    return Number(numbered[1]) > photosHeld
+      ? reason
+      : fill(t.numbered, { number: numbered[1], reason });
   }
   switch (failure.cause) {
     case "segment-check":

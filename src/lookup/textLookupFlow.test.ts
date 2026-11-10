@@ -243,16 +243,36 @@ describe("the text (SPEC 3.9: up to the configured length)", () => {
     expect(t.view().text).toBe("🍄".repeat(20));
   });
 
-  it("gives the text field a limit in UTF-16 units that every text of the configured length fits in (PBI-2.14, note 2)", async () => {
-    // The field's own limit counts UTF-16 units; a code point takes one or two.
-    const limit = lookupFieldMaxLength(20);
-    expect(limit).toBe(40);
-    expect("🍄".repeat(20)).toHaveLength(limit);
-    expect("a".repeat(20).length).toBeLessThanOrEqual(limit);
-    // What the field lets through beyond the configured length, the flow cuts.
+  it.each([
+    ["nothing", "", 40],
+    ["letters short of the limit", "a".repeat(19), 21],
+    ["emoji short of the limit", "🍄".repeat(19), 40],
+    ["letters and emoji", `${"a".repeat(5)}${"🍄".repeat(5)}`, 35],
+  ])(
+    "gives the text field, while it holds %s, room in UTF-16 units for the characters still free, each taking up to two (PBI-2.14, note 2)",
+    (_, held, limit) => {
+      expect(lookupFieldMaxLength(held, 20)).toBe(limit);
+    },
+  );
+
+  it.each([
+    ["letters", "a".repeat(20)],
+    ["emoji", "🍄".repeat(20)],
+    ["letters and emoji", `${"a".repeat(10)}${"🍄".repeat(10)}`],
+  ])(
+    "gives the text field at the limit, full of %s, the length of the text it holds, so that it takes no more (Clead's decision on #89)",
+    (_, held) => {
+      expect(lookupFieldMaxLength(held, 20)).toBe(held.length);
+    },
+  );
+
+  it("still cuts to the configured length what the field lets through beyond it", async () => {
+    // 19 letters leave the field room for two units: two more letters fit there, one too many.
     const t = setup();
     await t.flow.start();
-    t.flow.setText("a".repeat(limit));
+    t.flow.setText("a".repeat(19));
+    expect(lookupFieldMaxLength(t.view().text, 20)).toBe(21);
+    t.flow.setText("a".repeat(21));
     expect(t.view().text).toBe("a".repeat(20));
   });
 
