@@ -31,7 +31,7 @@ All notable changes to What mushroom is this? are documented here.
 - Phase 2's specification, approved by Adam: text lookup, several photos
   per find, a 1–100 confidence, the Library with a map, a Wikimedia
   picture and a self-check for text lookups (#47, #50, #56, #58, #62,
-  #69, #72, #76, #78).
+  #69, #72, #76, #78, #82).
 - The store at schema version 2, with a migration that keeps every
   Phase 1 find (#49).
 
@@ -98,6 +98,10 @@ All notable changes to What mushroom is this? are documented here.
   damaged ID of 2^53 − 1, the unused permission to read shared storage is
   blocked, and the tests check the app's own texts for its old name, the
   Expo project link, and every native module for a second version (#79).
+- An answer from the API holds its confidence as a number by type, so a
+  Phase 1 level cannot be written as a new answer; a find whose stored
+  confidence and answer disagree is shown as one that cannot be read
+  (#81).
 
 ## Project created
 
