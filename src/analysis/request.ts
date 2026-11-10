@@ -2,14 +2,14 @@ import { type AnalysisConfig, analysisConfig } from "../config/analysis";
 import { config as appConfig } from "../config/config";
 import { checkModelId } from "../config/modelSetting";
 import type { AnalysisError } from "./errors";
-import { ANALYSIS_PROMPT, TEXT_ANALYSIS_PROMPT } from "./prompt";
+import { analysisPrompt } from "./prompt";
 
 /**
- * The Messages API request for one photo (docs/SPEC.md 3.3): one user message
- * with the photo as a base64 image block, followed by the text prompt. Only
- * the photo and the prompt are sent. For a text lookup (3.9), the description
- * as a text block of its own, followed by the text lookup's prompt: only the
- * description and the prompt are sent.
+ * The Messages API request for a find (docs/SPEC.md 3.3, 3.9): one user message with the find's
+ * photos as base64 image blocks, in the order added, each after its label ("Image 1:", "Image 2:"
+ * and so on, also when there is one), then the find's description as a text block of its own when
+ * it has one, then the prompt for what was sent. Only the photos, the description and the prompt
+ * are sent. A text lookup without photos sends its description and the text lookup's prompt.
  */
 
 /**
@@ -51,21 +51,24 @@ interface RequestBase {
   apiKey: string;
 }
 
-/** What is analysed: a photo, or the description of a text lookup (docs/SPEC.md 3.9). */
+/**
+ * What is analysed (docs/SPEC.md 3.9): a find's photos, with its description when it has one, or
+ * the description of a text lookup alone. A description is as written: not blank, and at most the
+ * configured length in code points, as the screen and the store keep it.
+ */
 export type RequestInput = RequestBase &
   (
     | {
-        /** The JPEG to send, base64, already resized and checked by the image module. */
-        imageBase64: string;
-        text?: undefined;
+        /**
+         * The JPEGs to send, base64, each already resized and checked by the image module, in the
+         * order added: one at least, and at most the photos a find holds.
+         */
+        imagesBase64: readonly string[];
+        text?: string;
       }
     | {
-        /**
-         * The description, as written: not blank, and at most the configured length in code
-         * points, as the screen and the store keep it.
-         */
         text: string;
-        imageBase64?: undefined;
+        imagesBase64?: undefined;
       }
   );
 
@@ -82,9 +85,10 @@ export type BuildResult =
 
 /**
  * Builds the request, after checking what goes into it. An API address that is not valid is a
- * programming error (it is configuration) and throws a RangeError; so does an input with both a
- * photo and a text, or neither, or a text that is blank or longer than the configured length,
- * which the screen and the store never give. A key that cannot be sent as a header value, after
+ * programming error (it is configuration) and throws a RangeError; so does an input with neither a
+ * photo nor a text, more photos than a find holds, a photo that is not a non-empty text, or a text
+ * that is blank or longer than the configured length, which the queue never gives. A key that
+ * cannot be sent as a header value, after
  * the trim, gives `key-refused` with `status: null`; a model ID that is not valid, after the
  * trim, gives `model-unknown`. Either way nothing is built.
  */
@@ -129,27 +133,44 @@ type ContentBlock =
   | { type: "image"; source: { type: "base64"; media_type: "image/jpeg"; data: string } }
   | { type: "text"; text: string };
 
-/** The user message's blocks: the photo or the description first, then its prompt. */
+/**
+ * The user message's blocks: each photo after its label, in order, then the description when
+ * there is one, then the prompt for what was sent.
+ */
 function contentOf(input: RequestInput): ContentBlock[] {
-  const { imageBase64, text } = input;
-  if (typeof imageBase64 === "string" && text === undefined) {
-    return [
-      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } },
-      { type: "text", text: ANALYSIS_PROMPT },
-    ];
+  const { imagesBase64, text } = input;
+  const photos = imagesBase64 ?? [];
+  if (
+    !Array.isArray(photos) ||
+    photos.length > appConfig.maxPhotosPerFind ||
+    photos.some((data: unknown) => typeof data !== "string" || data.length === 0)
+  ) {
+    throw new RangeError(
+      `the photos must be a list of at most ${appConfig.maxPhotosPerFind} non-empty texts`,
+    );
   }
-  if (imageBase64 !== undefined || typeof text !== "string") {
-    throw new RangeError("the input must hold either a photo or a text");
+  if (photos.length === 0 && typeof text !== "string") {
+    throw new RangeError("the input must hold a photo or a text");
   }
-  if (text.trim().length === 0 || [...text].length > appConfig.lookupTextMaxLength) {
+  if (
+    text !== undefined &&
+    (typeof text !== "string" ||
+      text.trim().length === 0 ||
+      [...text].length > appConfig.lookupTextMaxLength)
+  ) {
     throw new RangeError(
       `the text must not be blank, and at most ${appConfig.lookupTextMaxLength} characters`,
     );
   }
-  return [
-    { type: "text", text },
-    { type: "text", text: TEXT_ANALYSIS_PROMPT },
-  ];
+  const blocks: ContentBlock[] = photos.flatMap((data, index): ContentBlock[] => [
+    { type: "text", text: `Image ${index + 1}:` },
+    { type: "image", source: { type: "base64", media_type: "image/jpeg", data } },
+  ]);
+  if (text !== undefined) {
+    blocks.push({ type: "text", text });
+  }
+  blocks.push({ type: "text", text: analysisPrompt(photos.length, text !== undefined) });
+  return blocks;
 }
 
 function isPort(value: number): boolean {

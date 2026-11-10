@@ -859,7 +859,8 @@ describe("a text find (SPEC 3.9, PBI-2.4)", () => {
     "shows the disclaimer for a lookup without photos in %s",
     async (lang) => {
       phoneIn(lang);
-      mockLog.finds.set(1, aTextFind(done(CHANTERELLE)));
+      // As the store holds it: an answer from the text alone that names a species has a check.
+      mockLog.finds.set(1, aTextFind(done(CHANTERELLE), { selfCheck: { state: "waiting" } }));
       await startApp();
       const edibility = within(await screen.findByTestId("match-edibility"));
       expect(edibility.getByText(STRINGS[lang].disclaimerDescribed)).toBeOnTheScreen();
@@ -1035,5 +1036,340 @@ describe("the edibility of an answer from text alone, until its self-check agree
       edibility.getByText(t.find.edibility.replace("{edibility}", t.find.edibilities.unknown)),
     ).toBeOnTheScreen();
     expect(edibility.getByText(t.find.selfCheck.waiting)).toBeOnTheScreen();
+  });
+
+  it("once a text find's answer from its photos and text replaces its text answer, shows the edibility by the photo rule, with no self-check and the photo disclaimer (PBI-2.5)", async () => {
+    const id = await mockLog.addText({
+      text: DESCRIPTION,
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
+    await mockLog.setAnswer(
+      id,
+      { answer: PORCINI, model: "m", analysedAtMs: 1 },
+      { photoUris: [] },
+    );
+    // Its self-check agreed, on its picture (PBI-2.9, PBI-2.10 make these; here they are set).
+    const answered = await mockLog.getStored(id);
+    if (answered === null) {
+      throw new Error("the text find was not saved");
+    }
+    mockLog.finds.set(id, {
+      ...answered,
+      selfCheck: { state: "agreed" },
+      picture: {
+        uri: "file:///photos/picture.jpg",
+        author: "A. Photographer",
+        licence: "CC BY-SA 4.0",
+        page: "https://commons.wikimedia.org/wiki/File:Porcini.jpg",
+      },
+    });
+    await mockLog.addPhoto(id, "file:///photos/a.jpg");
+    await mockLog.completeBatch(id);
+    await startApp(`/find/${id}`);
+    // Until the new answer, it keeps its text answer and its check (SPEC 3.9).
+    const before = within(await screen.findByTestId("match-edibility"));
+    expect(before.getByText(edibleText)).toBeOnTheScreen();
+    expect(screen.getByText(en.find.addedPhotos.waiting)).toBeOnTheScreen();
+    fetchMock.mockResolvedValueOnce(apiAnswer({ ...CHANTERELLE, confidence: 69 }));
+    await fireEvent.press(screen.getByRole("button", { name: en.find.analyseAgain }));
+    expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.messages[0].content.map((block: { type: string }) => block.type)).toEqual([
+      "text",
+      "image",
+      "text",
+      "text",
+    ]);
+    expect(mockLog.finds.get(id)).toMatchObject({ selfCheck: null, addedPhotos: "analysed" });
+    // The photo rule: below 70 the edibility is unknown, with no reason of a check.
+    const after = within(screen.getByTestId("match-edibility"));
+    expect(after.getByText(unknownText)).toBeOnTheScreen();
+    for (const reason of Object.values(en.find.selfCheck)) {
+      expect(after.queryByText(reason)).not.toBeOnTheScreen();
+    }
+    expect(after.getByText(en.disclaimer)).toBeOnTheScreen();
+    expect(after.queryByText(en.disclaimerDescribed)).not.toBeOnTheScreen();
+    expect(screen.queryByText(en.find.addedPhotos.waiting)).not.toBeOnTheScreen();
+  });
+});
+
+describe("the disclaimer follows what the answer shown was based on (Clead's decision 3 on #57)", () => {
+  it.each(["waiting", "not-analysed"] as const)(
+    "an answer from the text alone keeps the disclaimer for a description once the find has photos that are %s",
+    async (addedPhotos) => {
+      mockLog.finds.set(
+        1,
+        aTextFind(done(CHANTERELLE), {
+          photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+          addedPhotos,
+          selfCheck: { state: "agreed" },
+        }),
+      );
+      await startApp();
+      const edibility = within(await screen.findByTestId("match-edibility"));
+      expect(edibility.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+      expect(edibility.queryByText(en.disclaimer)).not.toBeOnTheScreen();
+    },
+  );
+
+  it("an answer from the text alone keeps the disclaimer for a description after the photos added since are removed, through the find log", async () => {
+    const id = await mockLog.addText({
+      text: DESCRIPTION,
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
+    await mockLog.setAnswer(
+      id,
+      { answer: CHANTERELLE, model: "m", analysedAtMs: 1 },
+      { photoUris: [] },
+    );
+    await mockLog.addPhoto(id, "file:///photos/a.jpg");
+    await mockLog.completeBatch(id);
+    await mockLog.removePhoto(id, 1);
+    await startApp(`/find/${id}`);
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+  });
+
+  it("an answer from photos keeps 3.5's disclaimer after the text find's photos are all removed, through the find log", async () => {
+    const id = await mockLog.addText({
+      text: DESCRIPTION,
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
+    await mockLog.addPhoto(id, "file:///photos/a.jpg");
+    await mockLog.completeBatch(id);
+    const sent = { photoUris: ["file:///photos/a.jpg"] };
+    await mockLog.setAnswer(id, { answer: CHANTERELLE, model: "m", analysedAtMs: 1 }, sent);
+    await mockLog.removePhoto(id, 1);
+    expect((await mockLog.getStored(id))?.photos).toEqual([]);
+    await startApp(`/find/${id}`);
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(en.disclaimer)).toBeOnTheScreen();
+    expect(edibility.queryByText(en.disclaimerDescribed)).not.toBeOnTheScreen();
+  });
+});
+
+describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
+  /** A photo find with `count` photos, the first in batch 1 and the rest in batch 2. */
+  function withPhotos(count: number, change: Partial<StoredFind> = {}): StoredFind {
+    return {
+      ...aTextFind(done(CHANTERELLE)),
+      text: null,
+      photos: Array.from({ length: count }, (_, i) => ({
+        uri: `file:///photos/${i + 1}.jpg`,
+        batch: i === 0 ? 1 : 2,
+      })),
+      ...change,
+    };
+  }
+  const label = (number: number, count: number) =>
+    fillIn(en.find.photoNumbered, { number: String(number), count: String(count) });
+  /** The photos the find log holds of find 1. */
+  const photosOf1 = async () => (await mockLog.getStored(1))?.photos;
+
+  it("shows every photo in the order added, each labelled with its number", async () => {
+    mockLog.finds.set(1, withPhotos(3));
+    await startApp();
+    expect(await screen.findByLabelText(label(1, 3))).toHaveProp("source", {
+      uri: "file:///photos/1.jpg",
+    });
+    expect(screen.getByLabelText(label(2, 3))).toHaveProp("source", {
+      uri: "file:///photos/2.jpg",
+    });
+    expect(screen.getByLabelText(label(3, 3))).toHaveProp("source", {
+      uri: "file:///photos/3.jpg",
+    });
+  });
+
+  it("offers adding photos, which opens New find for this find", async () => {
+    mockLog.finds.set(1, withPhotos(2));
+    const app = renderRouter(APP_DIR, { initialUrl: "/find/1" });
+    await app;
+    await fireEvent.press(await screen.findByRole("link", { name: en.find.addPhotos }));
+    expect(app.getPathname()).toBe("/new-find");
+    expect(app.getSearchParams()).toEqual({ find: "1" });
+  });
+
+  it("offers adding photos to a text find too", async () => {
+    mockLog.finds.set(1, aTextFind(done(CHANTERELLE)));
+    await startApp();
+    expect(await screen.findByRole("link", { name: en.find.addPhotos })).toBeOnTheScreen();
+  });
+
+  it("offers no more photos once the find holds the most, and says so", async () => {
+    mockLog.finds.set(1, withPhotos(5));
+    await startApp();
+    expect(await screen.findByText(en.find.maxPhotos.replace("{max}", "5"))).toBeOnTheScreen();
+    expect(screen.queryByRole("link", { name: en.find.addPhotos })).not.toBeOnTheScreen();
+  });
+
+  it("removes a photo after asking on the screen, and the others stay in order; nothing is analysed", async () => {
+    mockLog.finds.set(1, withPhotos(3));
+    await startApp();
+    const remove = fillIn(en.find.removePhoto, { number: "2" });
+    await fireEvent.press(await screen.findByRole("button", { name: remove }));
+    expect(screen.getByText(fillIn(en.find.removePhotoConfirm, { number: "2" }))).toBeOnTheScreen();
+    expect(await photosOf1()).toHaveLength(3);
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
+    expect(await screen.findByLabelText(label(2, 2))).toHaveProp("source", {
+      uri: "file:///photos/3.jpg",
+    });
+    expect(screen.getByLabelText(label(1, 2))).toHaveProp("source", {
+      uri: "file:///photos/1.jpg",
+    });
+    expect((await photosOf1())?.map((photo) => photo.uri)).toEqual([
+      "file:///photos/1.jpg",
+      "file:///photos/3.jpg",
+    ]);
+    expect(screen.getByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(preparePhotoForAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("keeps the photo when the user answers Keep", async () => {
+    mockLog.finds.set(1, withPhotos(2));
+    await startApp();
+    await fireEvent.press(
+      await screen.findByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
+    );
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoCancel }));
+    expect(
+      screen.queryByText(fillIn(en.find.removePhotoConfirm, { number: "1" })),
+    ).not.toBeOnTheScreen();
+    expect(await photosOf1()).toHaveLength(2);
+  });
+
+  it("does not offer removing the last photo of a find without text", async () => {
+    mockLog.finds.set(1, withPhotos(1));
+    await startApp();
+    await screen.findByTestId("match-names");
+    expect(
+      screen.queryByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
+    ).not.toBeOnTheScreen();
+  });
+
+  it("offers removing the last photo of a text find, which then shows no photo", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind({ state: "waiting" }, { photos: [{ uri: "file:///photos/1.jpg", batch: 1 }] }),
+    );
+    await startApp();
+    await fireEvent.press(
+      await screen.findByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
+    );
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
+    expect(await screen.findByText(DESCRIPTION)).toBeOnTheScreen();
+    await act(async () => undefined);
+    expect(screen.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+    expect(await photosOf1()).toEqual([]);
+  });
+
+  it("says so when a photo cannot be removed, without the error's text, and keeps it", async () => {
+    mockLog.finds.set(1, withPhotos(2));
+    jest.spyOn(mockLog, "removePhoto").mockRejectedValueOnce(new Error("database is locked"));
+    await startApp();
+    await fireEvent.press(
+      await screen.findByRole("button", { name: fillIn(en.find.removePhoto, { number: "2" }) }),
+    );
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
+    expect(await screen.findByText(en.find.removePhotoFailed)).toBeOnTheScreen();
+    expect(screen.queryByText(/locked/)).not.toBeOnTheScreen();
+    expect(screen.getByLabelText(label(2, 2))).toBeOnTheScreen();
+  });
+
+  it("says the photos added since the answer wait, and keeps showing the answer", async () => {
+    mockLog.finds.set(1, withPhotos(2, { addedPhotos: "waiting" }));
+    await startApp();
+    expect(await screen.findByText(en.find.addedPhotos.waiting)).toBeOnTheScreen();
+    expect(screen.getByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+  });
+
+  it("says why the photos added since the answer wait after a run that found no network", async () => {
+    mockLog.finds.set(1, withPhotos(2, { addedPhotos: "waiting" }));
+    fetchMock.mockRejectedValueOnce(new TypeError("Network request failed"));
+    Object.defineProperty(AppState, "currentState", { value: "active", configurable: true });
+    await startApp();
+    expect(await screen.findByText(en.queue.paused.network)).toBeOnTheScreen();
+    expect(screen.getByText(en.find.addedPhotos.waiting)).toBeOnTheScreen();
+  });
+
+  it("says the photos added since the answer were not analysed, and Analyse again analyses them all with the answer replaced", async () => {
+    mockLog.finds.set(1, withPhotos(2, { addedPhotos: "not-analysed" }));
+    fetchMock.mockResolvedValueOnce(apiAnswer(PORCINI));
+    await startApp();
+    expect(await screen.findByText(en.find.addedPhotos.notAnalysed)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: en.find.analyseAgain }));
+    expect(await screen.findByText(PORCINI.generalInformation.en)).toBeOnTheScreen();
+    expect(preparePhotoForAnalysis).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(
+      body.messages[0].content.filter((block: { type: string }) => block.type === "image"),
+    ).toHaveLength(2);
+    expect(screen.queryByText(en.find.addedPhotos.notAnalysed)).not.toBeOnTheScreen();
+    expect(mockLog.finds.get(1)).toMatchObject({ addedPhotos: "analysed" });
+  });
+
+  it("names the photo that failed, in plain words", async () => {
+    mockLog.finds.set(
+      1,
+      withPhotos(3, {
+        analysis: { state: "failed", failure: { cause: "photo", detail: "photo 2: load-failed" } },
+        addedPhotos: null,
+      }),
+    );
+    await startApp();
+    expect(
+      await screen.findByText(
+        fillIn(en.queue.failed.numbered, { number: "2", reason: en.queue.failed.photo.loadFailed }),
+      ),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(INTERNAL)).not.toBeOnTheScreen();
+  });
+
+  it("a find whose batch is still open: Analyse completes the batch and leaves the find to the queue", async () => {
+    mockLog.finds.set(
+      1,
+      withPhotos(2, { analysis: { state: "waiting" }, addedPhotos: null, batchOpen: true }),
+    );
+    const complete = jest.spyOn(mockLog, "completeBatch");
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
+    expect(complete).toHaveBeenCalledWith(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockLog.finds.get(1)).toMatchObject({ batchOpen: false });
+    expect(await screen.findByText(en.find.waiting)).toBeOnTheScreen();
+  });
+
+  it("says so, without the error, when the batch cannot be completed, and keeps it open", async () => {
+    mockLog.finds.set(
+      1,
+      withPhotos(2, { analysis: { state: "waiting" }, addedPhotos: null, batchOpen: true }),
+    );
+    jest.spyOn(mockLog, "completeBatch").mockRejectedValueOnce(new Error("database is locked"));
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
+    expect(await screen.findByText(en.find.analysisError)).toBeOnTheScreen();
+    expect(screen.queryByText(/locked/)).not.toBeOnTheScreen();
+    expect(mockLog.finds.get(1)).toMatchObject({ batchOpen: true });
+  });
+
+  it("is read again when the screen comes back into view, so photos added meanwhile are shown", async () => {
+    mockLog.finds.set(1, withPhotos(1));
+    await startApp();
+    expect(await screen.findByLabelText(en.find.photo)).toBeOnTheScreen();
+    await act(async () => {
+      router.push("/about");
+    });
+    await mockLog.addPhoto(1, "file:///photos/2.jpg");
+    await mockLog.completeBatch(1);
+    await act(async () => {
+      router.back();
+    });
+    expect(await screen.findByLabelText(label(2, 2))).toHaveProp("source", {
+      uri: "file:///photos/2.jpg",
+    });
+    expect(screen.getByText(en.find.addedPhotos.waiting)).toBeOnTheScreen();
   });
 });

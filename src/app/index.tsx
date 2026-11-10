@@ -15,6 +15,7 @@ import {
   edibilityText,
   fillIn,
   formatFindTime,
+  matchBasis,
   selfCheckReason,
 } from "../find/display";
 import { useLanguage } from "../i18n/LanguageContext";
@@ -363,8 +364,11 @@ function SummaryView({ find, language, strings }: FindRowProps) {
             })}
           </Text>
           {reason !== null && <Text style={styles.note}>{reason}</Text>}
+          {/* The disclaimer follows what the answer was based on (Clead's decision 3 on #57). */}
           <Text style={styles.note}>
-            {described ? strings.disclaimerDescribed : strings.disclaimer}
+            {matchBasis(find.selfCheck) === "described"
+              ? strings.disclaimerDescribed
+              : strings.disclaimer}
           </Text>
         </>
       );

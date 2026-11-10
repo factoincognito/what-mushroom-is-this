@@ -97,9 +97,11 @@ export interface FindStore {
    */
   list(): Promise<ListedFind[]>;
   /**
-   * The ID of the waiting find saved first whose batch is complete, or null when none waits: the
-   * queue's "oldest first" is the order of saving, the find's ID, not the time taken (docs/SPEC.md
-   * 3.4), and the queue does not take a find while its batch is open (3.9). A waiting find whose
+   * The ID of the find saved first that waits for the queue, its batch complete, or null when none
+   * waits: a waiting find, or an analysed one whose photos added since its answer wait
+   * (docs/SPEC.md 3.9, Batches; PBI-2.5). The queue's "oldest first" is the order of saving, the
+   * find's ID, not the time taken (3.4), and the queue does not take a find while its batch is
+   * open (3.9). A waiting find whose
    * row cannot be read as `getStored` reads it is passed over and left as it is, so it does not
    * stop the queue; the list shows it as unreadable.
    */
@@ -189,9 +191,20 @@ export interface LookupStore {
 
 /**
  * The find log as the screens and the queue use it: Phase 1's `FindStore`, and of `LookupStore`
- * the text find and the reading of everything a find holds (PBI-2.4). Later items add the rest.
+ * the text find and the reading of everything a find holds (PBI-2.4), and a find's photos in
+ * batches (PBI-2.5). Later items add the rest.
  */
-export type FindLog = FindStore & Pick<LookupStore, "addText" | "getStored">;
+export type FindLog = FindStore &
+  Pick<
+    LookupStore,
+    | "addText"
+    | "getStored"
+    | "addWithOpenBatch"
+    | "addPhoto"
+    | "completeBatch"
+    | "removePhoto"
+    | "setAddedPhotos"
+  >;
 
 export interface StoreOptions {
   /** A name for a new photo that no other photo in the directory has. */
@@ -264,11 +277,13 @@ const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, resul
   name_en, name_it, edibility, confidence, confidence_score FROM finds
   ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /**
- * The waiting find saved first after a given ID whose batch is complete, among the IDs the store
- * can read: one past 2^53 could not be passed over, since JavaScript cannot hold it to ask for the
- * next (PBI-1.26).
+ * The find saved first after a given ID that waits for the queue, its batch complete: a waiting
+ * find, or an analysed one whose photos added since its answer wait (PBI-2.5); among the IDs the
+ * store can read: one past 2^53 could not be passed over, since JavaScript cannot hold it to ask
+ * for the next (PBI-1.26).
  */
-const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE state = 'waiting' AND batch_open = 0
+const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds
+  WHERE (state = 'waiting' OR (state = 'done' AND added_photos = 'waiting')) AND batch_open = 0
   AND finds.id > ? AND finds.id <= ${Number.MAX_SAFE_INTEGER} ORDER BY finds.id ASC LIMIT 1`;
 /**
  * The IDs the store cannot read, those `SAFE_ID` gives back as NULL: `deleteUnreadable` matches
@@ -403,15 +418,14 @@ export async function createFindStore(
   ): Promise<void> {
     checkId(id);
     checkSent(sent);
-    const columns = answerColumns(analysed);
+    const { columns, result } = answerColumns(analysed);
     const row = await db.getFirstAsync(PHOTOS_OF, [id]);
     if (row === null) {
       throw new StoreError("not-found", `no find has the ID ${id}`);
     }
     const byUri = new Map(readPhotoNames(record(row)).map((name) => [photos.uriOf(name), name]));
     const sentNames = sent.photoUris.flatMap((uri) => byUri.get(uri) ?? []);
-    // The answer's result, the fourth of its columns, once more for the self-check.
-    const result = columns[3] ?? null;
+    // The answer's result once more, for the self-check.
     await update(id, sql, [...columns, JSON.stringify(sentNames), sent.photoUris.length, result]);
   }
 
@@ -761,9 +775,13 @@ function removeQuietly(photos: PhotoFiles, name: string): boolean {
 /**
  * The values of `ANSWER_COLUMNS`, from an answer checked against the shape. A new answer is
  * checked as one from the API, so its confidence is a whole number from 1 to 100: a Phase 1 level
- * is only ever read, never written again (docs/SPEC.md 3.9, PBI-2.3).
+ * is only ever read, never written again (docs/SPEC.md 3.9, PBI-2.3). The answer's result is also
+ * given by name, for the self-check (review of #49, round 2).
  */
-function answerColumns(analysed: AnalysedAnswer): Params {
+function answerColumns(analysed: AnalysedAnswer): {
+  columns: Params;
+  result: "match" | "no_mushroom" | "cannot_tell";
+} {
   const { answer, model, analysedAtMs } = analysed;
   if (typeof model !== "string" || model.trim().length === 0) {
     throw invalid("the model ID is empty");
@@ -783,12 +801,18 @@ function answerColumns(analysed: AnalysedAnswer): Params {
   }
   const valid = checked.answer;
   if (valid.result !== "match") {
-    return [json, model, analysedAtMs, valid.result, null, null, null, null, null, null];
+    return {
+      columns: [json, model, analysedAtMs, valid.result, null, null, null, null, null, null],
+      result: valid.result,
+    };
   }
   const { sv, en, it } = valid.names;
   const { confidence } = valid;
   const [level, score] = typeof confidence === "number" ? [null, confidence] : [confidence, null];
-  return [json, model, analysedAtMs, "match", sv, en, it, valid.edibility, level, score];
+  return {
+    columns: [json, model, analysedAtMs, "match", sv, en, it, valid.edibility, level, score],
+    result: "match",
+  };
 }
 
 type Row = Record<string, unknown>;

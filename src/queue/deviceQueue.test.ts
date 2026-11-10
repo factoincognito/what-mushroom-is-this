@@ -42,6 +42,7 @@ function log(): QueueLog & { waiting: boolean } {
     replaceAnswer: jest.fn(),
     markFailed: jest.fn(),
     markWaiting: jest.fn(),
+    setAddedPhotos: jest.fn(),
   };
   return store;
 }

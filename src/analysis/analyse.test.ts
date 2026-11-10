@@ -8,7 +8,7 @@ const input: AnalysisInput = {
   apiAddress: "https://api.example.test",
   model: "claude-test-model",
   apiKey,
-  imageBase64: "/9j/4AAQSkZJRg==",
+  imagesBase64: ["/9j/4AAQSkZJRg=="],
   timeLimitMs: 60_000,
 };
 

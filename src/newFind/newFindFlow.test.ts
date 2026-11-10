@@ -7,6 +7,13 @@ const granted = { status: "granted", granted: true, canAskAgain: true, expires: 
 const denied = { status: "denied", granted: false, canAskAgain: false, expires: "never" };
 const photo = (uri: string): PickResult => ({ kind: "photo", uri, exif: null });
 
+/** The find log's batch methods, which these tests of the first photo do not reach. */
+const UNUSED_BATCH = {
+  addPhoto: async () => undefined,
+  completeBatch: async () => undefined,
+  getStored: async () => null,
+};
+
 /**
  * A flow with stand-ins: a store whose first `failures` saves fail, a camera and a gallery.
  * `holdNextSave()` holds the next save open until the function it gives is called.
@@ -21,7 +28,8 @@ function setUp(failures: number) {
   const flow = new NewFindFlow(
     {
       findLog: async () => ({
-        add: async (find: NewFind) => {
+        // A photo lookup's find is saved with its batch open (PBI-2.5).
+        addWithOpenBatch: async (find: NewFind) => {
           const hold = holds.shift();
           if (hold !== undefined) {
             await hold;
@@ -33,6 +41,7 @@ function setUp(failures: number) {
           added.push(find);
           return added.length;
         },
+        ...UNUSED_BATCH,
         setPosition: async () => undefined,
       }),
       camera: { permission: { get: async () => granted, request: async () => granted }, take },
@@ -42,7 +51,11 @@ function setUp(failures: number) {
         permission: { get: async () => denied, request: async () => denied },
         source: { watch: async () => () => undefined, lastKnown: async () => null },
       },
-      appConfig: { lastKnownPositionMaxAgeMs: 120_000, positionFixWaitMs: 30_000 },
+      appConfig: {
+        lastKnownPositionMaxAgeMs: 120_000,
+        positionFixWaitMs: 30_000,
+        maxPhotosPerFind: 5,
+      },
       now: () => new Date(Date.UTC(2026, 10, 9, 12, 0, 0)),
     },
     (view) => views.push(view),
@@ -166,7 +179,8 @@ function setUpWithLocation(limits: {
         state.logAsked = true;
         await logOpen;
         return {
-          add: async (find: NewFind) => {
+          ...UNUSED_BATCH,
+          addWithOpenBatch: async (find: NewFind) => {
             if (state.addFails) {
               throw new Error("database is locked");
             }
@@ -187,7 +201,7 @@ function setUpWithLocation(limits: {
         permission: { get: async () => granted, request: async () => granted },
         source: location,
       },
-      appConfig: limits,
+      appConfig: { ...limits, maxPhotosPerFind: 5 },
       now: () => new Date(NOW_MS),
     },
     (shown) => {

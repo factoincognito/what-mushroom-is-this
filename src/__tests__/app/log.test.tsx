@@ -363,6 +363,71 @@ describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
     expect(row.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
   });
 
+  it("once it has photos and a queue run's answer from them replaced its text answer, shows its first photo and the edibility by the photo rule, with no self-check (SPEC 3.9; PBI-2.5)", async () => {
+    // Its answer from the text alone; then a batch of two photos, completed.
+    const id = await mockLog.addText({
+      text: "A yellow funnel with false gills.",
+      time: { takenAtMs: BASE, utcOffsetMinutes: 120, source: "saved" },
+      position: null,
+    });
+    const porcini: Match = {
+      ...CHANTERELLE,
+      names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
+    };
+    await mockLog.setAnswer(
+      id,
+      { answer: porcini, model: "claude-opus-5-5", analysedAtMs: BASE },
+      { photoUris: [] },
+    );
+    expect((await mockLog.getStored(id))?.selfCheck).toEqual({ state: "waiting" });
+    await mockLog.addPhoto(id, "file:///photos/a.jpg");
+    await mockLog.addPhoto(id, "file:///photos/b.jpg");
+    await mockLog.completeBatch(id);
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    Object.defineProperty(AppState, "currentState", { value: "active", configurable: true });
+    await startApp();
+    expect(await screen.findByText("Chanterelle")).toBeOnTheScreen();
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.messages[0].content.map((block: { type: string }) => block.type)).toEqual([
+      "text",
+      "image",
+      "text",
+      "image",
+      "text",
+      "text",
+    ]);
+    const row = within(screen.getByTestId(`find-row-${id}`));
+    expect(row.getByLabelText(en.find.photo)).toBeOnTheScreen();
+    expect(
+      row.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.edible)),
+    ).toBeOnTheScreen();
+    expect(row.queryByText(en.find.selfCheck.waiting)).toBeNull();
+    expect(row.getByText(en.disclaimer)).toBeOnTheScreen();
+    expect(row.queryByText(en.disclaimerDescribed)).toBeNull();
+  });
+
+  it("an answer from the text alone keeps the disclaimer for a description once the find has photos waiting (Clead's decision 3 on #57)", async () => {
+    mockLog.finds.set(1, {
+      ...textFind(1, 0, done(CHANTERELLE)),
+      photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+      addedPhotos: "waiting",
+    });
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(row.getByLabelText(en.find.photo)).toBeOnTheScreen();
+    expect(row.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+    expect(row.queryByText(en.disclaimer)).toBeNull();
+  });
+
+  it("an answer from photos keeps 3.5's disclaimer once the text find's photos are all removed (Clead's decision 3 on #57)", async () => {
+    mockLog.finds.set(1, textFind(1, 0, done(CHANTERELLE), null));
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(row.queryByLabelText(en.find.photo)).toBeNull();
+    expect(row.getByText(en.disclaimer)).toBeOnTheScreen();
+    expect(row.queryByText(en.disclaimerDescribed)).toBeNull();
+  });
+
   it("has a link to the text lookup", async () => {
     const app = await startApp();
     await fireEvent.press(await screen.findByRole("link", { name: en.log.textLookup }));

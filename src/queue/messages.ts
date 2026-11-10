@@ -86,7 +86,9 @@ function stopMessage(stop: QueueStop, strings: Strings, formatTime: FormatTime):
  * sentence; nothing of the detail itself is shown, so no code, marker number, status, native
  * message or file path reaches the user. A form the app does not know gets the cause's general
  * sentence. Details already stored in these forms are read the same way. For a lookup without
- * photos, a refusal names the description, not the photo (PBI-2.4).
+ * photos, a refusal names the description, not the photo (PBI-2.4). A photo's failure on a find
+ * with several photos names the photo: its detail is `photo <n>: <detail>` (`queue.ts`), and the
+ * message gives the number and the sentence of the rest (docs/SPEC.md 3.9, Batches; PBI-2.5).
  */
 export function failureMessage(
   failure: FindFailure,
@@ -95,6 +97,16 @@ export function failureMessage(
 ): string {
   const t = strings.queue.failed;
   const { detail } = failure;
+  const numbered = NUMBERED_PHOTO.exec(detail);
+  if (
+    numbered !== null &&
+    (failure.cause === "photo" || failure.cause === "segment-check") &&
+    numbered[1] !== undefined &&
+    numbered[2] !== undefined
+  ) {
+    const reason = failureMessage({ cause: failure.cause, detail: numbered[2] }, strings, subject);
+    return fill(t.numbered, { number: numbered[1], reason });
+  }
   switch (failure.cause) {
     case "segment-check":
       return segmentCheckMessage(detail, t.segmentCheck);
@@ -122,6 +134,8 @@ export function failureMessage(
   }
 }
 
+/** `queue.ts`: a photo's failure on a find with several photos, numbered from 1. */
+const NUMBERED_PHOTO = /^photo ([1-9][0-9]*): (.+)$/s;
 const REQUEST_WRONG = /^request-wrong \(status \d+\)$/;
 const REQUEST_TOO_LARGE = /^request-too-large \(status \d+\)$/;
 /** `readMessageBody`'s detail for a body that is not a Messages API message. */
