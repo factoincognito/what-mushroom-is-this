@@ -6,7 +6,7 @@
  * sitemap test runs expo-router's, and its mods as `npx expo config --type introspect` runs them
  * (PBI-1.17); for the others, these tests check the entries they are given.
  */
-import { PROJECT_ROOT } from "../../testing/projectFiles";
+import { fs, PROJECT_ROOT, path } from "../../testing/projectFiles";
 
 type PluginEntry = string | [string, Record<string, unknown>?];
 type ExpoConfig = {
@@ -189,6 +189,28 @@ describe("the iOS permission texts in the app's three languages (PBI-1.20)", () 
     });
   });
 
+  /** In each language: the map, its provider, and the old claim that the position goes nowhere. */
+  const LOCATION_WORDS: Record<string, { map: RegExp; provider: RegExp; nowhere: RegExp }> = {
+    en: { map: /\bmap\b/i, provider: /\bprovider\b/i, nowhere: /not sent anywhere/i },
+    sv: { map: /\bkart/i, provider: /leverantör/i, nowhere: /skickas inte någonstans/i },
+    it: {
+      map: /\bmappa\b/i,
+      provider: /fornitore/i,
+      nowhere: /non viene inviata da nessuna parte/i,
+    },
+  };
+
+  it.each(["sv", "en", "it"])(
+    "say in %s that the position also opens the map, whose provider sees the area shown, and no longer that it is sent nowhere (PBI-2.8)",
+    (language) => {
+      const text = String(ios.localesMap[language]?.NSLocationWhenInUseUsageDescription);
+      const words = LOCATION_WORDS[language];
+      expect(text).toMatch(words?.map ?? /^$/);
+      expect(text).toMatch(words?.provider ?? /^$/);
+      expect(text).not.toMatch(words?.nowhere ?? /^$/);
+    },
+  );
+
   it.each(["sv", "it"])("are translated in %s, not left in English", (language) => {
     for (const key of PERMISSION_KEYS) {
       expect(ios.localesMap[language]?.[key]).not.toBe(ios.localesMap.en?.[key]);
@@ -208,6 +230,71 @@ describe("the iOS permission texts in the app's three languages (PBI-1.20)", () 
     for (const texts of Object.values(android.localesMap)) {
       expect(texts).toEqual({});
     }
+  });
+});
+
+type GradleProperty = { type: string; key?: string; value?: string };
+
+/**
+ * The Android `gradle.properties` after MapLibre React Native's real config plugin has run over
+ * app.json with the options app.json gives it, its mods run without writing files.
+ */
+async function mapLibreGradleProperties(): Promise<GradleProperty[]> {
+  const entry = pluginEntry("@maplibre/maplibre-react-native");
+  if (entry === undefined) {
+    throw new Error("app.json registers no @maplibre/maplibre-react-native plugin");
+  }
+  const plugin: { default: (config: ExpoConfig, props: unknown) => ExpoConfig } =
+    jest.requireActual("@maplibre/maplibre-react-native/app.plugin.js");
+  const { compileModsAsync } = jest.requireActual("expo/config-plugins");
+  const config = plugin.default(structuredClone(appJson.expo), entry[1]);
+  await compileModsAsync(config, {
+    projectRoot: PROJECT_ROOT,
+    introspect: true,
+    platforms: ["android"],
+    assertMissingModProviders: false,
+  });
+  const results = config._internal?.modResults as
+    | { android?: { gradleProperties?: GradleProperty[] } }
+    | undefined;
+  const properties = results?.android?.gradleProperties;
+  if (properties === undefined) {
+    throw new Error("introspection gave no gradle.properties");
+  }
+  return properties;
+}
+
+describe("the MapLibre React Native config plugin in app.json (PBI-2.8)", () => {
+  it("is registered, with the library's own location engine, not Google's (SPEC 3.9), and no other option", () => {
+    expect(pluginEntry("@maplibre/maplibre-react-native")?.[1]).toEqual({
+      android: { locationEngine: "default" },
+    });
+  });
+
+  it("writes the default location engine into gradle.properties, and leaves the native variant to the plugin's default (the real plugin)", async () => {
+    const maplibre = (await mapLibreGradleProperties()).filter(
+      (property) =>
+        property.type === "property" && property.key?.startsWith("org.maplibre.reactnative."),
+    );
+    expect(maplibre).toEqual([
+      { type: "property", key: "org.maplibre.reactnative.locationEngine", value: "default" },
+    ]);
+  }, 120_000);
+
+  it("leaves the package's own default variant as OpenGL and its engine as the default one", () => {
+    const gradle = fs.readFileSync(
+      path.join(
+        PROJECT_ROOT,
+        "node_modules",
+        "@maplibre",
+        "maplibre-react-native",
+        "android",
+        "gradle.properties",
+      ),
+      "utf8",
+    );
+    expect(gradle).toMatch(/^org\.maplibre\.reactnative\.nativeVariant=opengl$/m);
+    expect(gradle).toMatch(/^org\.maplibre\.reactnative\.locationEngine=default$/m);
   });
 });
 

@@ -41,7 +41,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Your location is saved with each new find, so your log shows where you found it. It is not sent anywhere.",
+          "locationWhenInUsePermission": "Your location is saved with each new find, so your log shows where you found it, and the map opens where you are. The map's provider sees the area the map shows.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "motionUsagePermission": false
@@ -56,7 +56,8 @@
             { "domain": "database", "path": "." }
           ]
         }
-      ]
+      ],
+      ["@maplibre/maplibre-react-native", { "android": { "locationEngine": "default" } }]
     ],
     "extra": {
       "eas": {

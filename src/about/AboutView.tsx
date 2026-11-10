@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Notices } from "./notices";
@@ -10,8 +10,9 @@ type AboutViewProps = {
 
 /**
  * The About view (docs/SPEC.md 3.1): the app's own licence with its required notice, the
- * disclaimer of SPEC 3.5, and the licences of the libraries the app ships. A licence text is
- * shown when asked for, as the texts are long.
+ * disclaimer of SPEC 3.5, the map data credits with links to their pages (SPEC 3.9, PBI-2.8),
+ * and the licences of the libraries the app ships. A licence text is shown when asked for, as the
+ * texts are long.
  */
 export function AboutView({ notices }: AboutViewProps) {
   const { strings } = useLanguage();
@@ -33,6 +34,37 @@ export function AboutView({ notices }: AboutViewProps) {
           {t.disclaimerHeading}
         </Text>
         <Text style={styles.text}>{strings.disclaimer}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text accessibilityRole="header" style={styles.heading}>
+          {t.mapDataHeading}
+        </Text>
+        <Text style={styles.text}>{t.mapDataIntro}</Text>
+        {notices.mapData.map((entry) => (
+          <View key={entry.name} style={styles.library} testID={`map-data-${entry.name}`}>
+            <Text style={styles.name}>{entry.credit}</Text>
+            <Text style={styles.text}>{entry.licence}</Text>
+            <Pressable
+              accessibilityRole="link"
+              // A page that cannot be opened (no browser) leaves the user on About.
+              onPress={() => void Linking.openURL(entry.url).catch(() => undefined)}
+            >
+              <Text style={[styles.text, styles.link]}>{entry.url}</Text>
+            </Pressable>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.section}>
+        <Text accessibilityRole="header" style={styles.heading}>
+          {t.creditsHeading}
+        </Text>
+        {notices.credits.map((entry) => (
+          <View key={entry.name} style={styles.library} testID={`credit-${entry.name}`}>
+            <Text style={styles.text}>{entry.text}</Text>
+          </View>
+        ))}
       </View>
 
       <View style={styles.section}>
@@ -109,6 +141,9 @@ const styles = StyleSheet.create({
   },
   licence: {
     fontSize: 12,
+  },
+  link: {
+    textDecorationLine: "underline",
   },
   button: {
     alignSelf: "flex-start",

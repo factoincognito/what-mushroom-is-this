@@ -90,6 +90,7 @@ function summaryOf(stored: StoredFind): FindSummary {
     id: stored.id,
     photoUri: stored.photos[0]?.uri ?? null,
     time: stored.time,
+    position: stored.position,
     analysis: summary,
     selfCheck: stored.selfCheck,
     species: speciesOf(analysis),

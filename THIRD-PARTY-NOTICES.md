@@ -53,6 +53,7 @@ shipped in the app (internal tooling).
 | `expo-location` | 57.0.23 | MIT | depend | https://github.com/expo/expo, `packages/expo-location` | the phone's position for a new find (PBI-1.19). Its Android side builds in Google's `play-services-location`, below, from Maven, not npm (its `android/build.gradle`, and the POM of its prebuilt Android module, which otherwise names only `kotlin-stdlib-jdk7` 2.1.20, `org.jetbrains:annotations` 23.0.0 and `pika-api` 0.3.2, as for `expo-network`); on iOS its `ios/ExpoLocation.podspec` depends only on `ExpoModulesCore` |
 | `expo-font` | 57.0.4 | MIT | depend | https://github.com/expo/expo, `packages/expo-font` | one copy of the fonts library (PBI-1.30): a dependency of `expo`, and a peer library of `expo-symbols`, which `expo-router` depends on. Without it as a direct dependency, npm filled that peer with a version of the next SDK, beside the one `expo` brings |
 | `expo-document-picker` | 57.0.3 | MIT | depend | https://github.com/expo/expo, `packages/expo-document-picker` | photos from the phone's files (PBI-2.6, Known unknown 13). Its Android side builds in the two libraries below, from Maven, not npm (its `android/build.gradle`); the POM of its prebuilt Android module otherwise names only `kotlin-stdlib-jdk7` 2.1.20, `org.jetbrains:annotations` 23.0.0 and `pika-api` 0.3.2, as for `expo-network`; on iOS its `ios/ExpoDocumentPicker.podspec` depends only on `ExpoModulesCore`. Its config plugin adds only iCloud entitlements, and only when `ios.usesIcloudStorage` is set (its `plugin/build/withDocumentPickerIOS.js`); `app.json` neither sets that nor lists the plugin |
+| `@maplibre/maplibre-react-native` | 11.5.1 | MIT | depend | https://github.com/maplibre/maplibre-react-native | the Library's map (PBI-2.8, Known unknown 11), installed with `npx expo install` and pinned; its peer ranges (`expo >=54.0.0`, optional; `react-native >=0.80.0`; `react >=19.1.0`, from `npm view`) hold the app's 57.0.32, 0.86.3 and 19.2.3. Its licence file, `LICENSE.md`, names "MapLibre contributors" and "Mapbox". Its config plugin is in `app.json` with `locationEngine` "default", so its Android side builds in no Google location library (its `android/build.gradle`). It brings in these npm packages, each read from its installed `package.json`, all permissive; whether the shipped transitive npm packages are listed one by one is PBI-1.24's: `@maplibre/maplibre-gl-style-spec` 26.4.4 (ISC), `@mapbox/jsonlint-lines-primitives` 2.0.3 (MIT), `@mapbox/unitbezier` 1.0.0 (BSD-2-Clause), `json-stringify-pretty-compact` 4.0.0 (MIT), `minimist` 1.2.8 (MIT), `quickselect` 3.0.0 (ISC), `tinyqueue` 3.0.0 (ISC), `@turf/distance`, `@turf/helpers`, `@turf/invariant`, `@turf/length`, `@turf/meta` and `@turf/nearest-point-on-line` 7.4.0 (MIT), and the type package `@types/geojson` 7946.0.16 (MIT, not shipped). Its native libraries are in their own section below |
 
 ### The Android libraries `expo-image-picker` builds in
 
@@ -134,6 +135,130 @@ release gate.
 |---|---|---|---|---|---|
 | `androidx.annotation:annotation` (Android, through `expo-document-picker`'s `android/build.gradle`) | 1.0.0 | Apache-2.0 ("The Apache Software License, Version 2.0") | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: version 1.1.0's licence on https://badges.mvnrepository.com/artifact/androidx.annotation/annotation/1.1.0, and the AndroidX repository it is built from, as for `activity-ktx` |
 | `commons-io:commons-io` (Android, through `expo-document-picker`'s `android/build.gradle`) | 2.6 | Apache-2.0 | depend | https://commons.apache.org/proper/commons-io/ | not this version's POM: the Maven Central page, https://central.sonatype.com/artifact/commons-io/commons-io, which shows version 2.22.0, lists "Apache-2.0", and its POM's header says the ASF licenses it under the Apache License, Version 2.0 |
+
+### The native libraries `@maplibre/maplibre-react-native` builds in
+
+Mode "depend" for each. On Android, the libraries its `android/build.gradle` asks for, from
+Maven, not npm, with the versions its `android/gradle.properties` gives, which the plugin's
+options in `app.json` leave as they are (only `locationEngine`, at its default): the native
+variant is the plugin's default, "opengl". The same file also asks for
+`androidx.appcompat:appcompat` 1.7.1, recorded above for `expo-image-picker` at that version, and
+`androidx.annotation:annotation` 1.9.1, recorded above for `expo-document-picker` at 1.0.0 (Gradle
+builds in one version of each; which one it resolves was not checked), and for React Native's
+`react-android` and Kotlin's `kotlin-stdlib`, which come with the app. On iOS, the MapLibre
+Native that its `MapLibreReactNative.podspec` names, added through Swift Package Manager.
+
+Read on 2026-11-10 by Clead (session https://claude.ai/code/session_01RZ8pEJjkkFM9VDxAs7KA6f),
+as the table says for each; no Gradle cache was at hand, and PBI-2.8's own Crog agent could not
+fetch them. All are permissive (Appendix A.3).
+
+**MapLibre Native**, Android and iOS: its `LICENSE.md` at the tags `android-v13.6.1` (commit
+c7506d6) and `ios-v6.31.0` (commit 01791ad) of https://github.com/maplibre/maplibre-native is
+BSD-2-Clause, naming MapLibre contributors, MapTiler.com and Mapbox. The libraries it builds in
+are licensed as its `LICENSES.core.md` at the same tags says, the same file at both, 1,347 lines:
+ISC, BSD-2-Clause and BSD-3-Clause, the Boost Software License 1.0, MIT and "Old MIT", Apache-2.0
+(metal-cpp, FastPFOR), curl's licence (parsedate) and the FreeType Project licence, among others.
+Copies of both files at `android-v13.6.1` are in `licenses/maplibre-native/`; the About view
+gives both texts for the two MapLibre Native rows below (`src/about/maplibreNativeTexts.ts`,
+checked against those copies). BSD-2-Clause, and the BSD and FreeType terms in
+`LICENSES.core.md`, ask for their notices in the documentation; the About view carries them.
+Whether the iOS tag's `LICENSE.md` is byte for byte the Android tag's was not checked here; Clead
+read both as BSD-2-Clause with the same holders.
+
+- **FreeType** asks for a credit in the documentation of a binary, and suggests the text
+  "Portions of this software are copyright © <year> The FreeType Project (https://freetype.org).
+  All rights reserved.", the year to be that of the FreeType version used. `LICENSES.core.md`
+  does not give that year: it gives only the licence's own date (2006-Jan-27) and its copyright
+  lines (1996-2002, 2006, and 1996-2000), not the version MapLibre Native builds in. So the
+  About view gives the credit without a year (its "Credits", below); the version's year is for
+  the release gate (PBI-1.24).
+- **RapidJSON**'s section includes the JSON License ("The Software shall be used for Good, not
+  Evil"). RapidJSON's own text there says that only its `bin/jsonchecker/` directory is under
+  that licence, and that excluding it suffices. MapLibre Native's `vendor/rapidjson.cmake` at
+  `android-v13.6.1` uses only `rapidjson/include`, as an INTERFACE include directory, so the
+  JSON-licensed code is not built in (read by Clead, 2026-11-10). Not an escalation; RapidJSON
+  itself is MIT.
+
+The vulkan flavour of `android-sdk` 13.6.1, read for PBI-2.1, declares `ACCESS_FINE_LOCATION`,
+`ACCESS_COARSE_LOCATION` and `ACCESS_WIFI_STATE`; the app keeps blocking `ACCESS_WIFI_STATE`
+(`app.json`, PBI-1.10). The NOTICE duties of the Apache-2.0 libraries, and the texts of the two
+MapLibre plugins, are PBI-1.24's, as for the earlier items.
+
+| Library | Version | Licence | Mode | Source | Where the licence was read |
+|---|---|---|---|---|---|
+| `org.maplibre.gl:android-sdk-opengl` (Android, MapLibre Native) | 13.6.1 | BSD-2-Clause | depend | https://github.com/maplibre/maplibre-native | its `LICENSE.md` and `LICENSES.core.md` at the tag `android-v13.6.1` (commit c7506d6), read by Clead, 2026-11-10; copies in `licenses/maplibre-native/` |
+| `org.maplibre.gl:android-plugin-annotation-v9` (Android) | 3.0.2 | BSD-2-Clause (the POM names "BSD", with the BSD-2-Clause licence's address) | depend | https://central.sonatype.com/artifact/org.maplibre.gl/android-plugin-annotation-v9 | its 3.0.2 POM, on its artifact page on central.sonatype.com, read by Clead, 2026-11-10; its licence text is not in the app yet (PBI-1.24) |
+| `org.maplibre.gl:android-plugin-scalebar-v9` (Android) | 3.0.2 | BSD-2-Clause (the POM names "BSD", with the BSD-2-Clause licence's address) | depend | https://central.sonatype.com/artifact/org.maplibre.gl/android-plugin-scalebar-v9 | its 3.0.2 POM, on its artifact page on central.sonatype.com, read by Clead, 2026-11-10; its licence text is not in the app yet (PBI-1.24) |
+| `org.maplibre.gl:android-sdk-turf` (Android) | 6.0.1 | Apache-2.0 | depend | https://central.sonatype.com/artifact/org.maplibre.gl/android-sdk-turf | its 6.0.1 POM on central.sonatype.com, read by Clead, 2026-11-10 |
+| `com.squareup.okhttp3:okhttp` (Android) | 4.12.0 | Apache-2.0 | depend | https://central.sonatype.com/artifact/com.squareup.okhttp3/okhttp | not this version's POM: mvnrepository's listing of the managed dependencies of 4.12.0, and OkHttp's README, read by Clead, 2026-11-10 |
+| `com.squareup.okhttp3:okhttp-urlconnection` (Android) | 4.12.0 | Apache-2.0 | depend | https://central.sonatype.com/artifact/com.squareup.okhttp3/okhttp-urlconnection | not this version's POM: as for `okhttp` |
+| `androidx.vectordrawable:vectordrawable` (Android) | 1.2.0 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
+| `maplibre-gl-native-distribution` (iOS, MapLibre Native, the Swift package `MapLibre`) | 6.31.0 | BSD-2-Clause | depend | https://github.com/maplibre/maplibre-gl-native-distribution | MapLibre Native's `LICENSE.md` and `LICENSES.core.md` at the tag `ios-v6.31.0` (commit 01791ad) of https://github.com/maplibre/maplibre-native, read by Clead, 2026-11-10; the app carries the copies of `android-v13.6.1` |
+| `org.maplibre.gl:maplibre-android-gestures` (Android, through MapLibre Android's own build file) | 0.0.4 | BSD-2-Clause (the POM names "BSD", with the BSD-2-Clause licence's address) | depend | https://github.com/maplibre/maplibre-gestures-android | its 0.0.4 POM, as the mirror https://repository.jboss.org/nexus/repository/developer/org/maplibre/gl/maplibre-android-gestures/0.0.4/maplibre-android-gestures-0.0.4.pom gives it, read on 2026-11-10; its licence text is not in the app yet (PBI-1.24) |
+| `com.jakewharton.timber:timber` (Android, through MapLibre Android's own build file) | 5.0.1 | Apache-2.0 | depend | https://github.com/JakeWharton/timber | not this version's POM: the repository's licence, "apache-2.0", and its README's licence section, as https://awesome.ecosyste.ms/projects/github.com%2FJakeWharton%2Ftimber gives them, read on 2026-11-10 |
+| `androidx.interpolator:interpolator` (Android, through MapLibre Android's own build file) | 1.0.0 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
+
+#### What MapLibre Android itself builds in
+
+MapLibre Android 13.6.1 (`android-sdk-opengl`) asks for further Maven libraries itself. They are its
+`api` and `implementation` dependencies in `platform/android/MapLibreAndroid/build.gradle.kts`, with the
+versions of `platform/android/gradle/libs.versions.toml`, at the tag `android-v13.6.1` (commit
+c7506d6) of https://github.com/maplibre/maplibre-native, read on 2026-11-10 from a clone of that
+tag (the Clead-role review of #68, fix 1). The published 13.6.1 POM was not read and may differ.
+They are:
+- `org.maplibre.gl:maplibre-android-gestures` 0.0.4, `com.jakewharton.timber:timber` 5.0.1 and
+  `androidx.interpolator:interpolator` 1.0.0, rows of their own in the table above.
+- `org.maplibre.gl:android-sdk-turf` 6.0.1 and `com.squareup.okhttp3:okhttp` 4.12.0, the
+  versions the wrapper asks for, rows above.
+- `org.jetbrains.kotlinx:kotlinx-coroutines-core` 1.10.2, recorded above for
+  `expo-image-picker` at that version.
+- `androidx.annotation:annotation` 1.8.2 and `androidx.fragment:fragment` 1.8.9, Apache-2.0 from
+  the AndroidX repository they are built from, as for `activity-ktx`. They are recorded above at 1.0.0
+  (for `expo-document-picker` and Play services); Gradle builds in one version of each, and which
+  it resolves was not checked.
+- `org.maplibre.gl:android-sdk-geojson` 6.0.1: licence not read yet, so it is not listed in the
+  About view; for PBI-1.24. The one source found, ecosyste.ms's page for its repository
+  (https://awesome.ecosyste.ms/projects/github.com%2Fmaplibre%2Fmaplibre-java), says "mit". But
+  `android-sdk-turf` 6.0.1, from the same repository, has Apache-2.0 in its POM (above), so the
+  6.0.1 POM is to be read.
+
+The gestures library's 0.0.4 POM names `kotlin-stdlib` 2.0.10, `androidx.annotation` 1.8.2 and
+`androidx.core:core-ktx` 1.13.1 (recorded above at 1.17.0 for `expo-image-picker`).
+
+OkHttp's own dependencies (Okio, among others), and the POM dependencies of the two MapLibre
+plugins, of turf and of geojson, are not named yet: for PBI-1.24 and the release gate. Their own
+POMs were not read in PBI-2.8.
+
+## Map data
+
+The map's tiles, style, glyphs and sprites come from OpenFreeMap (`tiles.openfreemap.org`), as
+data, not as a library (SPEC 3.9; the escalation of OpenFreeMap's terms decided by Adam,
+2026-11-09 21:27). The map credits them through MapLibre's "(i)" button, which lists the
+attributions the style's sources give: for OpenFreeMap "OpenFreeMap", "© OpenMapTiles" and "Data
+from OpenStreetMap", each linked, OpenStreetMap to its copyright page (PBI-2.1's findings, section
+5; not seen on a phone). The About view lists the credits below. Their licences, from OpenFreeMap's
+licence file (https://github.com/hyperknot/openfreemap/blob/main/LICENSE.md, read 2026-11-10) and
+PBI-2.1's findings: the map data is OpenStreetMap's, under the ODbL; OpenMapTiles' design is CC
+BY 4.0 and its code BSD-3-Clause; the Liberty style is a fork of OSM Liberty, itself a fork of OSM
+Bright, its design CC BY 4.0 and its code BSD-3-Clause. The style also loads the Noto Sans glyphs
+(SIL Open Font License 1.1), the Maki icons (CC0 1.0) and a public-domain arrow, and Natural Earth
+data (public domain), which ask for no credit. The style's own JSON was not read in PBI-2.8 (its
+fetch needed an approval nobody answered).
+
+| Name | Credit | Licence | Link |
+|---|---|---|---|
+| `OpenStreetMap` | © OpenStreetMap contributors | Open Database License (ODbL) 1.0 | https://www.openstreetmap.org/copyright |
+| `OpenMapTiles` | © OpenMapTiles | design CC BY 4.0, code BSD-3-Clause | https://github.com/openmaptiles/openmaptiles |
+| `OpenFreeMap Liberty` | OpenFreeMap; the Liberty style, a fork of OSM Liberty, itself a fork of OSM Bright | design CC BY 4.0, code BSD-3-Clause | https://github.com/hyperknot/openfreemap/blob/main/LICENSE.md |
+
+## Credits
+
+Credits a licence asks to reach the user in the documentation; the About view shows them. FreeType's
+is the text its licence suggests, without the year, which `LICENSES.core.md` does not give (above).
+
+| Name | Credit |
+|---|---|
+| `FreeType` | Portions of this software are copyright © The FreeType Project (https://freetype.org). All rights reserved. |
 
 ## Development tools
 

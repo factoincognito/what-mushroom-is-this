@@ -35,6 +35,7 @@ import {
   yearOptions,
 } from "../library/filters";
 import { useLibraryFilters } from "../library/LibraryFiltersContext";
+import { LibraryMap } from "../library/LibraryMap";
 import { formatTimeIn, noticeMessage, stopNeedsSettings } from "../queue/messages";
 import { useQueue } from "../queue/QueueContext";
 import { useFindLog } from "../store/FindLogContext";
@@ -55,8 +56,8 @@ type ListState =
 
 /**
  * The Library, the start screen in place of the Log (docs/SPEC.md 3.9, PBI-2.7). It opens on its
- * list, the only view so far: the map and the switch between the two are PBI-2.8, which shows the
- * same filtered finds, so the filters are applied here, above the list. The filters (species,
+ * list; a switch shows the map in the list's place (`LibraryMap`, PBI-2.8), which takes the same
+ * finds and filters and shows those with a position in the area shown. The filters (species,
  * years, months) are held above the screens while the app runs (`LibraryFiltersProvider`) and are
  * opened and closed by a button; a chosen species or year that no find has any longer is dropped.
  * A find that could not be read is always listed, whatever the filters. A find without photos
@@ -88,6 +89,8 @@ export default function LibraryScreen() {
   const { stop, pause, running } = state;
   const [list, setList] = useState<ListState>({ kind: "loading" });
   const [filtersOpen, setFiltersOpen] = useState(false);
+  /** The list or the map; the Library opens on the list (SPEC 3.9). */
+  const [view, setView] = useState<"list" | "map">("list");
   /** The latest read; an earlier one that ends later is dropped. */
   const latestRead = useRef(0);
 
@@ -135,6 +138,23 @@ export default function LibraryScreen() {
   return (
     <View style={styles.container}>
       {list.kind === "ready" && (
+        <View style={styles.row}>
+          {(["list", "map"] as const).map((each) => (
+            <Pressable
+              key={each}
+              accessibilityRole="button"
+              accessibilityState={{ selected: view === each }}
+              onPress={() => setView(each)}
+              style={[styles.switchButton, view === each && styles.chipChecked]}
+            >
+              <Text style={styles.buttonText}>
+                {each === "list" ? strings.log.listView : strings.log.mapView}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      {list.kind === "ready" && (
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: filtersOpen }}
@@ -167,7 +187,15 @@ export default function LibraryScreen() {
             </Pressable>
           </View>
         )}
-        {list.kind === "ready" && (
+        {list.kind === "ready" && view === "map" && (
+          <LibraryMap
+            entries={list.entries}
+            filters={filters}
+            language={language}
+            strings={strings}
+          />
+        )}
+        {list.kind === "ready" && view === "list" && (
           <FlatList
             data={shown}
             keyExtractor={entryKey}
@@ -542,6 +570,12 @@ function Chip({ label, checked, onPress }: ChipProps) {
 
 const styles = StyleSheet.create({
   filterButton: {
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  switchButton: {
+    flex: 1,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,

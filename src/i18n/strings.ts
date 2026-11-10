@@ -48,6 +48,13 @@ export type Strings = {
     /** The text mark in place of a photo for a find without photos, and its accessible name. */
     readonly textMark: string;
     readonly textMarkLabel: string;
+    /** The switch between the Library's list and its map (docs/SPEC.md 3.9, PBI-2.8). */
+    readonly listView: string;
+    readonly mapView: string;
+    /** While the map waits for the phone's position before it opens. */
+    readonly mapOpening: string;
+    /** The map could not load its style; it still shows what its cache holds. */
+    readonly mapFailed: string;
   };
   readonly settings: {
     readonly title: string;
@@ -433,6 +440,11 @@ export type Strings = {
     /** For a library whose licence text is not in the app yet. */
     readonly textMissing: string;
     readonly disclaimerHeading: string;
+    /** The map data credits (docs/SPEC.md 3.9, PBI-2.8): their heading and what they are. */
+    readonly mapDataHeading: string;
+    readonly mapDataIntro: string;
+    /** The heading of the credits a licence asks for, such as FreeType's (PBI-2.8). */
+    readonly creditsHeading: string;
   };
 };
 
@@ -525,6 +537,10 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       noMatch: "Inga fynd passar filtren.",
       textMark: "Text",
       textMarkLabel: "Beskrivet fynd, utan foto",
+      listView: "Lista",
+      mapView: "Karta",
+      mapOpening: "Söker din position …",
+      mapFailed: "Kartan kunde inte laddas. Den visar det som redan finns sparat.",
     },
     settings: {
       title: "Inställningar",
@@ -825,6 +841,10 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       hideText: "Dölj licenstexten",
       textMissing: "Licenstexten finns inte i appen ännu.",
       disclaimerHeading: "Ätlighet",
+      creditsHeading: "Erkännanden",
+      mapDataHeading: "Kartdata",
+      mapDataIntro:
+        "Kartan hämtar sina kartbilder från OpenFreeMap. Deras källor anges här, som deras licenser kräver.",
     },
   },
   en: {
@@ -859,6 +879,10 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       noMatch: "No finds match the filters.",
       textMark: "Text",
       textMarkLabel: "A described find, without a photo",
+      listView: "List",
+      mapView: "Map",
+      mapOpening: "Finding your position …",
+      mapFailed: "The map could not be loaded. It shows what it has already saved.",
     },
     settings: {
       title: "Settings",
@@ -1154,6 +1178,10 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       hideText: "Hide the licence text",
       textMissing: "The licence text is not in the app yet.",
       disclaimerHeading: "Edibility",
+      creditsHeading: "Credits",
+      mapDataHeading: "Map data",
+      mapDataIntro:
+        "The map loads its tiles from OpenFreeMap. Their sources are credited here, as their licences ask.",
     },
   },
   // Not checked by an Italian speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
@@ -1189,6 +1217,10 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       noMatch: "Nessun ritrovamento corrisponde ai filtri.",
       textMark: "Testo",
       textMarkLabel: "Ritrovamento descritto, senza foto",
+      listView: "Elenco",
+      mapView: "Mappa",
+      mapOpening: "Ricerca della tua posizione …",
+      mapFailed: "Impossibile caricare la mappa. Mostra ciò che ha già salvato.",
     },
     settings: {
       title: "Impostazioni",
@@ -1496,6 +1528,10 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       hideText: "Nascondi il testo della licenza",
       textMissing: "Il testo della licenza non è ancora nell'app.",
       disclaimerHeading: "Commestibilità",
+      creditsHeading: "Riconoscimenti",
+      mapDataHeading: "Dati della mappa",
+      mapDataIntro:
+        "La mappa carica le sue tessere da OpenFreeMap. Le loro fonti sono citate qui, come richiedono le loro licenze.",
     },
   },
 };

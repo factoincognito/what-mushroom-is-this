@@ -221,6 +221,7 @@ describe("a text find (PBI-2.2)", () => {
         id,
         photoUri: null,
         time,
+        position,
         analysis: { state: "waiting" },
         selfCheck: null,
         species: null,
@@ -237,6 +238,7 @@ describe("a text find (PBI-2.2)", () => {
         id,
         photoUri: null,
         time,
+        position,
         analysis: {
           state: "done",
           result: "match",

@@ -1384,12 +1384,15 @@ describe("list", () => {
       summaryRow({ id: 6 }),
     ]);
     const time = { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" };
+    // The rows' position, which the Library's map shows (PBI-2.8).
+    const position = { latitude: 59.64, longitude: 17.08, accuracyM: 12.5, source: "fix" };
     await expect(store.list()).resolves.toEqual([
       {
         readable: true,
         id: 10,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        position,
         selfCheck: null,
         species: match.names,
         analysis: {
@@ -1405,6 +1408,7 @@ describe("list", () => {
         id: 9,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        position,
         selfCheck: null,
         species: match.names,
         analysis: {
@@ -1420,6 +1424,7 @@ describe("list", () => {
         id: 8,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        position,
         selfCheck: null,
         species: null,
         analysis: { state: "done", result: "no_mushroom" },
@@ -1429,6 +1434,7 @@ describe("list", () => {
         id: 7,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        position,
         selfCheck: null,
         species: null,
         analysis: { state: "failed", failure: { cause: "answer", detail: "shape" } },
@@ -1438,6 +1444,7 @@ describe("list", () => {
         id: 6,
         photoUri: "file:///doc/photos/p7.jpg",
         time,
+        position,
         selfCheck: null,
         species: null,
         analysis: { state: "waiting" },
@@ -1510,6 +1517,7 @@ describe("list", () => {
         id: 8,
         photoUri: null,
         time: { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" },
+        position: { latitude: 59.64, longitude: 17.08, accuracyM: 12.5, source: "fix" },
         analysis: { state: "waiting" },
         selfCheck: null,
         species: null,

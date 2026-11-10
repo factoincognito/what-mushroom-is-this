@@ -1,7 +1,7 @@
 {
   "ios": {
     "NSCameraUsageDescription": "The camera takes the photo of a mushroom for your find log.",
-    "NSLocationWhenInUseUsageDescription": "Your location is saved with each new find, so your log shows where you found it. It is not sent anywhere.",
+    "NSLocationWhenInUseUsageDescription": "Your location is saved with each new find, so your log shows where you found it, and the map opens where you are. The map's provider sees the area the map shows.",
     "NSPhotoLibraryUsageDescription": "A photo you pick from your library is saved as a find in your log."
   }
 }
