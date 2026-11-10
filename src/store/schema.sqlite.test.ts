@@ -941,7 +941,12 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
   it("reads an answer the store stored whose names hold a NUL and lone surrogates, which SQLite does not give back as written, in the list and get (PBI-2.17)", async () => {
     const odd: ApiMatch = {
       ...match,
-      names: { sv: "Kant\u0000arell", en: "Chan\uD800terelle", la: "C. c.", it: "Galli\uDC00naccio" },
+      names: {
+        sv: "Kant\u0000arell",
+        en: "Chan\uD800terelle",
+        la: "C. c.",
+        it: "Galli\uDC00naccio",
+      },
     };
     const id = await store.add(newFind(1_000));
     const sent = await sentPhoto(id);
@@ -951,7 +956,11 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
       .get(id);
     // Shown so the test says why the store does not compare these names: on `node:sqlite` the
     // columns come back cut at the NUL and with U+FFFD for each lone surrogate.
-    expect(columns).not.toEqual({ name_sv: odd.names.sv, name_en: odd.names.en, name_it: odd.names.it });
+    expect(columns).not.toEqual({
+      name_sv: odd.names.sv,
+      name_en: odd.names.en,
+      name_it: odd.names.it,
+    });
     await expect(store.get(id)).resolves.toMatchObject({
       analysis: { state: "done", answer: { names: odd.names } },
     });
@@ -962,7 +971,11 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
     const ids: number[] = [];
     for (const edibility of EDIBILITIES) {
       const id = await store.add(newFind(1_000));
-      await store.setAnswer(id, { ...analysed, answer: { ...match, edibility } }, await sentPhoto(id));
+      await store.setAnswer(
+        id,
+        { ...analysed, answer: { ...match, edibility } },
+        await sentPhoto(id),
+      );
       ids.push(id);
     }
     for (const result of ["no_mushroom", "cannot_tell"] as const) {

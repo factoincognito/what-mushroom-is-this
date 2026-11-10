@@ -289,22 +289,21 @@ const SAFE_BATCH_OPEN = "CASE WHEN batch_open IN (0, 1) THEN batch_open END AS b
 const PHOTO_COUNT = "(CASE WHEN json_valid(photos) THEN json_array_length(photos) END)";
 /**
  * Every column of a find, as `get`, `getStored`, the queue's pick and the list all read it; the
- * confidence columns too, which the list shows, so that each of them judges a find whose columns
- * and answer differ the same way (PBI-2.12).
+ * confidence columns (PBI-2.12) and the result, names and edibility (PBI-2.17) too, which the list
+ * shows, so that each of them judges a find whose columns and answer differ the same way.
  */
 const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source,
   latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES},
   ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model,
   ${safeTime("analysed_at_ms")}, answer_basis, added_photos, picture_file, picture_author,
   picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la,
-  check_name_it, confidence, confidence_score`;
+  check_name_it, confidence, confidence_score, result, name_sv, name_en, name_it, edibility`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
 /**
  * The finds, the latest taken first, by the stored time and ID (`finds.`, not the columns read),
  * each also with its ID as SQLite writes it, exactly, whatever the ID.
  */
-const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv,
-  name_en, name_it, edibility FROM finds
+const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id FROM finds
   ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /**
  * The find saved first after a given ID that waits for the queue, its batch complete: a waiting
@@ -913,7 +912,7 @@ function readStored(row: Row, photos: PhotoFiles): StoredFind {
   }
   const batchOpen = flagOf(row, "batch_open");
   const analysis = readAnalysis(row);
-  checkConfidenceColumns(row, analysis);
+  checkAnswerColumns(row, analysis);
   const addedPhotos =
     analysis.state === "done"
       ? enumOf(row, "added_photos", ADDED_PHOTOS_STATES)
@@ -1221,23 +1220,68 @@ function readSummaryAnalysis(row: Row): SummaryAnalysis {
 }
 
 /**
- * The confidence columns against the stored answer (PBI-2.12). The Library reads a find's
- * confidence from its columns and the Find screen from its answer, so a find whose two differ,
- * which only a damaged file can hold, is one the store cannot read, as other damage is (PBI-1.16,
- * PBI-1.26). They hold the same confidence in the same form: the store writes a new answer's number
- * to `confidence_score`, and a Phase 1 find keeps its level in `confidence` as in its answer
- * (schema version 2). A find without an answer naming a species has neither column set.
+ * The answer's columns against the stored answer (PBI-2.12, PBI-2.17). The Library reads a find's
+ * result, its names in the app's three languages, its edibility and its confidence from its
+ * columns, and the Find screen reads them from its answer, so a find whose two differ, which only
+ * a damaged file can hold, is one the store cannot read, as other damage is (PBI-1.16, PBI-1.26).
+ * The store has written every one of these columns from the answer it stores, at every version,
+ * and the migrations copy them as they are. An answer naming no species has no names, edibility or
+ * confidence. The confidence is held in the same form: the store writes a new answer's number to
+ * `confidence_score`, and a Phase 1 find keeps its level in `confidence` as in its answer (schema
+ * version 2).
+ *
+ * A find without an answer is read by its state: the list shows none of its result, names or
+ * edibility, and the answer the queue stores for it writes them all, so they are compared only on
+ * a find with an answer (the review of #84, fix 1, keeps such a damaged waiting or failed find
+ * readable). It has no confidence columns set (PBI-2.12). A name is compared only where SQLite
+ * gives a text back as it was written (`sameName`).
  */
-function checkConfidenceColumns(row: Row, analysis: Analysis): void {
-  const answered =
-    analysis.state === "done" && analysis.answer.result === "match"
-      ? analysis.answer.confidence
-      : null;
+function checkAnswerColumns(row: Row, analysis: Analysis): void {
+  const match =
+    analysis.state === "done" && analysis.answer.result === "match" ? analysis.answer : null;
+  if (analysis.state === "done") {
+    if (row.result !== analysis.answer.result) {
+      throw corrupt("the stored result column differs from the stored answer's result");
+    }
+    for (const language of ["sv", "en", "it"] as const) {
+      const column = `name_${language}`;
+      if (!sameName(row[column], match === null ? null : match.names[language])) {
+        throw corrupt(`the stored ${column} differs from the stored answer's name`);
+      }
+    }
+    if (row.edibility !== (match?.edibility ?? null)) {
+      throw corrupt("the stored edibility column differs from the stored answer's edibility");
+    }
+  }
   const stored =
     row.confidence === null && row.confidence_score === null ? null : readConfidence(row);
-  if (stored !== answered) {
+  if (stored !== (match?.confidence ?? null)) {
     throw corrupt("the stored confidence columns differ from the stored answer's confidence");
   }
+}
+
+/**
+ * Whether a name column holds the answer's name. A name holding a NUL or a lone surrogate fits the
+ * answer's shape, so the store writes it, but SQLite's driver need not give it back as written
+ * (`node:sqlite` cuts the text at the NUL and gives U+FFFD for a lone surrogate), so for such a
+ * name the column need only hold a text; any other name is compared exactly.
+ */
+function sameName(column: unknown, name: string | null): boolean {
+  if (name === null || keepsAsWritten(name)) {
+    return column === name;
+  }
+  return typeof column === "string";
+}
+
+/** Whether a text holds no NUL and no lone surrogate, read code point by code point. */
+function keepsAsWritten(text: string): boolean {
+  for (const character of text) {
+    const code = character.codePointAt(0);
+    if (code === 0 || (code !== undefined && code >= 0xd800 && code <= 0xdfff)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**

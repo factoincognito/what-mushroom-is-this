@@ -1428,7 +1428,12 @@ describe("get", () => {
     ["an edibility", row({ edibility: "edible" })],
     [
       "an edibility, failed",
-      row({ state: "failed", failure_cause: "request", failure_detail: "400", edibility: "edible" }),
+      row({
+        state: "failed",
+        failure_cause: "request",
+        failure_detail: "400",
+        edibility: "edible",
+      }),
     ],
   ])(
     "reads a find without an answer by its state, though a damaged file gives it %s, which nothing shows and its next answer rewrites (review of #84, fix 1; PBI-2.17)",
