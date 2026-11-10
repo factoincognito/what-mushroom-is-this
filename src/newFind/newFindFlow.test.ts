@@ -29,6 +29,11 @@ const SAVED_LOOKUP = {
   removeCopy: () => undefined,
 };
 
+/** The phone's files, which these tests do not open (PBI-2.6). */
+const NO_FILES = {
+  files: { pick: async (): Promise<PickResult> => ({ kind: "canceled" }) },
+};
+
 /**
  * A flow with stand-ins: a store whose first `failures` saves fail, a camera and a gallery.
  * `holdNextSave()` holds the next save open until the function it gives is called.
@@ -61,6 +66,7 @@ function setUp(failures: number) {
       }),
       camera: { permission: { get: async () => granted, request: async () => granted }, take },
       gallery: { pick },
+      ...NO_FILES,
       ...SAVED_LOOKUP,
       // No location permission: these tests are of the photo, not the position.
       location: {
@@ -213,6 +219,7 @@ function setUpWithLocation(limits: {
         take: async () => photo("file:///cache/first.jpg"),
       },
       gallery: { pick: async () => photo("file:///cache/second.jpg") },
+      ...NO_FILES,
       ...SAVED_LOOKUP,
       location: {
         permission: { get: async () => granted, request: async () => granted },
@@ -550,8 +557,16 @@ function setUpLookup(
     cancelCamera?: number;
     /** Runs while the camera is open, before it gives its photo (its number, from 1). */
     whileCameraOpen?: (shot: number) => void;
+    /**
+     * What the phone's files give, in turn (PBI-2.6); once these are used, `files-1.jpg` and so
+     * on, each with `GALLERY_EXIF`, which a photo from the files must not take its time or
+     * position from.
+     */
+    files?: (PickResult | Error)[];
   } = {},
 ) {
+  const fileResults = options.files ?? [];
+  let filePicks = 0;
   const location = options.location;
   let cancels = options.cancelCamera ?? 0;
   /** The Save setting's reading and the camera's opening, in order. */
@@ -625,6 +640,24 @@ function setUpLookup(
           return {
             kind: "photo",
             uri: `file:///cache/gallery-${galleryPicks}.jpg`,
+            exif: GALLERY_EXIF,
+          };
+        },
+      },
+      files: {
+        pick: async (): Promise<PickResult> => {
+          events.push("files");
+          const next = fileResults.shift();
+          if (next instanceof Error) {
+            throw next;
+          }
+          if (next !== undefined) {
+            return next;
+          }
+          filePicks += 1;
+          return {
+            kind: "photo",
+            uri: `file:///cache/DocumentPicker/files-${filePicks}.jpg`,
             exif: GALLERY_EXIF,
           };
         },
@@ -1324,5 +1357,181 @@ describe("the position of a photo lookup (SPEC 3.9: asked for when the camera op
     const { flow } = setUpLookup({ location });
     await flow.start();
     expect(location.onFix).not.toBeNull();
+  });
+});
+
+describe("photos from the phone's files (SPEC 3.9, Lookups; Known unknown 13; PBI-2.6)", () => {
+  it("saves a file as a new find's first photo at the time of saving and without a position, though the phone has a fix and the picker gave metadata", async () => {
+    const location = new FakeLocation();
+    const { flow, log, last } = setUpLookup({ saveAtStart: true, cancelCamera: 1, location });
+    await flow.start();
+    location.send(59.66, 17.1, 9);
+    await settle();
+    await flow.pickFromFiles();
+    expect(log.added).toEqual([
+      {
+        photoUri: "file:///cache/DocumentPicker/files-1.jpg",
+        time: expect.objectContaining({ source: "saved" }),
+        position: null,
+      },
+    ]);
+    expect(log.added[0]?.time.takenAtMs).toBeGreaterThan(NOW_MS);
+    expect(location.stops).toBe(1);
+    location.send(59.0, 17.0, 3);
+    await settle();
+    expect(log.positions).toEqual([]);
+    expect(last()).toMatchObject({ phase: "saved", photoCount: 1, batchOpen: true });
+  });
+
+  it("saves a file after a camera photo to the same find, in its open batch", async () => {
+    const { flow, log, last } = setUpLookup({ saveAtStart: true });
+    await flow.start();
+    await flow.pickFromFiles();
+    expect(log.added.map((find) => find.photoUri)).toEqual(["file:///cache/camera-1.jpg"]);
+    expect(log.photosAdded).toEqual([[1, "file:///cache/DocumentPicker/files-1.jpg"]]);
+    expect(last()).toMatchObject({ photoCount: 2, batchOpen: true });
+  });
+
+  it("adds a file to a find from its screen, which keeps its time and position", async () => {
+    const { flow, log, last } = setUpLookup({
+      target: { kind: "add", findId: 7 },
+      storedPhotos: 1,
+      cancelCamera: 1,
+    });
+    await flow.start();
+    await flow.pickFromFiles();
+    expect(log.photosAdded).toEqual([[7, "file:///cache/DocumentPicker/files-1.jpg"]]);
+    expect(log.added).toEqual([]);
+    expect(log.positions).toEqual([]);
+    expect(last()).toMatchObject({ photoCount: 2, save: null });
+  });
+
+  it("holds a file on an unsaved lookup, and gives the lookup, when it is the first, the time of picking and no position once Save is turned on", async () => {
+    const location = new FakeLocation();
+    const { flow, log, last } = setUpLookup({ cancelCamera: 1, location });
+    await flow.start();
+    location.send(59.66, 17.1, 9);
+    await settle();
+    await flow.pickFromFiles();
+    expect(log.added).toEqual([]);
+    expect(last()).toMatchObject({
+      held: 1,
+      heldPhotos: ["file:///cache/DocumentPicker/files-1.jpg"],
+    });
+    await flow.setSave(true);
+    expect(log.added).toEqual([
+      {
+        photoUri: "file:///cache/DocumentPicker/files-1.jpg",
+        time: expect.objectContaining({ source: "saved" }),
+        position: null,
+      },
+    ]);
+    await settle();
+    expect(log.positions).toEqual([]);
+  });
+
+  it("sends a held file with the lookup's other photos, in the order added", async () => {
+    const { flow, analysed } = setUpLookup();
+    await flow.start();
+    await flow.pickFromFiles();
+    await flow.analyse();
+    expect(analysed).toEqual([
+      ["file:///cache/camera-1.jpg", "file:///cache/DocumentPicker/files-1.jpg"],
+    ]);
+  });
+
+  it("refuses a file the app cannot load as an image with a message, saves nothing, and offers the files again", async () => {
+    const { flow, log, last } = setUpLookup({
+      saveAtStart: true,
+      cancelCamera: 1,
+      files: [{ kind: "notImage" }],
+    });
+    await flow.start();
+    await flow.pickFromFiles();
+    expect(last()).toMatchObject({
+      phase: "ready",
+      message: "fileNotImage",
+      photoCount: 0,
+      canAddMore: true,
+      canRetrySave: false,
+    });
+    expect(log.added).toEqual([]);
+    await flow.pickFromFiles();
+    expect(log.added.map((find) => find.photoUri)).toEqual([
+      "file:///cache/DocumentPicker/files-1.jpg",
+    ]);
+    expect(last()).toMatchObject({ phase: "saved", message: null });
+  });
+
+  it("holds nothing on an unsaved lookup for a file that is not an image, and drops no photo it holds", async () => {
+    const { flow, last } = setUpLookup({ files: [{ kind: "notImage" }] });
+    await flow.start();
+    await flow.pickFromFiles();
+    expect(last()).toMatchObject({
+      message: "fileNotImage",
+      held: 1,
+      heldPhotos: ["file:///cache/camera-1.jpg"],
+    });
+  });
+
+  it("says so when the files picker fails, as for the gallery, and saves nothing", async () => {
+    const { flow, log, last } = setUpLookup({
+      saveAtStart: true,
+      cancelCamera: 1,
+      files: [new Error("no activity")],
+    });
+    await flow.start();
+    await flow.pickFromFiles();
+    expect(last()).toMatchObject({ phase: "ready", message: "pickFailed" });
+    expect(log.added).toEqual([]);
+  });
+
+  it("changes nothing when the files are closed without one", async () => {
+    const { flow, log, last } = setUpLookup({
+      saveAtStart: true,
+      cancelCamera: 1,
+      files: [{ kind: "canceled" }],
+    });
+    await flow.start();
+    await flow.pickFromFiles();
+    expect(last()).toMatchObject({ phase: "ready", message: null, canAddMore: true });
+    expect(log.added).toEqual([]);
+  });
+
+  it("does not open the files while a photo whose save failed is kept", async () => {
+    const { flow, log, events } = setUpLookup({ saveAtStart: true });
+    log.failNext.push(true);
+    await flow.start();
+    await flow.pickFromFiles();
+    expect(events).not.toContain("files");
+  });
+
+  it("does not open the files once the find holds the most photos", async () => {
+    const { flow, events, last } = setUpLookup({
+      target: { kind: "add", findId: 7 },
+      storedPhotos: 5,
+    });
+    await flow.start();
+    await flow.pickFromFiles();
+    expect(events).not.toContain("files");
+    expect(last()).toMatchObject({ canAddMore: false });
+  });
+
+  it("removes the app's copy of a held file when it is removed from the lookup, and of the others when the screen is left", async () => {
+    const { flow, removed } = setUpLookup();
+    await flow.start();
+    await flow.pickFromFiles();
+    await flow.pickFromFiles();
+    flow.askToRemove(2);
+    flow.discardPending();
+    expect(removed).toEqual(["file:///cache/DocumentPicker/files-1.jpg"]);
+    flow.askToLeave();
+    flow.discardPending();
+    flow.close();
+    expect(removed).toEqual([
+      "file:///cache/DocumentPicker/files-1.jpg",
+      "file:///cache/camera-1.jpg",
+      "file:///cache/DocumentPicker/files-2.jpg",
+    ]);
   });
 });

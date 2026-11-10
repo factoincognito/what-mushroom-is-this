@@ -8,6 +8,7 @@
  * that no queue run starts by itself.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as DocumentPicker from "expo-document-picker";
 import { Directory, File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { getLocales } from "expo-localization";
@@ -62,6 +63,18 @@ jest.mock("expo-location", () => ({
 jest.mock("../../image/prepareForAnalysis", () => ({
   ...jest.requireActual("../../image/prepareForAnalysis"),
   preparePhotoForAnalysis: jest.fn(),
+}));
+// The phone's files, and the image loader that checks a file is an image (PBI-2.6).
+jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
+jest.mock("../../image/deviceJpegEncoder", () => ({
+  deviceJpegEncoder: {
+    load: jest.fn(async () => ({
+      width: 4032,
+      height: 3024,
+      encodeJpeg: async () => new Uint8Array(),
+      release: () => undefined,
+    })),
+  },
 }));
 
 /** The find log in memory. (Named `mock…` so that the hoisted factory may use it.) */
@@ -443,6 +456,37 @@ describe("an unsaved photo lookup (Save off)", () => {
     await goBack();
     expect(app.pathname()).toBe("/");
     expect(screen.queryByText(en.newFind.leaveLookupConfirm)).not.toBeOnTheScreen();
+  });
+
+  it("holds a photo from the phone's files, which Analyse sends with the others, and removes only the app's copy of it once the screen is left (PBI-2.6)", async () => {
+    const directory = new Directory(Paths.cache, "DocumentPicker");
+    directory.create({ intermediates: true, idempotent: true });
+    const copy = new File(directory, "IMG_0042.jpg");
+    copy.write(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
+    jest.mocked(DocumentPicker.getDocumentAsync).mockResolvedValueOnce(
+      wrong({
+        canceled: false,
+        assets: [{ uri: copy.uri, name: "IMG_0042.jpg", lastModified: Date.UTC(2020, 0, 1) }],
+      }),
+    );
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    const app = await openUnsaved();
+    await press(en.newFind.pickFromFiles);
+    expect(
+      screen.getByText(en.newFind.heldCount.replace("{count}", "2").replace("{max}", "5")),
+    ).toBeOnTheScreen();
+    await press(en.newFind.analyse);
+    expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+    expect(sentPhotos()).toEqual([shots[0]?.uri, copy.uri]);
+    expect(mockLog.finds.size).toBe(0);
+    await goBack();
+    await press(en.newFind.leaveYes);
+    await runTimers();
+    await settle();
+    expect(app.pathname()).toBe("/");
+    expect(copy.exists).toBe(false);
+    expect(shots.map((shot) => shot.exists)).toEqual([false]);
+    expect(mockLog.finds.size).toBe(0);
   });
 });
 
