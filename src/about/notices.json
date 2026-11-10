@@ -369,6 +369,27 @@
       "licence": "BSD-2-Clause",
       "source": "https://github.com/maplibre/maplibre-gl-native-distribution",
       "textId": "maplibre-native"
+    },
+    {
+      "name": "org.maplibre.gl:maplibre-android-gestures",
+      "version": "0.0.4",
+      "licence": "BSD-2-Clause",
+      "source": "https://github.com/maplibre/maplibre-gestures-android",
+      "textId": null
+    },
+    {
+      "name": "com.jakewharton.timber:timber",
+      "version": "5.0.1",
+      "licence": "Apache-2.0",
+      "source": "https://github.com/JakeWharton/timber",
+      "textId": "Apache-2.0"
+    },
+    {
+      "name": "androidx.interpolator:interpolator",
+      "version": "1.0.0",
+      "licence": "Apache-2.0",
+      "source": "https://android.googlesource.com/platform/frameworks/support/",
+      "textId": "Apache-2.0"
     }
   ],
   "credits": [

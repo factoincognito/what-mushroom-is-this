@@ -194,6 +194,40 @@ MapLibre plugins, are PBI-1.24's, as for the earlier items.
 | `com.squareup.okhttp3:okhttp-urlconnection` (Android) | 4.12.0 | Apache-2.0 | depend | https://central.sonatype.com/artifact/com.squareup.okhttp3/okhttp-urlconnection | not this version's POM: as for `okhttp` |
 | `androidx.vectordrawable:vectordrawable` (Android) | 1.2.0 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
 | `maplibre-gl-native-distribution` (iOS, MapLibre Native, the Swift package `MapLibre`) | 6.31.0 | BSD-2-Clause | depend | https://github.com/maplibre/maplibre-gl-native-distribution | MapLibre Native's `LICENSE.md` and `LICENSES.core.md` at the tag `ios-v6.31.0` (commit 01791ad) of https://github.com/maplibre/maplibre-native, read by Clead, 2026-11-10; the app carries the copies of `android-v13.6.1` |
+| `org.maplibre.gl:maplibre-android-gestures` (Android, through MapLibre Android's own build file) | 0.0.4 | BSD-2-Clause (the POM names "BSD", with the BSD-2-Clause licence's address) | depend | https://github.com/maplibre/maplibre-gestures-android | its 0.0.4 POM, as the mirror https://repository.jboss.org/nexus/repository/developer/org/maplibre/gl/maplibre-android-gestures/0.0.4/maplibre-android-gestures-0.0.4.pom gives it, read on 2026-11-10; its licence text is not in the app yet (PBI-1.24) |
+| `com.jakewharton.timber:timber` (Android, through MapLibre Android's own build file) | 5.0.1 | Apache-2.0 | depend | https://github.com/JakeWharton/timber | not this version's POM: the repository's licence, "apache-2.0", and its README's licence section, as https://awesome.ecosyste.ms/projects/github.com%2FJakeWharton%2Ftimber gives them, read on 2026-11-10 |
+| `androidx.interpolator:interpolator` (Android, through MapLibre Android's own build file) | 1.0.0 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
+
+#### What MapLibre Android itself builds in
+
+MapLibre Android 13.6.1 (`android-sdk-opengl`) asks for further Maven libraries itself. They are its
+`api` and `implementation` dependencies in `platform/android/MapLibreAndroid/build.gradle.kts`, with the
+versions of `platform/android/gradle/libs.versions.toml`, at the tag `android-v13.6.1` (commit
+c7506d6) of https://github.com/maplibre/maplibre-native, read on 2026-11-10 from a clone of that
+tag (the Clead-role review of #68, fix 1). The published 13.6.1 POM was not read and may differ.
+They are:
+- `org.maplibre.gl:maplibre-android-gestures` 0.0.4, `com.jakewharton.timber:timber` 5.0.1 and
+  `androidx.interpolator:interpolator` 1.0.0, rows of their own in the table above.
+- `org.maplibre.gl:android-sdk-turf` 6.0.1 and `com.squareup.okhttp3:okhttp` 4.12.0, the
+  versions the wrapper asks for, rows above.
+- `org.jetbrains.kotlinx:kotlinx-coroutines-core` 1.10.2, recorded above for
+  `expo-image-picker` at that version.
+- `androidx.annotation:annotation` 1.8.2 and `androidx.fragment:fragment` 1.8.9, Apache-2.0 from
+  the AndroidX repository they are built from, as for `activity-ktx`. They are recorded above at 1.0.0
+  (for `expo-document-picker` and Play services); Gradle builds in one version of each, and which
+  it resolves was not checked.
+- `org.maplibre.gl:android-sdk-geojson` 6.0.1: licence not read yet, so it is not listed in the
+  About view; for PBI-1.24. The one source found, ecosyste.ms's page for its repository
+  (https://awesome.ecosyste.ms/projects/github.com%2Fmaplibre%2Fmaplibre-java), says "mit". But
+  `android-sdk-turf` 6.0.1, from the same repository, has Apache-2.0 in its POM (above), so the
+  6.0.1 POM is to be read.
+
+The gestures library's 0.0.4 POM names `kotlin-stdlib` 2.0.10, `androidx.annotation` 1.8.2 and
+`androidx.core:core-ktx` 1.13.1 (recorded above at 1.17.0 for `expo-image-picker`).
+
+OkHttp's own dependencies (Okio, among others), and the POM dependencies of the two MapLibre
+plugins, of turf and of geojson, are not named yet: for PBI-1.24 and the release gate. Their own
+POMs were not read in PBI-2.8.
 
 ## Map data
 
