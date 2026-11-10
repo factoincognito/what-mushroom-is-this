@@ -444,8 +444,6 @@ describe("the migration to schema version 3, on a version 2 database (PBI-2.15)"
   it.each([
     "a waiting find with an answer's columns set",
     "a failed find with an answer's columns set",
-    "a text find that never had a photo, its JSON a match and its result column no mushroom",
-    "the same with one photo",
   ] as const)(
     "keeps readable, in getStored and the list, a damaged row the version 2 store reads: %s (review of #84, fix 1)",
     async (name) => {
@@ -459,6 +457,29 @@ describe("the migration to schema version 3, on a version 2 database (PBI-2.15)"
     },
   );
 
+  /**
+   * Until PBI-2.17 the store read these by the answer's JSON while the list showed the result
+   * column, "no mushroom", beside a Find screen naming a species: the gap PBI-2.17 closes. The
+   * migration still keeps them as they were; the store now reads them as unreadable, as it reads
+   * every find whose answer and columns differ, before the migration as after it.
+   */
+  it.each([
+    "a text find that never had a photo, its JSON a match and its result column no mushroom",
+    "the same with one photo",
+  ] as const)(
+    "lists as unreadable, by its ID, a damaged row whose result column differs from its answer: %s; getStored refuses it and delete removes it (PBI-2.17)",
+    async (name) => {
+      await versionTwo();
+      const { id } = damagedReadableRows()[name];
+      const store = await open();
+      await expect(store.getStored(id)).rejects.toMatchObject({ code: "corrupt" });
+      const list = await store.list();
+      expect(list).toHaveLength(4);
+      expect(list.find((entry) => entry.id === id)).toEqual({ readable: false, id });
+      await expect(store.delete(id)).resolves.toEqual({ photoRemoved: true });
+    },
+  );
+
   it("keeps a damaged waiting row with an answer's columns set the queue's pick, as on version 2 (review of #84, fix 1)", async () => {
     await versionTwo();
     const rows = damagedReadableRows();
@@ -466,10 +487,10 @@ describe("the migration to schema version 3, on a version 2 database (PBI-2.15)"
     await expect(store.oldestWaiting()).resolves.toBe(
       rows["a waiting find with an answer's columns set"].id,
     );
-    // The list's summary of the match read as no mushroom keeps its result column, as on version 2.
-    expect((await store.list())[0]).toMatchObject({
+    // The match whose result column says no mushroom is no longer shown as no mushroom (PBI-2.17).
+    expect((await store.list())[0]).toEqual({
+      readable: false,
       id: rows["the same with one photo"].id,
-      analysis: { state: "done", result: "no_mushroom" },
     });
   });
 
@@ -634,6 +655,34 @@ describe("a Phase 1 database, through versions 2 and 3 (PBI-2.15)", () => {
     expect(list.find((entry) => entry.id === ids.noMushroom)).toMatchObject({
       answerBasis: "photos",
     });
+  });
+
+  it("brings Phase 1 finds at the edges of the position's range to version 3, readable in getStored, the list and the queue's pick (PBI-2.16)", async () => {
+    await migrate(sqliteDatabase(sqlite), [MIGRATIONS[0] ?? ""]);
+    const north = insertV1("a.jpg", 1_000, {
+      ...doneV1(phaseOneMatch),
+      latitude: 90,
+      longitude: 180,
+      accuracy_m: 0,
+      position_source: "fix",
+    });
+    const south = insertV1("b.jpg", 2_000, {
+      latitude: -90,
+      longitude: -180,
+      position_source: "photo",
+    });
+    const store = await open();
+    await expect(store.getStored(north)).resolves.toMatchObject({
+      position: { latitude: 90, longitude: 180, accuracyM: 0, source: "fix" },
+    });
+    await expect(store.getStored(south)).resolves.toMatchObject({
+      position: { latitude: -90, longitude: -180, accuracyM: null, source: "photo" },
+    });
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id: south }),
+      expect.objectContaining({ readable: true, id: north }),
+    ]);
+    await expect(store.oldestWaiting()).resolves.toBe(south);
   });
 });
 

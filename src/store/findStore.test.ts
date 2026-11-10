@@ -1,6 +1,7 @@
 import type { SQLiteBindParams } from "expo-sqlite";
 
 import type { ApiAnswer, ApiMatch, Match } from "../analysis/answer";
+import { config } from "../config/config";
 import { answerToJson } from "./answerJson";
 import type { FindDatabase, SqlRunner } from "./database";
 import { type NewAnalysedAnswer, type NewFind, StoreError } from "./find";
@@ -162,10 +163,14 @@ const SAFE_OFFSET =
   "CASE WHEN utc_offset_min BETWEEN -1080 AND 1080 THEN utc_offset_min END AS utc_offset_min";
 /** The ID, given back only as a positive safe integer, else as NULL (PBI-1.26). */
 const SAFE_ID = "CASE WHEN id BETWEEN 1 AND 9007199254740991 THEN id END AS id";
-const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES}, ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}, answer_basis, added_photos, picture_file, picture_author, picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it, confidence, confidence_score`;
+/**
+ * Every column of a find, as get, getStored, the queue's pick and the list all read it: the
+ * confidence columns (PBI-2.12) and the result, names and edibility the list shows (PBI-2.17) too.
+ */
+const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES}, ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}, answer_basis, added_photos, picture_file, picture_author, picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it, confidence, confidence_score, result, name_sv, name_en, name_it, edibility`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
 const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE (state = 'waiting' OR (state = 'done' AND (added_photos = 'waiting' OR (self_check = 'waiting' AND (picture_file IS NULL OR ${PHOTO_COUNT} = 0))))) AND batch_open = 0 AND finds.id > ? AND finds.id <= 9007199254740991 ORDER BY finds.id ASC LIMIT 1`;
-const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv, name_en, name_it, edibility FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
+const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /** Only among the IDs the store cannot read: a readable find is deleted by `delete` alone. */
 const UNREADABLE_ID = "(id < 1 OR id > 9007199254740991)";
 const FILES_OF_STORED = `SELECT photos, picture_file FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
@@ -233,6 +238,9 @@ const newFind: NewFind = {
   position: { latitude: 59.64, longitude: 17.08, accuracyM: 12.5, source: "fix" },
 };
 
+/** The columns of a match the list shows, empty as on a find whose answer names no species. */
+const NO_MATCH_COLUMNS = { name_sv: null, name_en: null, name_it: null, edibility: null };
+
 function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 7,
@@ -266,13 +274,16 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     check_name_it: null,
     confidence: null,
     confidence_score: null,
+    ...NO_MATCH_COLUMNS,
+    result: null,
     ...overrides,
   };
 }
 
 /**
  * A done row whose answer is the match, as the store writes it: its confidence also in its column
- * (PBI-2.12), and from the find's photo (PBI-2.15).
+ * (PBI-2.12), its result, names and edibility in theirs (PBI-2.17), and from the find's photo
+ * (PBI-2.15).
  */
 function doneRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return row({
@@ -283,9 +294,53 @@ function doneRow(overrides: Record<string, unknown> = {}): Record<string, unknow
     answer_basis: "photos",
     added_photos: "analysed",
     confidence_score: 90,
+    result: "match",
+    name_sv: "Kantarell",
+    name_en: "Chanterelle",
+    name_it: "Gallinaccio",
+    edibility: "edible",
     ...overrides,
   });
 }
+
+/** A stored list of `count` photos, all in batch 1, as the store writes one (PBI-2.2). */
+function photoList(count: number): string {
+  return JSON.stringify(
+    Array.from({ length: count }, (_, index) => ({ file: `p${index + 1}.jpg`, batch: 1 })),
+  );
+}
+
+/** One photo past the most a find holds, which only a damaged file can store (PBI-2.16). */
+const PHOTOS_PAST_LIMIT = photoList(config.maxPhotosPerFind + 1);
+/** One character past the longest text a lookup takes (PBI-2.14, note 1). */
+const TEXT_PAST_LIMIT = "a".repeat(config.lookupTextMaxLength + 1);
+/**
+ * The longest text a lookup takes, in characters each outside the Basic Multilingual Plane, so
+ * twice as many UTF-16 units: the store counts code points, as the flow and the counter do.
+ */
+const TEXT_AT_LIMIT = "\u{1F344}".repeat(config.lookupTextMaxLength);
+
+/**
+ * The rows a damaged file can hold past the store's limits, each a waiting find with a photo,
+ * which the store reads as unreadable (PBI-2.14 note 1, PBI-2.16 note 1, and #68's longitude).
+ */
+const PAST_LIMITS: [string, Record<string, unknown>][] = [
+  ["more photos than a find holds (PBI-2.16)", { photos: PHOTOS_PAST_LIMIT }],
+  ["a text longer than a lookup takes (PBI-2.14)", { text: TEXT_PAST_LIMIT }],
+  ["a longitude past 180 (#68)", { longitude: 180.5 }],
+  ["a longitude below -180 (#68)", { longitude: -181 }],
+  ["a longitude the map would wrap onto the Earth (#68)", { longitude: 540 }],
+  ["a latitude past 90 (#68)", { latitude: 90.5 }],
+  ["a latitude below -90 (#68)", { latitude: -91 }],
+];
+
+/** The rows at the store's limits, which its own writes can produce and it reads. */
+const AT_LIMITS: [string, Record<string, unknown>][] = [
+  ["as many photos as a find holds", { photos: photoList(config.maxPhotosPerFind) }],
+  ["a text as long as a lookup takes, in code points", { text: TEXT_AT_LIMIT }],
+  ["the position at 90 and 180", { latitude: 90, longitude: 180 }],
+  ["the position at -90 and -180", { latitude: -90, longitude: -180 }],
+];
 
 /** A representative picture's columns, as `setPicture` writes them (PBI-2.2). */
 const picture = {
@@ -1089,6 +1144,8 @@ describe("getStored (PBI-2.2)", () => {
       "left empty by the migration, on a text find that has had a photo, naming no species",
       textRow({
         answer_json: answerToJson({ result: "no_mushroom" }),
+        result: "no_mushroom",
+        ...NO_MATCH_COLUMNS,
         confidence_score: null,
         self_check: null,
         batches: 1,
@@ -1227,6 +1284,11 @@ describe("get", () => {
         answer_basis: "photos",
         added_photos: "analysed",
         confidence_score: 90,
+        result: "match",
+        name_sv: "Kantarell",
+        name_en: "Chanterelle",
+        name_it: "Gallinaccio",
+        edibility: "edible",
       }),
     );
     await expect(store.get(7)).resolves.toMatchObject({
@@ -1283,7 +1345,12 @@ describe("get", () => {
     ],
     [
       "a confidence beside an answer that names no species",
-      doneRow({ answer_json: answerToJson({ result: "no_mushroom" }), confidence_score: 90 }),
+      doneRow({
+        answer_json: answerToJson({ result: "no_mushroom" }),
+        result: "no_mushroom",
+        ...NO_MATCH_COLUMNS,
+        confidence_score: 90,
+      }),
     ],
     ["a confidence on a find without an answer", row({ confidence_score: 90 })],
   ])(
@@ -1294,6 +1361,117 @@ describe("get", () => {
       await expect(store.getStored(7)).rejects.toMatchObject({ code: "corrupt" });
     },
   );
+
+  it.each(PAST_LIMITS)(
+    "refuses as corrupt a find with %s, as get and getStored both read it",
+    async (_, overrides) => {
+      db.reply("first", GET, row(overrides));
+      await expect(store.get(7)).rejects.toMatchObject({ code: "corrupt" });
+      await expect(store.getStored(7)).rejects.toMatchObject({ code: "corrupt" });
+    },
+  );
+
+  it("refuses as corrupt a text find without photos whose text is longer than a lookup takes (PBI-2.14)", async () => {
+    db.reply("first", GET, row({ text: TEXT_PAST_LIMIT, photos: "[]", batches: 0 }));
+    await expect(store.getStored(7)).rejects.toMatchObject({ code: "corrupt" });
+  });
+
+  it.each(AT_LIMITS)("reads a find with %s, as get and getStored", async (_, overrides) => {
+    db.reply("first", GET, row(overrides));
+    await expect(store.get(7)).resolves.toMatchObject({ id: 7 });
+    await expect(store.getStored(7)).resolves.toMatchObject({ id: 7 });
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ["a result other than its answer's", doneRow({ result: "no_mushroom" })],
+    ["a Swedish name other than its answer's", doneRow({ name_sv: "Narrkantarell" })],
+    ["an English name other than its answer's", doneRow({ name_en: "False chanterelle" })],
+    ["an Italian name other than its answer's", doneRow({ name_it: "Falso gallinaccio" })],
+    ["no Swedish name where its answer has one", doneRow({ name_sv: null })],
+    ["an edibility other than its answer's", doneRow({ edibility: "poisonous" })],
+    ["no edibility where its answer has one", doneRow({ edibility: null })],
+    [
+      "an edibility other than its Phase 1 answer's",
+      doneRow({
+        answer_json: PHASE_ONE_JSON,
+        confidence: "low",
+        confidence_score: null,
+        edibility: "deadly_poisonous",
+      }),
+    ],
+    [
+      "an edibility other than its answer's from a text alone",
+      textRow({ edibility: "edible_after_preparation" }),
+    ],
+    [
+      "a match's names and edibility beside an answer that names no species",
+      doneRow({
+        answer_json: answerToJson({ result: "no_mushroom" }),
+        result: "no_mushroom",
+        confidence_score: null,
+      }),
+    ],
+  ])(
+    "refuses as corrupt a find whose answer columns hold %s, as get and getStored both read it (PBI-2.17)",
+    async (_, stored) => {
+      db.reply("first", GET, stored);
+      await expect(store.getStored(7)).rejects.toMatchObject({ code: "corrupt" });
+      if (stored.text === null) {
+        await expect(store.get(7)).rejects.toMatchObject({ code: "corrupt" });
+      }
+    },
+  );
+
+  it.each<[string, Record<string, unknown>]>([
+    ["a result", row({ result: "match" })],
+    ["a name", row({ name_en: "Chanterelle" })],
+    ["an edibility", row({ edibility: "edible" })],
+    [
+      "an edibility, failed",
+      row({
+        state: "failed",
+        failure_cause: "request",
+        failure_detail: "400",
+        edibility: "edible",
+      }),
+    ],
+  ])(
+    "reads a find without an answer by its state, though a damaged file gives it %s, which nothing shows and its next answer rewrites (review of #84, fix 1; PBI-2.17)",
+    async (_, stored) => {
+      db.reply("first", GET, stored);
+      await expect(store.getStored(7)).resolves.toMatchObject({ id: 7 });
+    },
+  );
+
+  /**
+   * An answer whose Swedish name holds a NUL and whose English name a lone surrogate: both fit the
+   * answer's shape, so the store writes them, but SQLite's drivers do not give them back as they
+   * were given (`node:sqlite` cuts a text at a NUL and turns a lone surrogate into U+FFFD).
+   */
+  const oddNames: Match = {
+    ...match,
+    names: { ...match.names, sv: "Kant\u0000arell", en: "Chan\uD800terelle" },
+  };
+
+  it("reads a find whose name columns hold what a driver gave back of a name with a NUL or a lone surrogate, which it does not compare (PBI-2.17)", async () => {
+    db.reply(
+      "first",
+      GET,
+      doneRow({
+        answer_json: answerToJson(oddNames),
+        name_sv: "Kant",
+        name_en: "Chan�terelle",
+      }),
+    );
+    await expect(store.getStored(7)).resolves.toMatchObject({
+      analysis: { answer: { names: oddNames.names } },
+    });
+  });
+
+  it("refuses as corrupt a find whose name column is empty where its answer's name holds a NUL (PBI-2.17)", async () => {
+    db.reply("first", GET, doneRow({ answer_json: answerToJson(oddNames), name_sv: null }));
+    await expect(store.getStored(7)).rejects.toMatchObject({ code: "corrupt" });
+  });
 
   it.each<[string, string]>([
     ["0", '"confidence":0'],
@@ -1677,6 +1855,30 @@ describe("list", () => {
     ],
     ["a done find with an unknown result", doneMatchRow({ result: "maybe" })],
     [
+      "a match whose result column names no species (PBI-2.17)",
+      doneMatchRow({ result: "cannot_tell" }),
+    ],
+    [
+      "a match whose name column differs from its answer's (PBI-2.17)",
+      doneMatchRow({ name_it: "Falso gallinaccio" }),
+    ],
+    [
+      "a match whose edibility column differs from its answer's (PBI-2.17)",
+      doneMatchRow({ edibility: "edible_after_preparation" }),
+    ],
+    [
+      "an answer naming no species whose result column holds another (PBI-2.17)",
+      summaryRow({
+        state: "done",
+        answer_json: answerToJson({ result: "no_mushroom" }),
+        model: "m",
+        analysed_at_ms: 1,
+        answer_basis: "photos",
+        added_photos: "analysed",
+        result: "cannot_tell",
+      }),
+    ],
+    [
       "a done find whose stored answer is not of the shape (Clead's review of #26, decision 2)",
       doneMatchRow({ answer_json: '{"result":"maybe"}' }),
     ],
@@ -1726,6 +1928,29 @@ describe("list", () => {
       ]);
     },
   );
+
+  it.each(PAST_LIMITS)(
+    "marks a stored row with %s as unreadable, by its ID, and lists the others",
+    async (_, overrides) => {
+      db.reply("all", LIST, [
+        summaryRow({ id: 9 }),
+        summaryRow({ ...overrides, id: 8 }),
+        summaryRow({ id: 7 }),
+      ]);
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: 9 }),
+        { readable: false, id: 8 },
+        expect.objectContaining({ readable: true, id: 7 }),
+      ]);
+    },
+  );
+
+  it.each(AT_LIMITS)("lists a row with %s as readable", async (_, overrides) => {
+    db.reply("all", LIST, [summaryRow({ ...overrides, id: 8 })]);
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id: 8 }),
+    ]);
+  });
 
   it.each<[string, unknown]>([
     ["a row that is not an object", "a row"],
@@ -1793,6 +2018,9 @@ describe("list", () => {
       summaryRow({ taken_at_ms: null }),
       // The Library reads the confidence from the column, the Find screen from the answer (PBI-2.12).
       doneMatchRow({ confidence_score: 85 }),
+      // And so the result, the names and the edibility (PBI-2.17).
+      doneMatchRow({ edibility: "poisonous" }),
+      doneMatchRow({ name_sv: "Narrkantarell" }),
     ];
     for (const stored of damaged) {
       db.reply("first", GET, stored);
@@ -1856,6 +2084,36 @@ describe("oldestWaiting (PBI-1.7, PBI-1.16)", () => {
       return params[0] === 2 ? doneRow({ id: 5, added_photos: "waiting" }) : null;
     });
     await expect(store.oldestWaiting()).resolves.toBe(5);
+  });
+
+  it("passes over an analysed find whose added photos wait and whose edibility column differs from its answer's, as one it cannot read (PBI-2.17)", async () => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) => {
+      if (params[0] === 0) {
+        return doneRow({ id: 2, added_photos: "waiting", edibility: "deadly_poisonous" });
+      }
+      return params[0] === 2 ? doneRow({ id: 5, added_photos: "waiting" }) : null;
+    });
+    await expect(store.oldestWaiting()).resolves.toBe(5);
+  });
+
+  it.each(PAST_LIMITS)(
+    "passes over a waiting find with %s, as one it cannot read, and gives the next",
+    async (_, overrides) => {
+      db.reply("first", NEXT_WAITING, (params: readonly unknown[]) => {
+        if (params[0] === 0) {
+          return row({ ...overrides, id: 2 });
+        }
+        return params[0] === 2 ? row({ id: 5 }) : null;
+      });
+      await expect(store.oldestWaiting()).resolves.toBe(5);
+    },
+  );
+
+  it.each(AT_LIMITS)("gives a waiting find with %s", async (_, overrides) => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) =>
+      params[0] === 0 ? row({ ...overrides, id: 4 }) : null,
+    );
+    await expect(store.oldestWaiting()).resolves.toBe(4);
   });
 
   it("gives null when every waiting find is one it cannot read", async () => {
