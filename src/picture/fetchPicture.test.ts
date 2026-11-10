@@ -464,6 +464,51 @@ describe("Wikimedia's failures, classed (docs/SPEC.md 3.9, Fetching it)", () => 
     });
   });
 
+  const apiSteps = ["search", "entities", "fileinfo", "thumb"] as const;
+  const apiError = (code: string) => ({ error: { code, info: "x", docref: "See api.php" } });
+
+  it.each(
+    apiSteps.flatMap((step) =>
+      ["ratelimited", "maxlag", "readonly"].map((code) => [step, code] as const),
+    ),
+  )(
+    "at the %s: a status 200 whose API error is temporary (%s) makes the picture wait, as a 429 does (Clead, #71)",
+    async (step, code) => {
+      const t = setup({ [step]: { status: 200, json: apiError(code) } });
+      await expect(fetchPicture(NAME, HIGH_TIER_MODEL, t.deps)).resolves.toEqual({
+        kind: "waits",
+        cause: "picture-source",
+        retryAtMs: NOW + wikimediaConfig.retryWaitMinMs,
+      });
+      expect(t.steps().at(-1)).toBe(step);
+    },
+  );
+
+  it("a temporary API error with Retry-After waits until it", async () => {
+    const t = setup({
+      entities: { status: 200, headers: { "Retry-After": "20" }, json: apiError("maxlag") },
+    });
+    await expect(fetchPicture(NAME, HIGH_TIER_MODEL, t.deps)).resolves.toMatchObject({
+      kind: "waits",
+      retryAtMs: NOW + 20_000,
+    });
+  });
+
+  it.each(
+    apiSteps.flatMap((step) =>
+      ["badvalue", "unknownerror", "internal_api_error_DBQueryError"].map(
+        (code) => [step, code] as const,
+      ),
+    ),
+  )("at the %s: any other API error (%s) gives no picture", async (step, code) => {
+    const t = setup({ [step]: { status: 200, json: apiError(code) } });
+    await expect(fetchPicture(NAME, HIGH_TIER_MODEL, t.deps)).resolves.toEqual({
+      kind: "none",
+      reason: "answer",
+    });
+    expect(t.steps().at(-1)).toBe(step);
+  });
+
   it.each(steps)("at the %s: any other status gives no picture", async (step) => {
     const t = setup({ [step]: { status: 403, text: "Forbidden" } });
     await expect(fetchPicture(NAME, HIGH_TIER_MODEL, t.deps)).resolves.toEqual({

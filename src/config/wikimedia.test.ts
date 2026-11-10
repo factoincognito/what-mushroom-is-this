@@ -60,6 +60,11 @@ describe("wikimediaConfig (docs/SPEC.md 3.9, Known unknown 15; PBI-2.9)", () => 
     expect(pictureMaxBytes).toBe(25 * 1024 * 1024);
   });
 
+  it("counts as temporary only the API errors MediaWiki documents as such (Clead, #71)", () => {
+    expect(wikimediaConfig.temporaryApiErrors).toEqual(["ratelimited", "maxlag", "readonly"]);
+    expect(Object.isFrozen(wikimediaConfig.temporaryApiErrors)).toBe(true);
+  });
+
   it("cannot be changed at run time", () => {
     expect(Object.isFrozen(wikimediaConfig)).toBe(true);
     expect(Object.isFrozen(wikimediaConfig.thumbnailWidths)).toBe(true);

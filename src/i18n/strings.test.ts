@@ -126,6 +126,21 @@ describe("the strings of the representative picture (SPEC 3.9; PBI-2.9)", () => 
     expect(STRINGS.en.lookup.checkAgain).toBe("Check again");
   });
 
+  it("say in English that a find with no usable picture could not be checked, also when one was found but not used (Clead, #71)", () => {
+    expect(STRINGS.en.find.selfCheck.noPicture).toBe(
+      "The edibility is shown as unknown: the find could not be checked, as no usable picture of the species was found.",
+    );
+  });
+
+  it.each([
+    ["sv", /användbar bild/, /kunde inte kontrolleras/],
+    ["it", /immagine utilizzabile/, /non è stato possibile controllare/],
+  ] as const)("say it in %s too", (language, usable, notChecked) => {
+    const text = STRINGS[language].find.selfCheck.noPicture;
+    expect(text).toMatch(usable);
+    expect(text).toMatch(notChecked);
+  });
+
   it("are new strings in groups not checked by a speaker in Swedish and Italian", () => {
     for (const language of ["sv", "it"] as const) {
       expect(NOT_CHECKED_BY_A_SPEAKER[language]).toEqual(
