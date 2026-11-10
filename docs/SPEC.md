@@ -189,7 +189,8 @@ When the queue has stopped (3.3), the Log screen says why and offers
   - the best match: its names in Swedish, English, Latin and Italian;
   - its edibility, one of: edible, edible only after preparation, not
     edible, poisonous, deadly poisonous, unknown;
-  - a confidence: low, medium or high;
+  - a confidence: low, medium or high (in Phase 2 a whole number from 1
+    to 100, 3.9 "Answers");
   - the general information in Swedish, English and Italian, so a change
     of the app's language needs no new call;
   - the poisonous look-alikes, each with its names in the four languages
@@ -496,8 +497,8 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   formats the Claude API accepts, its type read from its bytes, not from
   what Wikimedia says it is (Adam, 2026-11-10 00:10, approving Clead's
   proposal). The same holds for the original when Wikimedia serves it in
-  place of a thumbnail, so an SVG or TIFF original gives no picture
-  (**[Clead]**). Its licence must be CC0, public domain
+  place of a thumbnail, so an SVG or TIFF original served that way gives
+  no picture (**[Clead]**). Its licence must be CC0, public domain
   without a country limit, CC BY or CC BY-SA; any other licence means no
   picture (Adam, 2026-11-09 21:27). A file under several licences is used
   when one of them is on that list, and is credited under the first of
@@ -510,10 +511,10 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   has no picture and no check, and the list shows its first photo
   (**[Clead]**). A waiting check on a find that has photos is never run,
   at the queue's next run or later, as an exception to the self-check's
-  "tried again at the queue's next run" below; if the batch's analysis
-  fails, the check stays waiting, the edibility stays "unknown" and the
-  find gives the waiting check as the reason, until an answer replaces
-  the text answer or the photos are removed (**[Clead]**, 2026-11-10,
+  "tried again at the queue's next run" below; if the analysis of the
+  find's photos fails, the check stays waiting, the edibility stays
+  "unknown" and the find gives the waiting check as the reason, until an
+  answer replaces the text answer or the photos are removed (**[Clead]**, 2026-11-10,
   #75).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
@@ -563,7 +564,7 @@ answers to Clead's questions, 19:05).
   not the user's text, is sent to Anthropic (**[Clead]**). The two match
   when the first two words of their Latin names, genus and species, are
   the same, ignoring case (**[Clead]**), except that a Latin name of one
-  word, or whose second word is a rank or uncertainty mark (`sp.`,
+  word, or one whose second word is a rank or uncertainty mark (`sp.`,
   `spp.`, `cf.`, `aff.`, `ssp.`, `subsp.`, `var.`, `agg.`, with or
   without the dot), matches nothing, not even the same name; a check
   answer with such a name counts as the check naming another species
@@ -588,7 +589,8 @@ answers to Clead's questions, 19:05).
   waiting; one that stops the queue stops it as for a find, and the check
   waits; any other marks the check failed, and the find says it could
   not be checked. A check that waits is tried again at the queue's next
-  run (except on a find that has photos, above), or by "Check again" on an unsaved lookup's screen (**[Clead]**).
+  run (except on a find that has photos, above), or by "Check again" on
+  an unsaved lookup's screen (**[Clead]**).
   A run takes waiting checks together with waiting finds, oldest find
   first; a check that waits for want of a network or a fault on
   Anthropic's or Wikimedia's side ends the run, as a waiting find does
@@ -715,7 +717,9 @@ answers to Clead's questions, 19:05).
    documentation says reading it needs the `ACCESS_MEDIA_LOCATION`
    permission, and `expo-image-picker` does not ask for it, so it most
    likely does not (Crog's reading of the documentation and the library's
-   source for #14, 2026-11-09; to be checked on a phone, PBI-1.18).
+   source for #14, 2026-11-09; to be checked on a phone, PBI-1.18). Not
+  tested in Adam's Phase 1 test session (PBI-1.11); checked in his Phase 2
+  test session (PBI-2.11).
 8. Whether a user's API key can be one that needs the
    `anthropic-workspace-id` header, which the API documentation says a key
    not scoped to a workspace needs (Crog's reading for PBI-1.4, checked
@@ -733,7 +737,8 @@ answers to Clead's questions, 19:05).
     #16). If they do not, a camera find takes its position more often
     from a fix the app had before the camera opened, or from the last
     known position (3.6); a fix after the camera closes still counts
-    within the 30 seconds. Checked in Adam's test session (PBI-1.11).
+    within the 30 seconds. Not checked in Adam's Phase 1 test session
+    (PBI-1.11); checked in his Phase 2 test session (PBI-2.11).
 11. Phase 2's map (3.9). Decided by Adam, 2026-11-09 21:27, on PBI-2.1's
     findings (product office,
     `library/designs/what-mushroom-is-this/phase-2-checks.md`): MapLibre
@@ -777,8 +782,8 @@ answers to Clead's questions, 19:05).
     `type: 'image/*'` and
     `copyToCacheDirectory` on, so that `expo-image-manipulator` reads a
     local file; the copy then goes into the app's photo store. Its
-    `lastModified` is never used as the photo's time. To be checked on the phone: `content://` sources,
-    and HEIC and SVG files (PBI-2.6).
+    `lastModified` is never used as the photo's time. To be checked on
+    the phone: `content://` sources, and HEIC and SVG files (PBI-2.6).
 14. Whether resizing up to five photos for one request (one at a time,
     3.9) brings back the low-memory load failures PBI-1.25 was written
     for, on Adam's phone.
