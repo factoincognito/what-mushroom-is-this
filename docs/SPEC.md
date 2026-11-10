@@ -415,7 +415,14 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   photos stay waiting and the queue takes the find again at its next run.
   Any other class marks them as not yet analysed, and they are analysed
   only when the user asks. Either way the find keeps its answer, as 3.3
-  says (**[Clead]**).
+  says (**[Clead]**). Even so, two cases leave the photos waiting, as
+  they leave a find without an answer (3.2, 3.3;
+  **[Clead]**, 2026-11-10, #57):
+  - there is no key;
+  - the queue stops with an internal error, including the stop after two
+    finds in a row whose photos cannot be loaded (PBI-1.25), for the
+    find it stops on; the first of those two is failed as 3.3 says, so
+    its photos are not yet analysed.
 - An analysis sends all of the find's photos, in the order added, each
   labelled "Image 1:", "Image 2:" and so on, each resized and checked as
   in 3.3, in one request, and the find's text when it has one
@@ -451,7 +458,15 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   without photos, saved or not, shows instead: "There is no guarantee
   that the mushroom you described is that species", with its Swedish and
   Italian counterparts; the Italian is checked as before (Adam, 20:49,
-  approving Clead's proposal).
+  approving Clead's proposal). On a saved find, an answer naming a
+  species shows this disclaimer when it is an answer from the text
+  alone, also after the find has got photos, and 3.5's when it is an
+  answer from photos, also after photos were removed (**[Clead]**,
+  2026-11-10, #57: Clead's reading of his own proposal, that the
+  disclaimer follows the analysis that gave the answer). For "no mushroom"
+  and "cannot tell" the store does not yet hold what the answer was
+  based on, so their wording follows whether the find has photos
+  (PBI-2.15).
 
 **A representative picture for text lookups** (Adam, 19:01; the source,
 Wikimedia Commons, is his answer to Clead's question, by 19:03).
