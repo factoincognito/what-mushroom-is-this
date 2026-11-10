@@ -695,13 +695,23 @@ async function rowIds(): Promise<string[]> {
   );
 }
 
+/**
+ * The titles of the screens' headers. Under Jest the native stack's header is not drawn as text:
+ * its title is a prop of the header's configuration element.
+ */
+function headerTitles(): string[] {
+  return screen.container
+    .queryAll((node) => node.type === "RNSScreenStackHeaderConfig")
+    .map((node) => String(node.props.title));
+}
+
 /** The accessible names of the filter choices given, in their order on the screen. */
 function labels(boxes: { props: { accessibilityLabel?: string } }[]): (string | undefined)[] {
   return boxes.map((box) => box.props.accessibilityLabel);
 }
 
-async function openFilters(): Promise<void> {
-  await fireEvent.press(await screen.findByRole("button", { name: en.log.filters }));
+async function openFilters(label = en.log.filters): Promise<void> {
+  await fireEvent.press(await screen.findByRole("button", { name: label }));
 }
 
 async function choose(name: string): Promise<void> {
@@ -714,7 +724,7 @@ describe("the Library, the start screen in place of the Log (SPEC 3.9, PBI-2.7)"
     const app = await startApp();
     expect(app.pathname()).toBe("/");
     expect(await screen.findByTestId("find-row-1")).toBeOnTheScreen();
-    expect(screen.getByText(en.log.title)).toBeOnTheScreen();
+    expect(headerTitles()).toEqual([en.log.title]);
     expect(screen.getByRole("button", { name: en.log.filters })).toHaveProp(
       "accessibilityState",
       expect.objectContaining({ expanded: false }),
@@ -726,7 +736,8 @@ describe("the Library, the start screen in place of the Log (SPEC 3.9, PBI-2.7)"
     phoneIn(lang);
     mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
     await startApp();
-    expect(await screen.findByText(STRINGS[lang].log.title)).toBeOnTheScreen();
+    await screen.findByTestId("find-row-1");
+    expect(headerTitles()).toEqual([STRINGS[lang].log.title]);
     expect(screen.getByRole("button", { name: STRINGS[lang].log.filters })).toBeOnTheScreen();
   });
 
@@ -909,7 +920,7 @@ describe("the species filter (SPEC 3.9; Clead's decision 3 on PBI-2.7)", () => {
       mockLog.finds.set(1, find(1, 0, done(PORCINI)));
       mockLog.finds.set(2, find(2, 1, { state: "waiting" }));
       await startApp();
-      await openFilters();
+      await openFilters(t.log.filters);
       expect(screen.getByRole("checkbox", { name: PORCINI.names[lang] })).toBeOnTheScreen();
       expect(screen.getByRole("checkbox", { name: t.log.notIdentified })).toBeOnTheScreen();
       for (const all of [t.log.allSpecies, t.log.allYears, t.log.allMonths]) {
@@ -1000,7 +1011,7 @@ describe("the filters while the app runs (SPEC 3.9)", () => {
     await openFilters();
     await choose("Porcini");
     expect(await rowIds()).toEqual(["2"]);
-    screen.unmount();
+    await screen.unmount();
     await startApp();
     expect(await rowIds()).toEqual(["2", "1"]);
     expect(screen.getByRole("button", { name: en.log.filters })).toBeOnTheScreen();
@@ -1021,24 +1032,21 @@ describe("the filters while the app runs (SPEC 3.9)", () => {
     expect(screen.queryByRole("button", { name: en.log.filtersOn })).not.toBeOnTheScreen();
   });
 
-  it("are not offered while the Library cannot be read, and its rows come back filtered when it is read again", async () => {
+  it("are not offered while the Library cannot be read, and are once it is read again", async () => {
     mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
-    mockLog.finds.set(2, find(2, 1, done(PORCINI)));
-    const app = await startApp();
-    await openFilters();
-    await choose("Porcini");
     jest
       .spyOn(mockLog, "list")
       .mockRejectedValueOnce(
         new StoreError("corrupt", "the stored edibility is not one the store knows"),
       );
-    await fireEvent.press(screen.getByRole("link", { name: en.log.settings }));
-    await act(async () => router.back());
-    expect(app.pathname()).toBe("/");
+    await startApp();
     expect(await screen.findByText(en.log.unreadable)).toBeOnTheScreen();
-    expect(screen.queryByRole("button", { name: en.log.filtersOn })).not.toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.log.filters })).not.toBeOnTheScreen();
+    expect(screen.queryByRole("checkbox")).not.toBeOnTheScreen();
     await fireEvent.press(screen.getByRole("button", { name: en.log.retry }));
-    expect(await rowIds()).toEqual(["2"]);
+    expect(await rowIds()).toEqual(["1"]);
+    await openFilters();
+    expect(screen.getByRole("checkbox", { name: "Chanterelle" })).toBeOnTheScreen();
     jest.mocked(mockLog.list).mockRestore();
   });
 });

@@ -5,6 +5,7 @@ import {
   FlatList,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -21,6 +22,19 @@ import {
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Language } from "../i18n/languages";
 import type { Strings } from "../i18n/strings";
+import {
+  ALL,
+  applyFilters,
+  type Choice,
+  type LibraryFilters,
+  MONTHS,
+  monthName,
+  pruneFilters,
+  speciesOptions,
+  toggle,
+  yearOptions,
+} from "../library/filters";
+import { useLibraryFilters } from "../library/LibraryFiltersContext";
 import { formatTimeIn, noticeMessage, stopNeedsSettings } from "../queue/messages";
 import { useQueue } from "../queue/QueueContext";
 import { useFindLog } from "../store/FindLogContext";
@@ -40,7 +54,16 @@ type ListState =
   | { kind: "unreadable" };
 
 /**
- * The Log screen, the start screen (docs/SPEC.md 3.1): the finds, newest first as the store lists
+ * The Library, the start screen in place of the Log (docs/SPEC.md 3.9, PBI-2.7). It opens on its
+ * list, the only view so far: the map and the switch between the two are PBI-2.8, which shows the
+ * same filtered finds, so the filters are applied here, above the list. The filters (species,
+ * years, months) are held above the screens while the app runs (`LibraryFiltersProvider`) and are
+ * opened and closed by a button; a chosen species or year that no find has any longer is dropped.
+ * A find that could not be read is always listed, whatever the filters. A find without photos
+ * shows the text mark in place of a photo; a find with photos shows its first (Clead's decision on
+ * #63). The rest is the Log's, kept as it was:
+ *
+ * The finds, newest first as the store lists
  * them, each with its photo, date and time, the species name in the app's language and the
  * edibility of the matched species ("unknown" below the confidence line, SPEC 3.9, or when a Phase 1
  * level is low, SPEC 3.3) with the
@@ -56,13 +79,15 @@ type ListState =
  * disclaimer for a lookup without photos, and "no mushroom" and "cannot tell" in the words of a
  * description (PBI-2.4).
  */
-export default function LogScreen() {
+export default function LibraryScreen() {
   const { language, strings } = useLanguage();
   const { state, analyseNow } = useQueue();
   const findLog = useFindLog();
+  const { filters, setFilters } = useLibraryFilters();
   const formatTime = useMemo(() => formatTimeIn(language), [language]);
   const { stop, pause, running } = state;
   const [list, setList] = useState<ListState>({ kind: "loading" });
+  const [filtersOpen, setFiltersOpen] = useState(false);
   /** The latest read; an earlier one that ends later is dropped. */
   const latestRead = useRef(0);
 
@@ -93,8 +118,43 @@ export default function LogScreen() {
     wasRunning.current = running;
   }, [running, load]);
 
+  // A choice is among the finds (SPEC 3.9): one no find has any longer is dropped. Unchanged
+  // filters come back as they were, so this sets nothing then.
+  useEffect(() => {
+    if (list.kind === "ready") {
+      setFilters((now) => pruneFilters(now, list.entries));
+    }
+  }, [list, setFilters]);
+
+  const shown = useMemo(
+    () => (list.kind === "ready" ? applyFilters(list.entries, filters) : []),
+    [list, filters],
+  );
+  const filtered = filters.species !== ALL || filters.years !== ALL || filters.months !== ALL;
+
   return (
     <View style={styles.container}>
+      {list.kind === "ready" && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: filtersOpen }}
+          onPress={() => setFiltersOpen((open) => !open)}
+          style={styles.filterButton}
+        >
+          <Text style={styles.buttonText}>
+            {filtered ? strings.log.filtersOn : strings.log.filters}
+          </Text>
+        </Pressable>
+      )}
+      {list.kind === "ready" && filtersOpen && (
+        <FilterPanel
+          entries={list.entries}
+          filters={filters}
+          onChange={setFilters}
+          language={language}
+          strings={strings}
+        />
+      )}
       <View style={styles.list}>
         {list.kind === "loading" && <ActivityIndicator testID="log-loading" />}
         {list.kind === "unreadable" && (
@@ -109,7 +169,7 @@ export default function LogScreen() {
         )}
         {list.kind === "ready" && (
           <FlatList
-            data={list.entries}
+            data={shown}
             keyExtractor={entryKey}
             renderItem={({ item }) => (
               <LogRow
@@ -121,7 +181,9 @@ export default function LogScreen() {
             )}
             ListEmptyComponent={
               <View style={styles.centred}>
-                <Text style={styles.empty}>{strings.log.empty}</Text>
+                <Text style={styles.empty}>
+                  {list.entries.length === 0 ? strings.log.empty : strings.log.noMatch}
+                </Text>
               </View>
             }
             contentContainerStyle={styles.rows}
@@ -316,12 +378,21 @@ function FindRow({ find, language, strings }: FindRowProps) {
   return (
     <Link href={`/find/${find.id}`} asChild>
       <Pressable accessibilityRole="link" testID={`find-row-${find.id}`} style={styles.findRow}>
-        {find.photoUri !== null && (
+        {find.photoUri !== null ? (
           <Image
             source={{ uri: find.photoUri }}
             accessibilityLabel={strings.find.photo}
             style={styles.thumbnail}
           />
+        ) : (
+          // PBI-2.9's representative picture is to take the text mark's place (SPEC 3.9).
+          <View
+            accessible
+            accessibilityLabel={strings.log.textMarkLabel}
+            style={[styles.thumbnail, styles.textMark]}
+          >
+            <Text style={styles.textMarkText}>{strings.log.textMark}</Text>
+          </View>
         )}
         <View style={styles.findText}>
           <Text style={styles.note}>{formatFindTime(find.time, language)}</Text>
@@ -376,7 +447,138 @@ function SummaryView({ find, language, strings }: FindRowProps) {
   }
 }
 
+type FilterPanelProps = {
+  readonly entries: readonly LogEntry[];
+  readonly filters: LibraryFilters;
+  readonly onChange: (filters: LibraryFilters) => void;
+  readonly language: Language;
+  readonly strings: Strings;
+};
+
+/**
+ * The species, years and months filters, each a row of choices led by its default: the species
+ * and the years among the finds (`speciesOptions`, `yearOptions`), the twelve months by name.
+ */
+function FilterPanel({ entries, filters, onChange, language, strings }: FilterPanelProps) {
+  const t = strings.log;
+  const species = speciesOptions(entries, language);
+  return (
+    <ScrollView style={styles.filterPanel} contentContainerStyle={styles.filterGroups}>
+      <FilterGroup
+        heading={t.species}
+        allLabel={t.allSpecies}
+        choice={filters.species}
+        values={species.map((option) => ({
+          value: option.choice,
+          label: option.names === null ? t.notIdentified : option.names[language],
+        }))}
+        onChange={(choice) => onChange({ ...filters, species: choice })}
+      />
+      <FilterGroup
+        heading={t.years}
+        allLabel={t.allYears}
+        choice={filters.years}
+        values={yearOptions(entries).map((year) => ({ value: year, label: String(year) }))}
+        onChange={(choice) => onChange({ ...filters, years: choice })}
+      />
+      <FilterGroup
+        heading={t.months}
+        allLabel={t.allMonths}
+        choice={filters.months}
+        values={MONTHS.map((month) => ({ value: month, label: monthName(month, language) }))}
+        onChange={(choice) => onChange({ ...filters, months: choice })}
+      />
+    </ScrollView>
+  );
+}
+
+type FilterGroupProps<T> = {
+  readonly heading: string;
+  readonly allLabel: string;
+  readonly choice: Choice<T>;
+  readonly values: readonly { readonly value: T; readonly label: string }[];
+  readonly onChange: (choice: Choice<T>) => void;
+};
+
+/** One filter: its default, which chooses all again, then its values, each chosen or not. */
+function FilterGroup<T>({ heading, allLabel, choice, values, onChange }: FilterGroupProps<T>) {
+  return (
+    <View style={styles.filterGroup}>
+      <Text style={styles.name}>{heading}</Text>
+      <View style={styles.chips}>
+        <Chip label={allLabel} checked={choice === ALL} onPress={() => onChange(ALL)} />
+        {values.map(({ value, label }) => (
+          <Chip
+            key={String(value)}
+            label={label}
+            checked={choice !== ALL && choice.has(value)}
+            onPress={() => onChange(toggle(choice, value))}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+type ChipProps = {
+  readonly label: string;
+  readonly checked: boolean;
+  readonly onPress: () => void;
+};
+
+function Chip({ label, checked, onPress }: ChipProps) {
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityLabel={label}
+      accessibilityState={{ checked }}
+      onPress={onPress}
+      style={[styles.chip, checked && styles.chipChecked]}
+    >
+      <Text style={styles.note}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  filterButton: {
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  filterPanel: {
+    maxHeight: 280,
+    flexGrow: 0,
+  },
+  filterGroups: {
+    gap: 12,
+  },
+  filterGroup: {
+    gap: 6,
+  },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  chip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  chipChecked: {
+    borderWidth: 3,
+  },
+  textMark: {
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  textMarkText: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
   container: {
     flex: 1,
     padding: 16,

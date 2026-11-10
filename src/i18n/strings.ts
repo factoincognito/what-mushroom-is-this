@@ -29,6 +29,25 @@ export type Strings = {
     /** The list could not be read; the error itself is not shown. */
     readonly unreadable: string;
     readonly retry: string;
+    /** The button that opens and closes the filters (docs/SPEC.md 3.9, The Library). */
+    readonly filters: string;
+    /** The same button while a filter is not at its default. */
+    readonly filtersOn: string;
+    /** The species filter's heading, its default, and the finds without a species named. */
+    readonly species: string;
+    readonly allSpecies: string;
+    readonly notIdentified: string;
+    /** The years filter's heading and its default. */
+    readonly years: string;
+    readonly allYears: string;
+    /** The months filter's heading and its default. */
+    readonly months: string;
+    readonly allMonths: string;
+    /** No find passes the filters; the Library itself is not empty. */
+    readonly noMatch: string;
+    /** The text mark in place of a photo for a find without photos, and its accessible name. */
+    readonly textMark: string;
+    readonly textMarkLabel: string;
   };
   readonly settings: {
     readonly title: string;
@@ -481,15 +500,27 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       accept: "Godkänn",
     },
     log: {
-      title: "Fynd",
+      title: "Bibliotek",
       empty: "Inga fynd ännu.",
       newFind: "Nytt fynd",
       textLookup: "Beskriv en svamp",
       settings: "Inställningar",
       waiting: "Väntar på analys",
       failed: "Analysen misslyckades",
-      unreadable: "Fyndloggen gick inte att läsa.",
+      unreadable: "Biblioteket gick inte att läsa.",
       retry: "Försök igen",
+      filters: "Filter",
+      filtersOn: "Filter (på)",
+      species: "Art",
+      allSpecies: "Alla arter",
+      notIdentified: "Inte identifierad",
+      years: "År",
+      allYears: "Alla år",
+      months: "Månader",
+      allMonths: "Alla månader",
+      noMatch: "Inga fynd passar filtren.",
+      textMark: "Text",
+      textMarkLabel: "Beskrivet fynd, utan foto",
     },
     settings: {
       title: "Inställningar",
@@ -532,7 +563,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     notFound: {
       title: "Hittades inte",
       message: "Den här sidan finns inte.",
-      back: "Tillbaka till Fynd",
+      back: "Tillbaka till Biblioteket",
     },
     newFind: {
       title: "Nytt fynd",
@@ -568,7 +599,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       openSettings: "Öppna telefonens inställningar",
       save: "Spara",
       saveHint:
-        "När Spara är på blir sökningen ett fynd i loggen, och varje foto sparas när det tas eller väljs. När Spara är av finns fotona bara på den här sidan, analyseras här och tas bort när du lämnar den.",
+        "När Spara är på blir sökningen ett fynd i Biblioteket, och varje foto sparas när det tas eller väljs. När Spara är av finns fotona bara på den här sidan, analyseras här och tas bort när du lämnar den.",
       heldCount: "Sökningen har {count} av högst {max} foton, bara på den här sidan.",
       heldMaxReached: "Sökningen har så många foton som ett fynd kan ha.",
       heldPhoto: "Foto {number} av {count} i sökningen",
@@ -593,7 +624,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       input: "Din beskrivning av svampen",
       count: "{count} av {max} tecken",
       save: "Spara",
-      saveHint: "När Spara är på blir sökningen ett fynd i loggen och väntar där på analys.",
+      saveHint: "När Spara är på blir sökningen ett fynd i Biblioteket och väntar där på analys.",
       analyse: "Analysera",
       analysing: "Analyserar …",
       saving: "Sparar fyndet …",
@@ -691,7 +722,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Fynd",
       notFound: "Fyndet finns inte. Det kan ha tagits bort.",
       unreadable: "Fyndet gick inte att läsa.",
-      back: "Tillbaka till Fynd",
+      back: "Tillbaka till Biblioteket",
       photo: "Fotot av fyndet",
       photoNumbered: "Foto {number} av {count} av fyndet",
       addPhotos: "Lägg till foton",
@@ -800,15 +831,27 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       accept: "Accept",
     },
     log: {
-      title: "Finds",
+      title: "Library",
       empty: "No finds yet.",
       newFind: "New find",
       textLookup: "Describe a mushroom",
       settings: "Settings",
       waiting: "Waiting for analysis",
       failed: "The analysis failed",
-      unreadable: "The find log could not be read.",
+      unreadable: "The Library could not be read.",
       retry: "Try again",
+      filters: "Filters",
+      filtersOn: "Filters (on)",
+      species: "Species",
+      allSpecies: "All species",
+      notIdentified: "Not identified",
+      years: "Years",
+      allYears: "All years",
+      months: "Months",
+      allMonths: "All months",
+      noMatch: "No finds match the filters.",
+      textMark: "Text",
+      textMarkLabel: "A described find, without a photo",
     },
     settings: {
       title: "Settings",
@@ -850,7 +893,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     notFound: {
       title: "Not found",
       message: "This page does not exist.",
-      back: "Back to Finds",
+      back: "Back to the Library",
     },
     newFind: {
       title: "New find",
@@ -885,7 +928,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       openSettings: "Open the phone's settings",
       save: "Save",
       saveHint:
-        "With Save on, the lookup becomes a find in the log, and each photo is saved as it is taken or picked. With Save off, the photos are held on this screen only, analysed here, and removed when you leave it.",
+        "With Save on, the lookup becomes a find in the Library, and each photo is saved as it is taken or picked. With Save off, the photos are held on this screen only, analysed here, and removed when you leave it.",
       heldCount: "The lookup holds {count} of at most {max} photos, on this screen only.",
       heldMaxReached: "The lookup holds as many photos as a find can.",
       heldPhoto: "Photo {number} of {count} of the lookup",
@@ -909,7 +952,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       input: "Your description of the mushroom",
       count: "{count} of {max} characters",
       save: "Save",
-      saveHint: "With Save on, the lookup becomes a find in the log and waits there for analysis.",
+      saveHint:
+        "With Save on, the lookup becomes a find in the Library and waits there for analysis.",
       analyse: "Analyse",
       analysing: "Analysing…",
       saving: "Saving the find…",
@@ -1004,7 +1048,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Find",
       notFound: "This find does not exist. It may have been deleted.",
       unreadable: "This find could not be read.",
-      back: "Back to Finds",
+      back: "Back to the Library",
       photo: "Photo of the find",
       photoNumbered: "Photo {number} of {count} of the find",
       addPhotos: "Add photos",
@@ -1114,15 +1158,27 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       accept: "Accetta",
     },
     log: {
-      title: "Ritrovamenti",
+      title: "Biblioteca",
       empty: "Ancora nessun ritrovamento.",
       newFind: "Nuovo ritrovamento",
       textLookup: "Descrivi un fungo",
       settings: "Impostazioni",
       waiting: "In attesa di analisi",
       failed: "Analisi non riuscita",
-      unreadable: "Non è stato possibile leggere il registro dei ritrovamenti.",
+      unreadable: "Non è stato possibile leggere la Biblioteca.",
       retry: "Riprova",
+      filters: "Filtri",
+      filtersOn: "Filtri (attivi)",
+      species: "Specie",
+      allSpecies: "Tutte le specie",
+      notIdentified: "Non identificato",
+      years: "Anni",
+      allYears: "Tutti gli anni",
+      months: "Mesi",
+      allMonths: "Tutti i mesi",
+      noMatch: "Nessun ritrovamento corrisponde ai filtri.",
+      textMark: "Testo",
+      textMarkLabel: "Ritrovamento descritto, senza foto",
     },
     settings: {
       title: "Impostazioni",
@@ -1165,7 +1221,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
     notFound: {
       title: "Non trovata",
       message: "Questa pagina non esiste.",
-      back: "Torna a Ritrovamenti",
+      back: "Torna alla Biblioteca",
     },
     newFind: {
       title: "Nuovo ritrovamento",
@@ -1201,7 +1257,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       openSettings: "Apri le impostazioni del telefono",
       save: "Salva",
       saveHint:
-        "Con Salva attivo, la ricerca diventa un ritrovamento nel registro e ogni foto viene salvata appena scattata o scelta. Con Salva disattivato, le foto restano solo in questa pagina, vengono analizzate qui ed eliminate quando la lasci.",
+        "Con Salva attivo, la ricerca diventa un ritrovamento nella Biblioteca e ogni foto viene salvata appena scattata o scelta. Con Salva disattivato, le foto restano solo in questa pagina, vengono analizzate qui ed eliminate quando la lasci.",
       heldCount: "La ricerca ha {count} foto su un massimo di {max}, solo in questa pagina.",
       heldMaxReached: "La ricerca ha il numero massimo di foto di un ritrovamento.",
       heldPhoto: "Foto {number} di {count} della ricerca",
@@ -1228,7 +1284,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       count: "{count} di {max} caratteri",
       save: "Salva",
       saveHint:
-        "Con Salva attivo, la ricerca diventa un ritrovamento nel registro e lì resta in attesa di analisi.",
+        "Con Salva attivo, la ricerca diventa un ritrovamento nella Biblioteca e lì resta in attesa di analisi.",
       analyse: "Analizza",
       analysing: "Analisi in corso…",
       saving: "Salvataggio del ritrovamento…",
@@ -1329,7 +1385,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       title: "Ritrovamento",
       notFound: "Questo ritrovamento non esiste. Potrebbe essere stato eliminato.",
       unreadable: "Non è stato possibile leggere questo ritrovamento.",
-      back: "Torna a Ritrovamenti",
+      back: "Torna alla Biblioteca",
       photo: "Foto del ritrovamento",
       photoNumbered: "Foto {number} di {count} del ritrovamento",
       addPhotos: "Aggiungi foto",
