@@ -14,6 +14,11 @@
  * up to `config.maxPhotosPerFind`; completing a batch; the queue's pick of a waiting find or an
  * analysed one whose added photos wait, its batch complete; removing a photo; and the state of
  * the photos added since an answer. `memoryFindLog.test.ts` runs the same changes on both.
+ *
+ * A text answer's representative picture (PBI-2.9) follows them too: it is set, as the picture given
+ * (the store would keep a copy of its own), only beside a self-check that waits and has none; the
+ * check's "no picture" only on one that waits without it, its other outcomes only with it; the
+ * queue's pick takes a find whose check waits without a picture; and the list gives the picture.
  */
 
 import { config } from "../config/config";
@@ -22,6 +27,8 @@ import {
   type Analysis,
   type AnalysisSent,
   checkId,
+  checkNewPicture,
+  checkSelfCheckOutcome,
   checkUri,
   type Find,
   type FindSummary,
@@ -94,6 +101,7 @@ function summaryOf(stored: StoredFind): FindSummary {
     analysis: summary,
     selfCheck: stored.selfCheck,
     species: speciesOf(analysis),
+    picture: stored.picture,
   };
 }
 
@@ -261,6 +269,26 @@ export function memoryFindLog(): MemoryFindLog {
       }
       put(id, { ...find, addedPhotos: state }, batchesOf(id));
     },
+    async setPicture(id, picture) {
+      checkId(id);
+      checkNewPicture(picture);
+      const find = stored(id);
+      if (find.selfCheck?.state !== "waiting" || find.picture !== null) {
+        throw new StoreError("wrong-state", `find ${id}'s self-check does not wait for a picture`);
+      }
+      const { sourceUri, author, licence, page } = picture;
+      put(id, { ...find, picture: { uri: sourceUri, author, licence, page } }, batchesOf(id));
+    },
+    async setSelfCheck(id, outcome) {
+      checkId(id);
+      checkSelfCheckOutcome(outcome);
+      const find = stored(id);
+      const fits = outcome.state === "no-picture" ? find.picture === null : find.picture !== null;
+      if (find.selfCheck?.state !== "waiting" || !fits) {
+        throw new StoreError("wrong-state", `find ${id}'s self-check does not fit the change`);
+      }
+      put(id, { ...find, selfCheck: outcome }, batchesOf(id));
+    },
     async addText(find) {
       const id = nextId();
       const text: StoredFind = {
@@ -310,7 +338,9 @@ export function memoryFindLog(): MemoryFindLog {
           (find) =>
             !find.batchOpen &&
             (find.analysis.state === "waiting" ||
-              (find.analysis.state === "done" && find.addedPhotos === "waiting")) &&
+              (find.analysis.state === "done" &&
+                (find.addedPhotos === "waiting" ||
+                  (find.selfCheck?.state === "waiting" && find.picture === null)))) &&
             !unreadable.has(find.id),
         );
       return waiting.length === 0 ? null : Math.min(...waiting.map((find) => find.id));

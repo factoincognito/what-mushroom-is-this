@@ -11,6 +11,11 @@
  * - An unsaved lookup (Save off) is analysed when "Analyse" is tapped, through the queue's
  *   `analyseLookup`, and nothing of it is stored. A class that leaves a find waiting, and a
  *   missing key, offer to turn Save on. Leaving the screen with an unsaved lookup asks first.
+ * - An unsaved lookup's answer that names a species gets its representative picture at once
+ *   (docs/SPEC.md 3.9; PBI-2.9), by its Latin name: shown, not stored. A picture that waits, or
+ *   whose fetch met an error in the app, offers "Check again". The app's copy is removed when the
+ *   answer it belongs to is no longer shown (the text changed, "Analyse" again) or the screen is
+ *   left; a picture that comes for an answer no longer shown is removed at once.
  */
 
 import type { Answer } from "../analysis/answer";
@@ -21,6 +26,7 @@ import {
   type PermissionState,
 } from "../newFind/permissions";
 import { saveTextFind } from "../newFind/saveFind";
+import type { FetchedPicture, PictureFetch, PictureWaitCause } from "../picture/fetchPicture";
 import {
   type LocationSource,
   type PositionTracker,
@@ -29,9 +35,22 @@ import {
 import type { AnalyseLookupResult, QueueNotice } from "../queue/queue";
 import type { FindLog } from "../store/findStore";
 
-/** What an unsaved lookup's analysis came to: the answer, a notice, or an error in the app. */
+/** An unsaved lookup's representative picture (docs/SPEC.md 3.9; PBI-2.9). */
+export type LookupPicture =
+  | { state: "fetching" }
+  | { state: "shown"; picture: FetchedPicture }
+  /** No picture for the answer: the screen says the edibility could not be checked. */
+  | { state: "none" }
+  | { state: "waits"; cause: PictureWaitCause }
+  /** The fetch met an error in the app, which is not shown. */
+  | { state: "error" };
+
+/**
+ * What an unsaved lookup's analysis came to: the answer, with its picture when it names a species
+ * (null otherwise), a notice, or an error in the app.
+ */
 export type TextLookupOutcome =
-  | { kind: "answer"; answer: Answer }
+  | { kind: "answer"; answer: Answer; picture: LookupPicture | null }
   | { kind: "notice"; notice: QueueNotice }
   | { kind: "error" };
 
@@ -80,6 +99,10 @@ export interface TextLookupDeps {
   findLog: () => Promise<Pick<FindLog, "addText" | "setPosition">>;
   /** The queue's analysis of an unsaved lookup. */
   analyseLookup: (text: string) => Promise<AnalyseLookupResult>;
+  /** The queue's fetch of an unsaved lookup's picture, by the Latin name (`fetchLookupPicture`). */
+  fetchPicture: (latinName: string) => Promise<PictureFetch>;
+  /** Removes the app's copy of a picture shown. */
+  removePictureCopy: (uri: string) => void;
   /** The Save switch's starting value from Settings (`readTextLookupSave`); it never rejects. */
   readSaveSetting: () => Promise<boolean>;
   location: { permission: PermissionAsker; source: LocationSource };
@@ -109,6 +132,8 @@ export class TextLookupFlow {
   private discarded = false;
   /** The screen was left during the save under way, so the leave waits for its end. */
   private leaveWaits = false;
+  /** Counts the pictures asked for and dropped: a fetch that ends under an older count is stale. */
+  private pictureToken = 0;
 
   constructor(
     private readonly deps: TextLookupDeps,
@@ -147,6 +172,7 @@ export class TextLookupFlow {
     if (kept === this.view.text) {
       return;
     }
+    this.dropPicture();
     this.show({ text: kept, outcome: null, offerSave: false, message: null });
   }
 
@@ -177,12 +203,17 @@ export class TextLookupFlow {
       return;
     }
     const { text } = this.view;
+    this.dropPicture();
     this.show({ phase: "analysing", outcome: null, offerSave: false, message: null });
     let outcome: TextLookupOutcome;
     try {
       const result = await this.deps.analyseLookup(text);
       outcome = result.ok
-        ? { kind: "answer", answer: result.answer }
+        ? {
+            kind: "answer",
+            answer: result.answer,
+            picture: result.answer.result === "match" ? { state: "fetching" } : null,
+          }
         : { kind: "notice", notice: result.notice };
     } catch {
       outcome = { kind: "error" };
@@ -194,6 +225,67 @@ export class TextLookupFlow {
       outcome: current ? outcome : null,
       offerSave: current && outcome.kind === "notice" && offersSave(outcome.notice),
     });
+    if (current && outcome.kind === "answer" && outcome.picture !== null) {
+      await this.fetchPicture();
+    }
+  }
+
+  /**
+   * "Check again" (docs/SPEC.md 3.9): fetches the answer's picture again when it waited, or its
+   * fetch met an error in the app. Does nothing otherwise.
+   */
+  async checkAgain(): Promise<void> {
+    const { outcome } = this.view;
+    if (
+      this.view.phase !== "ready" ||
+      outcome?.kind !== "answer" ||
+      (outcome.picture?.state !== "waits" && outcome.picture?.state !== "error")
+    ) {
+      return;
+    }
+    this.show({ outcome: { ...outcome, picture: { state: "fetching" } } });
+    await this.fetchPicture();
+  }
+
+  /** Fetches the picture of the answer shown, and shows what came of it while it is still shown. */
+  private async fetchPicture(): Promise<void> {
+    const { outcome } = this.view;
+    if (outcome?.kind !== "answer" || outcome.answer.result !== "match") {
+      return;
+    }
+    this.pictureToken += 1;
+    const token = this.pictureToken;
+    let fetched: PictureFetch | null = null;
+    let picture: LookupPicture;
+    try {
+      fetched = await this.deps.fetchPicture(outcome.answer.names.la);
+      picture =
+        fetched.kind === "picture"
+          ? { state: "shown", picture: fetched.picture }
+          : fetched.kind === "none"
+            ? { state: "none" }
+            : { state: "waits", cause: fetched.cause };
+    } catch {
+      picture = { state: "error" };
+    }
+    const shown = this.view.outcome;
+    if (token !== this.pictureToken || this.closed || shown?.kind !== "answer") {
+      // The answer it was for is no longer shown: its copy goes at once.
+      if (fetched?.kind === "picture") {
+        this.deps.removePictureCopy(fetched.picture.uri);
+      }
+      return;
+    }
+    this.show({ outcome: { ...shown, picture } });
+  }
+
+  /** The answer's picture is no longer shown: a fetch under way is stale, and a copy is removed. */
+  private dropPicture(): void {
+    this.pictureToken += 1;
+    const { outcome } = this.view;
+    if (outcome?.kind === "answer" && outcome.picture?.state === "shown") {
+      this.deps.removePictureCopy(outcome.picture.picture.uri);
+    }
   }
 
   /**
@@ -231,9 +323,13 @@ export class TextLookupFlow {
     return true;
   }
 
-  /** The screen is gone: stops asking for a position, unless a saved find still waits for a fix. */
+  /**
+   * The screen is gone: stops asking for a position, unless a saved find still waits for a fix,
+   * and removes the copy of a picture shown (docs/SPEC.md 3.9).
+   */
   close(): void {
     this.closed = true;
+    this.dropPicture();
     if (!this.trackerHandedOff) {
       this.tracker?.stop();
     }

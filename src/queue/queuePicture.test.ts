@@ -55,7 +55,7 @@ function setup() {
     preparePhoto: async () => ({ ok: true, imageBase64: "AAAA", width: 1, height: 1 }),
     analyse: async (input): Promise<AnalysisCallResult> => {
       analyses.push(input);
-      events.push(`analyse ${"imageBase64" in input ? "photos" : "text"}`);
+      events.push(`analyse ${"imagesBase64" in input ? "photos" : "text"}`);
       return { ok: true, answer: answers.shift() ?? MATCH };
     },
     now: () => now,

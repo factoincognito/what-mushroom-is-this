@@ -133,6 +133,12 @@ export interface FindSummary {
    * "The filters use the text answer's species").
    */
   species: SpeciesNames | null;
+  /**
+   * The representative picture of a text answer, with its credit, or null (docs/SPEC.md 3.9, The
+   * Library; PBI-2.9): the list shows it in place of the text mark, and in place of the first photo
+   * of a text find with photos whose answer is from the text alone, while it has one.
+   */
+  picture: Picture | null;
 }
 
 /** The species a find's current answer names (`FindSummary.species`); null without one. */

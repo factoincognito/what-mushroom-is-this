@@ -38,6 +38,21 @@
  * An unsaved lookup is sent from its screen, a text (`analyseLookup`) or photos
  * (`analysePhotoLookup`, PBI-2.13): nothing of it is stored, and each error class has the outcome
  * it has for a find analysed from its screen.
+ *
+ * A text answer's representative picture (docs/SPEC.md 3.9; PBI-2.9): when an answer stored, in a
+ * run or from the find's screen, is from the text alone and names a species (the store then starts
+ * its self-check, waiting), the picture is fetched at once, before the next find, by the answer's
+ * Latin name and for the model in use, and stored with its credit, apart from the photos; with no
+ * picture for the answer, the check is stored as having none. A picture that waits (no network,
+ * the time limit, a 429 or a 5xx from Wikimedia) is left to the next run, which the store's pick
+ * takes the find for (after its photos added since, which come first); in a run it ends the run, as
+ * a find that waits does (3.4, and 3.9: "a check that waits for want of a network or a fault on …
+ * Wikimedia's side ends the run"), with its pause, and no request goes to Wikimedia before its
+ * `Retry-After` (Clead's decision 5). From the find's screen, a picture that waits sets no pause.
+ * The fetch's copy is removed once the store has its own. An unsaved lookup's picture is fetched
+ * on its screen's asking (`fetchLookupPicture`), and not stored; the screen removes its copy. The
+ * check on the picture is PBI-2.10's: until then the self-check waits, or has no picture. A picture
+ * that cannot be loaded counts neither toward the count of failed loads nor ends it.
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
@@ -46,11 +61,15 @@ import type { AnalysisError } from "../analysis/errors";
 import { config } from "../config/config";
 import type { PreparedPhoto } from "../image/prepareForAnalysis";
 import type { ReadKeyResult } from "../key/apiKey";
+import type { PictureFetch } from "../picture/fetchPicture";
 import { type AnalysisSent, type FindFailure, type StoredFind, StoreError } from "../store/find";
 import type { FindStore, LookupStore } from "../store/findStore";
 
-/** Why the finds wait after a run: no network, the time limit passed, or a fault on Anthropic's side. */
-export type PauseCause = "network" | "time-out" | "server";
+/**
+ * Why the finds wait after a run: no network, the time limit passed, a fault on Anthropic's side,
+ * or a representative picture that waits for Wikimedia (a 429, a 5xx, its time limit; PBI-2.9).
+ */
+export type PauseCause = "network" | "time-out" | "server" | "picture-source";
 
 /** Why the queue stopped. It starts again on "analyse now", or on a change of the setting named. */
 export type QueueStop =
@@ -121,7 +140,7 @@ export type QueueLog = Pick<
   FindStore,
   "oldestWaiting" | "setAnswer" | "replaceAnswer" | "markFailed" | "markWaiting"
 > &
-  Pick<LookupStore, "getStored" | "setAddedPhotos">;
+  Pick<LookupStore, "getStored" | "setAddedPhotos" | "setPicture" | "setSelfCheck">;
 
 export interface QueueDeps {
   findLog: () => Promise<QueueLog>;
@@ -137,6 +156,13 @@ export interface QueueDeps {
   now: () => number;
   /** Runs `task` after `delayMs`; gives a function that cancels it. */
   schedule: (task: () => void, delayMs: number) => () => void;
+  /**
+   * A species' representative picture, by its Latin name, for the model in use (`fetchPicture`,
+   * docs/SPEC.md 3.9); a picture fetched is in a copy of its own.
+   */
+  fetchPicture: (latinName: string, modelId: string) => Promise<PictureFetch>;
+  /** Removes the copy a fetched picture came in. */
+  removePictureCopy: (uri: string) => void;
 }
 
 export interface QueueSettings {
@@ -185,6 +211,8 @@ export class AnalysisQueue {
   /** The end of the last task that sends a request; the next one waits for it. */
   private lock: Promise<unknown> = Promise.resolve();
   private cancelRestart: (() => void) | null = null;
+  /** No request goes to Wikimedia before this time, from its last `Retry-After` (PBI-2.9). */
+  private pictureNotBeforeMs: number | null = null;
 
   constructor(
     private readonly deps: QueueDeps,
@@ -256,6 +284,8 @@ export class AnalysisQueue {
       switch (attempt.type) {
         case "answered":
           await this.storeAnswer(log, find, attempt);
+          // A picture that waits is left to the queue's next run; the screen sets no pause.
+          await this.pictureAfterAnswer(log, id);
           return { ok: true };
         case "find-failed":
           if (analysed) {
@@ -338,6 +368,21 @@ export class AnalysisQueue {
   }
 
   /**
+   * Fetches an unsaved text lookup's representative picture at once, from its screen (docs/SPEC.md
+   * 3.9), also while the queue is stopped, and stores nothing: the screen shows it and removes its
+   * copy (`removePictureCopy`). Before Wikimedia's last `Retry-After` it waits without a request.
+   * An error that is not Wikimedia's rejects.
+   */
+  fetchLookupPicture(latinName: string): Promise<PictureFetch> {
+    return this.exclusive(() => this.picture(latinName));
+  }
+
+  /** Removes a copy of a fetched picture, for a screen that showed it. */
+  removePictureCopy(uri: string): void {
+    this.deps.removePictureCopy(uri);
+  }
+
+  /**
    * Stops the queue for an error it does not handle: whoever starts a run sets this when the run
    * rejects. The error is not kept: the user is told only that something went wrong.
    */
@@ -385,16 +430,27 @@ export class AnalysisQueue {
       return "none";
     }
     const find = await log.getStored(id);
-    if (find === null || !waitsForTheQueue(find)) {
-      // Deleted, or analysed from its screen since; take the next.
+    if (find === null) {
+      // Deleted since; take the next.
       return "next";
+    }
+    if (!waitsForTheQueue(find)) {
+      // Its picture waits (PBI-2.9), or it was analysed from its screen since: take the next.
+      return picturePending(find) ? this.pictureStep(log, find) : "next";
     }
     const analysed = find.analysis.state === "done";
     const attempt = await this.attempt(find, count);
     switch (attempt.type) {
-      case "answered":
+      case "answered": {
         await this.storeAnswer(log, find, attempt);
-        return "next";
+        // The run that brings a text answer fetches its picture at once (docs/SPEC.md 3.9).
+        const pause = await this.pictureAfterAnswer(log, id);
+        if (pause === null) {
+          return "next";
+        }
+        this.setState({ pause });
+        return "end";
+      }
       case "find-failed":
         if (analysed) {
           await this.addedNotAnalysed(log, find);
@@ -494,6 +550,81 @@ export class AnalysisQueue {
     return failure === null
       ? { ok: true, imagesBase64, allLoaded }
       : { ok: false, failure, allLoaded };
+  }
+
+  /** A run's step for a find whose picture waits: fetches it, and ends the run when it waits. */
+  private async pictureStep(log: QueueLog, find: StoredFind): Promise<Step> {
+    const pause = await this.storePicture(log, find);
+    if (pause === null) {
+      return "next";
+    }
+    this.setState({ pause });
+    return "end";
+  }
+
+  /**
+   * After an answer is stored: when the store started a self-check with no picture (an answer from
+   * the text alone naming a species), fetches and stores the picture. Gives the pause when the
+   * picture waits, or null.
+   */
+  private async pictureAfterAnswer(log: QueueLog, id: number): Promise<PauseCause | null> {
+    const stored = await log.getStored(id);
+    return stored !== null && picturePending(stored) ? this.storePicture(log, stored) : null;
+  }
+
+  /**
+   * Fetches the picture of a find whose check waits for one, and stores it, or that it has none.
+   * Gives the pause when it waits, or null. A find deleted or changed meanwhile keeps nothing of
+   * it, and the copy is removed all the same.
+   */
+  private async storePicture(log: QueueLog, find: StoredFind): Promise<PauseCause | null> {
+    const { analysis } = find;
+    if (analysis.state !== "done" || analysis.answer.result !== "match") {
+      return null;
+    }
+    const fetched = await this.picture(analysis.answer.names.la);
+    switch (fetched.kind) {
+      case "picture": {
+        const { uri, author, licence, page } = fetched.picture;
+        try {
+          await log.setPicture(find.id, { sourceUri: uri, author, licence, page });
+        } catch (error) {
+          if (!isGone(error)) {
+            throw error;
+          }
+        } finally {
+          this.deps.removePictureCopy(uri);
+        }
+        return null;
+      }
+      case "none":
+        try {
+          await log.setSelfCheck(find.id, { state: "no-picture" });
+        } catch (error) {
+          if (!isGone(error)) {
+            throw error;
+          }
+        }
+        return null;
+      case "waits":
+        return fetched.cause;
+    }
+  }
+
+  /**
+   * Fetches a species' picture for the model in use, unless Wikimedia's last `Retry-After` has not
+   * passed: then it waits without a request. A wait with a time keeps it for the next fetch.
+   */
+  private async picture(latinName: string): Promise<PictureFetch> {
+    const notBefore = this.pictureNotBeforeMs;
+    if (notBefore !== null && this.deps.now() < notBefore) {
+      return { kind: "waits", cause: "picture-source", retryAtMs: notBefore };
+    }
+    const fetched = await this.deps.fetchPicture(latinName, await this.deps.readModelId());
+    if (fetched.kind === "waits" && fetched.retryAtMs !== null) {
+      this.pictureNotBeforeMs = fetched.retryAtMs;
+    }
+    return fetched;
   }
 
   /** Stores an answer, with every photo the analysis sent; a find that had one has it replaced. */
@@ -626,6 +757,27 @@ function waitsForTheQueue(find: StoredFind): boolean {
   return (
     find.analysis.state === "waiting" ||
     (find.analysis.state === "done" && find.addedPhotos === "waiting")
+  );
+}
+
+/**
+ * Whether the find's picture waits for the queue (docs/SPEC.md 3.9; PBI-2.9), as the store's pick
+ * judges it: an answer with a self-check that waits and no picture, its batch complete. Its photos
+ * added since, when they wait, come first (`waitsForTheQueue`).
+ */
+function picturePending(find: StoredFind): boolean {
+  return (
+    !find.batchOpen &&
+    find.analysis.state === "done" &&
+    find.selfCheck?.state === "waiting" &&
+    find.picture === null
+  );
+}
+
+/** A change that applied to no find: the find was deleted, or its state changed meanwhile. */
+function isGone(error: unknown): boolean {
+  return (
+    error instanceof StoreError && (error.code === "not-found" || error.code === "wrong-state")
   );
 }
 

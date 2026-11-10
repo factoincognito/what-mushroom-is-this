@@ -251,6 +251,34 @@ fetch needed an approval nobody answered).
 | `OpenMapTiles` | © OpenMapTiles | design CC BY 4.0, code BSD-3-Clause | https://github.com/openmaptiles/openmaptiles |
 | `OpenFreeMap Liberty` | OpenFreeMap; the Liberty style, a fork of OSM Liberty, itself a fork of OSM Bright | design CC BY 4.0, code BSD-3-Clause | https://github.com/hyperknot/openfreemap/blob/main/LICENSE.md |
 
+## Pictures of species
+
+A text lookup's representative picture (SPEC 3.9, Known unknown 15; PBI-2.9) comes from Wikimedia
+Commons, found through Wikidata, as data, not as a library. The use was escalated under the
+policy, and the Product Office decided it on 2026-11-09 at 21:27 (Adam): Wikimedia's API terms are
+accepted, and the pictures are limited to CC0, public domain without a country limit, CC BY and CC
+BY-SA. Mode: "depend" on the APIs; no picture is copied into the app or the repository.
+
+- **Wikidata** (https://www.wikidata.org): the items found by their taxon name, P225, and their
+  image, P18. Its data is CC0 (Wikidata:Licensing, as the product office's
+  `library/designs/what-mushroom-is-this/phase-2-checks.md` section 4 gives it), which asks for no
+  credit.
+- **Wikimedia Commons** (https://commons.wikimedia.org): each picture is under the licence of its
+  own file, read from the file page's licence templates (`src/config/wikimedia.ts`). A picture is
+  shown only with its credit: that it is from Wikimedia Commons, its author, its licence with a
+  link to the licence's deed (public domain has none), that the app resized it, and a link to its
+  page on Commons. A file whose author Wikimedia does not give in machine-readable form is not
+  used. The pictures are not in the About view: each credit stands with its picture.
+- **Wikimedia's terms**, read for PBI-2.1 (phase-2-checks.md section 5): the Terms of Use § 12, the
+  User-Agent policy, the API usage guidelines (no white-labelling: the credit names Wikimedia
+  Commons), the Robot policy (one request at a time, `Accept-Encoding: gzip`, standard thumbnail
+  widths only) and the rate limits (respect `Retry-After`).
+
+For the IP lawyer's review before release (policy rule 6; SPEC Known unknown 15): resizing under
+CC 2.x, 2.5 and 3.0, sending the pictures to Anthropic for the self-check (PBI-2.10), and public
+domain by country. The public-domain templates the app accepts were read on copies of their
+Commons pages, not on Commons itself (`src/config/wikimedia.ts`).
+
 ## Credits
 
 Credits a licence asks to reach the user in the documentation; the About view shows them. FreeType's

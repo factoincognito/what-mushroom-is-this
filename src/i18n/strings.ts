@@ -216,6 +216,14 @@ export type Strings = {
     /** The location permission is not given: a saved lookup gets no position. */
     readonly locationDenied: string;
     readonly openSettings: string;
+    /** An unsaved lookup's representative picture (docs/SPEC.md 3.9; PBI-2.9): being fetched. */
+    readonly pictureFetching: string;
+    /** It waits (no network, the time limit, a 429 or a 5xx), so the check waits. */
+    readonly pictureWaits: string;
+    /** It could not be fetched for an error in the app; the error itself is not shown. */
+    readonly pictureError: string;
+    /** Fetches it again, after it waited or the error (docs/SPEC.md 3.9: "Check again"). */
+    readonly checkAgain: string;
   };
   /**
    * The analysis queue (docs/SPEC.md 3.3, 3.4): a message for each error class and stop. `{time}`,
@@ -231,6 +239,8 @@ export type Strings = {
       readonly network: string;
       readonly timeOut: string;
       readonly server: string;
+      /** A representative picture waits for Wikimedia Commons (PBI-2.9). */
+      readonly pictureSource: string;
     };
     readonly stopped: {
       /** A 429 with `retry-after`: the queue starts again by itself at `{time}`. */
@@ -390,6 +400,28 @@ export type Strings = {
       readonly noSpecies: string;
       readonly failed: string;
       readonly noPicture: string;
+    };
+    /**
+     * A text answer's representative picture and its credit (docs/SPEC.md 3.9; PBI-2.9), on the
+     * Find screen, the text lookup screen and in the Library. `{name}` is the species' name in the
+     * app's language, `{author}` and `{licence}` the credit's.
+     */
+    readonly picture: {
+      /** The picture's accessible name. */
+      readonly label: string;
+      /** Says what it is, and what it is not, beside it. */
+      readonly caption: string;
+      readonly author: string;
+      /** The licence's name; a link to its deed, but for public domain. */
+      readonly licence: string;
+      /** The licence's name for public domain, put in `licence`. */
+      readonly publicDomain: string;
+      /** The picture was resized, as its licence asks to be told. */
+      readonly resized: string;
+      /** The link to its page on Wikimedia Commons. */
+      readonly page: string;
+      /** A link of the credit could not be opened. */
+      readonly linkFailed: string;
     };
     readonly waiting: string;
     /** A failed find; the cause follows in the queue's words. */
@@ -662,6 +694,11 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       locationDenied:
         "Appen får inte använda telefonens plats, så en sparad sökning får ingen position. Du kan tillåta det i telefonens inställningar.",
       openSettings: "Öppna telefonens inställningar",
+      pictureFetching: "Hämtar en bild av arten från Wikimedia Commons …",
+      pictureWaits:
+        "Bilden av arten gick inte att hämta från Wikimedia Commons just nu, så kontrollen väntar.",
+      pictureError: "Bilden av arten kunde inte hämtas på grund av ett fel i appen.",
+      checkAgain: "Kontrollera igen",
     },
     queue: {
       analyseNow: "Analysera nu",
@@ -673,6 +710,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "Claude-API:t svarade inte i tid. Fynden väntar och prövas igen vid nästa körning.",
         server:
           "Claude-API:t hade ett fel hos Anthropic. Fynden väntar och prövas igen vid nästa körning.",
+        pictureSource:
+          "Wikimedia Commons svarade inte i tid, hade ett fel eller bad appen vänta. Bilden av en art väntar och hämtas vid en senare körning.",
       },
       stopped: {
         rateLimitedUntil:
@@ -799,6 +838,16 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "Ätligheten visas som okänd: en kontroll mot en bild av arten kunde inte ange någon art.",
         failed: "Ätligheten visas som okänd: kontrollen mot en bild av arten misslyckades.",
         noPicture: "Ätligheten visas som okänd: ingen bild av arten hittades för kontrollen.",
+      },
+      picture: {
+        label: "Bild av arten {name} från Wikimedia Commons, inte av din svamp",
+        caption: "En bild av arten från Wikimedia Commons, inte av din svamp.",
+        author: "Av {author}",
+        licence: "Licens: {licence}",
+        publicDomain: "allmän egendom",
+        resized: "Storleken är ändrad av appen.",
+        page: "Bildens sida på Wikimedia Commons",
+        linkFailed: "Länken gick inte att öppna.",
       },
       waiting: "Fyndet väntar på analys.",
       failed: "Analysen misslyckades.",
@@ -1001,6 +1050,12 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       locationDenied:
         "The app may not use the phone's location, so a saved lookup gets no position. You can allow it in the phone's settings.",
       openSettings: "Open the phone's settings",
+      pictureFetching: "Fetching a picture of the species from Wikimedia Commons…",
+      pictureWaits:
+        "The picture of the species could not be fetched from Wikimedia Commons just now, so the check waits.",
+      pictureError:
+        "The picture of the species could not be fetched because of an error in the app.",
+      checkAgain: "Check again",
     },
     queue: {
       analyseNow: "Analyse now",
@@ -1012,6 +1067,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "The Claude API did not answer in time. The finds wait and are tried again at the next run.",
         server:
           "The Claude API had a fault on Anthropic's side. The finds wait and are tried again at the next run.",
+        pictureSource:
+          "Wikimedia Commons did not answer in time, had a fault or asked the app to wait. The picture of a species waits and is fetched at a later run.",
       },
       stopped: {
         rateLimitedUntil:
@@ -1136,6 +1193,16 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         failed: "The edibility is shown as unknown: the check on a picture of the species failed.",
         noPicture:
           "The edibility is shown as unknown: no picture of the species was found for the check.",
+      },
+      picture: {
+        label: "Picture of the species {name} from Wikimedia Commons, not of your mushroom",
+        caption: "A picture of the species from Wikimedia Commons, not of your mushroom.",
+        author: "By {author}",
+        licence: "Licence: {licence}",
+        publicDomain: "public domain",
+        resized: "Resized by the app.",
+        page: "The picture's page on Wikimedia Commons",
+        linkFailed: "The link could not be opened.",
       },
       waiting: "This find waits for analysis.",
       failed: "The analysis failed.",
@@ -1343,6 +1410,12 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       locationDenied:
         "L'app non può usare la posizione del telefono, quindi una ricerca salvata non avrà una posizione. Puoi consentirlo nelle impostazioni del telefono.",
       openSettings: "Apri le impostazioni del telefono",
+      pictureFetching: "Recupero di un'immagine della specie da Wikimedia Commons…",
+      pictureWaits:
+        "Non è stato possibile recuperare ora l'immagine della specie da Wikimedia Commons, quindi il controllo è in attesa.",
+      pictureError:
+        "Non è stato possibile recuperare l'immagine della specie per un errore nell'app.",
+      checkAgain: "Controlla di nuovo",
     },
     queue: {
       analyseNow: "Analizza ora",
@@ -1355,6 +1428,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "L'API di Claude non ha risposto in tempo. I ritrovamenti restano in attesa e vengono riprovati alla prossima esecuzione.",
         server:
           "L'API di Claude ha avuto un guasto da parte di Anthropic. I ritrovamenti restano in attesa e vengono riprovati alla prossima esecuzione.",
+        pictureSource:
+          "Wikimedia Commons non ha risposto in tempo, ha avuto un guasto o ha chiesto all'app di attendere. L'immagine di una specie resta in attesa e viene recuperata in un'esecuzione successiva.",
       },
       stopped: {
         rateLimitedUntil:
@@ -1486,6 +1561,16 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "La commestibilità è indicata come sconosciuta: il controllo su un'immagine della specie non è riuscito.",
         noPicture:
           "La commestibilità è indicata come sconosciuta: non è stata trovata nessuna immagine della specie per il controllo.",
+      },
+      picture: {
+        label: "Immagine della specie {name} da Wikimedia Commons, non del tuo fungo",
+        caption: "Un'immagine della specie da Wikimedia Commons, non del tuo fungo.",
+        author: "Di {author}",
+        licence: "Licenza: {licence}",
+        publicDomain: "pubblico dominio",
+        resized: "Ridimensionata dall'app.",
+        page: "La pagina dell'immagine su Wikimedia Commons",
+        linkFailed: "Non è stato possibile aprire il link.",
       },
       waiting: "Questo ritrovamento è in attesa di analisi.",
       failed: "L'analisi non è riuscita.",

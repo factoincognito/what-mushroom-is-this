@@ -569,7 +569,8 @@ describe("the list's picture of a text find (docs/SPEC.md 3.9, The Library; PBI-
     const id = await answeredTextFind();
     await store.setPicture(id, newPicture);
     const picture = {
-      uri: "file:///photos/p1.png",
+      // The test's photo directory names every copy `.jpg` (`memoryPhotos`).
+      uri: "file:///photos/p1.jpg",
       author: newPicture.author,
       licence: newPicture.licence,
       page: newPicture.page,
