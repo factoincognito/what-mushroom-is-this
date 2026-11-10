@@ -386,6 +386,14 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
 - The position is asked for when the camera opens whether or not "Save"
   is on. A lookup saved after its first photo was taken keeps that
   photo's time and position by the rules of 3.1 and 3.6 (**[Clead]**).
+- "Save" is on the screen of a new photo lookup, not when photos are
+  added to a find from its screen; once the lookup is saved, it cannot be
+  turned off (**[Clead]**, 2026-11-10, #61).
+- A photo can be removed from an unsaved photo lookup on its screen,
+  after a question, as from a find (Batches); unlike a find's, its last
+  photo can be removed too, since nothing is stored, and the screen then
+  offers "Analyse" again only once a photo is added. Removing a photo
+  drops an answer shown (**[Clead]**, 2026-11-10, #61).
 - Photos from the phone's files are images only; a file the app cannot
   load as an image is refused with a message (**[Clead]**). A photo from
   the files has no position or time of its own, as a gallery photo
