@@ -111,6 +111,8 @@ All notable changes to What mushroom is this? are documented here.
   whose stored species, names or edibility differ from its answer, is
   shown as one that cannot be read, can be deleted, and no longer stops
   the queue (#87).
+- The app is named Wushroom, not Washroom, on the phone and in the
+  User-Agent it sends (#91).
 
 ## Project created
 

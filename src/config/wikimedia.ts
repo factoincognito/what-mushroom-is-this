@@ -72,7 +72,7 @@ export const wikimediaConfig: WikimediaConfig = Object.freeze({
   retryAfterMaxMs: 24 * 60 * 60 * 1_000,
   // Proposed by Crog in PBI-2.9: a 3840 px JPEG thumbnail is a few MB; 25 MB leaves room.
   pictureMaxBytes: 25 * 1024 * 1024,
-  // SPEC Known unknown 15, the User-Agent's form: `Washroom/<app version> (<repository>) expo-fetch`.
+  // SPEC Known unknown 15, the User-Agent's form: `Wushroom/<app version> (<repository>) expo-fetch`.
   userAgentContact: "https://github.com/factoincognito/what-mushroom-is-this",
   userAgentLibrary: "expo-fetch",
   // Commons' own CC0 template, {{Cc-zero}}, as Commons:Donate to the public domain recommends it
