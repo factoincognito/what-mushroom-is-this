@@ -514,8 +514,8 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   "tried again at the queue's next run" below; if the analysis of the
   find's photos fails, the check stays waiting, the edibility stays
   "unknown" and the find gives the waiting check as the reason, until an
-  answer replaces the text answer or the photos are removed (**[Clead]**, 2026-11-10,
-  #75).
+  answer replaces the text answer or the photos are removed
+  (**[Clead]**, 2026-11-10, #75).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
@@ -717,9 +717,9 @@ answers to Clead's questions, 19:05).
    documentation says reading it needs the `ACCESS_MEDIA_LOCATION`
    permission, and `expo-image-picker` does not ask for it, so it most
    likely does not (Crog's reading of the documentation and the library's
-   source for #14, 2026-11-09; to be checked on a phone, PBI-1.18). Not
-  tested in Adam's Phase 1 test session (PBI-1.11); checked in his Phase 2
-  test session (PBI-2.11).
+   source for #14, 2026-11-09). Not tested in Adam's Phase 1 test session
+   (PBI-1.11); to be checked in his Phase 2 test session (PBI-2.11). If it
+   does not arrive, PBI-1.18 is the remedy.
 8. Whether a user's API key can be one that needs the
    `anthropic-workspace-id` header, which the API documentation says a key
    not scoped to a workspace needs (Crog's reading for PBI-1.4, checked
@@ -738,7 +738,7 @@ answers to Clead's questions, 19:05).
     from a fix the app had before the camera opened, or from the last
     known position (3.6); a fix after the camera closes still counts
     within the 30 seconds. Not checked in Adam's Phase 1 test session
-    (PBI-1.11); checked in his Phase 2 test session (PBI-2.11).
+    (PBI-1.11); to be checked in his Phase 2 test session (PBI-2.11).
 11. Phase 2's map (3.9). Decided by Adam, 2026-11-09 21:27, on PBI-2.1's
     findings (product office,
     `library/designs/what-mushroom-is-this/phase-2-checks.md`): MapLibre
