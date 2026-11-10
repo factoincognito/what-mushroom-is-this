@@ -31,7 +31,7 @@ All notable changes to What mushroom is this? are documented here.
 - Phase 2's specification, approved by Adam: text lookup, several photos
   per find, a 1–100 confidence, the Library with a map, a Wikimedia
   picture and a self-check for text lookups (#47, #50, #56, #58, #62,
-  #69, #72, #76).
+  #69, #72, #76, #78).
 - The store at schema version 2, with a migration that keeps every
   Phase 1 find (#49).
 
@@ -94,6 +94,10 @@ All notable changes to What mushroom is this? are documented here.
 - The self-check of a text lookup: a photo lookup on the representative
   picture; the text answer's edibility is shown only when the check names
   the same genus and species (#75).
+- Follow-ups that need no phone: a new find's ID stays readable after a
+  damaged ID of 2^53 − 1, the unused permission to read shared storage is
+  blocked, and the tests check the app's own texts for its old name, the
+  Expo project link, and every native module for a second version (#79).
 
 ## Project created
 
