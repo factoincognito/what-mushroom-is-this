@@ -525,8 +525,8 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   IP address (**[Clead]**).
 - Fetching it (**[Clead]**):
   - no network, a time limit, 429 or 5xx from Wikimedia, or an API
-    answer whose error says it is temporary (`ratelimited`, `maxlag`,
-    `readonly`; **[Clead]**, 2026-11-10, #71): the picture, and so the
+    error whose code is `ratelimited`, `maxlag` or `readonly`
+    (**[Clead]**, 2026-11-10, #71): the picture, and so the
     check, wait; on a saved find the queue tries again at its next run,
     and an unsaved lookup's screen offers "Check again";
   - no Wikidata item, no image, a licence the IP policy does not allow
@@ -804,20 +804,24 @@ answers to Clead's questions, 19:05).
     Settled for PBI-2.9 (**[Clead]**, 2026-11-10, #71):
     - which item when a name has several, also outside the fungi: among
       the items whose P225 is the name, ignoring case, those whose P105 is
-      species; among those, the ones with a P18; among those, the one
-      with the most sitelinks; with none, no picture. A homonym of
-      another kingdom would fail the self-check, so its edibility stays
-      "unknown";
+      species; among those, the ones with a P18 that is not deprecated;
+      among those, the one with the most sitelinks; with none, or with a
+      tie for the most, no picture. Whether the self-check catches a
+      homonym of another kingdom is not checked; one of the same genus
+      it does not catch, hence no picture on a tie;
     - which picture when an item has several P18: the first of preferred
       rank, else the first of normal rank, never a deprecated one;
     - a file's licences are read from its page's licence templates,
       mapped by a table in configuration to CC0, public domain, CC BY and
-      CC BY-SA (versions 2.0 to 4.0 and their ports); public domain
-      counts only for a configured list of templates without a country
-      limit; the metadata gives only the author, the credit and the
-      page;
-    - the credit names Wikimedia Commons as the source.
-    Read on copies, not on Commons itself, which WebFetch cannot reach:
-    the public-domain templates' "applies worldwide" (PBI-1.24).
+      CC BY-SA (any version of CC BY and CC BY-SA, and their ports);
+      public domain counts only for a configured list of templates
+      without a country limit; the file's metadata gives only the
+      author, the attribution text and the page;
+    - the credit names Wikimedia Commons as the source and says the
+      picture was resized.
+    The public-domain templates' "applies worldwide" was read on copies
+    (c.enwp.org, species-id.net), since WebFetch did not reach
+    commons.wikimedia.org in that session; it is read on Commons before
+    release (PBI-1.24).
     Before release, the IP lawyer's review covers resizing under CC
     2.x/3.0 and sending pictures to Anthropic (policy rule 6).
