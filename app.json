@@ -11,7 +11,8 @@
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.ACCESS_WIFI_STATE",
-        "android.permission.SYSTEM_ALERT_WINDOW"
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE"
       ]
     },
     "ios": {
