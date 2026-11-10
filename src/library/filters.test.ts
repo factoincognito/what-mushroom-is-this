@@ -54,6 +54,7 @@ function entry(
     id,
     photoUri: `file:///photos/${id}.jpg`,
     time: { takenAtMs: Date.parse(iso), utcOffsetMinutes, source: "saved" },
+    position: null,
     analysis:
       analysis ??
       (species === null

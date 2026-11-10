@@ -301,12 +301,12 @@ describe("the store's statements on a real SQLite", () => {
     const placed = await store.add(newFind(2_000, at));
     const unplaced = await store.add(newFind(1_000));
     const list = await store.list();
-    expect(list.map((entry) => entry.readable && { id: entry.id, position: entry.position })).toEqual(
-      [
-        { id: placed, position: at },
-        { id: unplaced, position: null },
-      ],
-    );
+    expect(
+      list.map((entry) => entry.readable && { id: entry.id, position: entry.position }),
+    ).toEqual([
+      { id: placed, position: at },
+      { id: unplaced, position: null },
+    ]);
   });
 
   it("stores an answer, which the find and the list then show", async () => {
@@ -321,6 +321,7 @@ describe("the store's statements on a real SQLite", () => {
         id,
         photoUri: "file:///photos/p1.jpg",
         time: { takenAtMs: 1_000, utcOffsetMinutes: 60, source: "saved" },
+        position: null,
         selfCheck: null,
         // The Latin name, from the stored answer, for the Library's species filter (PBI-2.7).
         species: match.names,

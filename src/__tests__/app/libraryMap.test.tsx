@@ -10,9 +10,9 @@
  */
 import { TransformRequestManager } from "@maplibre/maplibre-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Location from "expo-location";
 import { getLocales } from "expo-localization";
-import { act, fireEvent, renderRouter, screen, within } from "expo-router/testing-library";
+import * as Location from "expo-location";
+import { act, fireEvent, renderRouter, screen, waitFor, within } from "expo-router/testing-library";
 import { AppState } from "react-native";
 
 import type { Answer, Match } from "../../analysis/answer";
@@ -138,9 +138,7 @@ function phoneAt(at: { latitude: number; longitude: number } | null): void {
 
 /** The location refused before, so the map opens on its fallbacks at once. */
 function locationRefused(): void {
-  jest
-    .mocked(Location.getForegroundPermissionsAsync)
-    .mockResolvedValue(permissionAnswer("denied"));
+  jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValue(permissionAnswer("denied"));
 }
 
 async function startApp(initialUrl = "/"): Promise<{ pathname: () => string }> {
@@ -150,6 +148,8 @@ async function startApp(initialUrl = "/"): Promise<{ pathname: () => string }> {
 }
 
 async function resetStandIns(): Promise<void> {
+  // Each test counts the calls it makes itself; the implementations are set again below.
+  jest.clearAllMocks();
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
   await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
@@ -160,9 +160,6 @@ async function resetStandIns(): Promise<void> {
   mockLog.withoutId.length = 0;
   phoneIn("en");
   phoneAt(PHONE);
-  removeWatch.mockReset();
-  jest.mocked(Location.requestForegroundPermissionsAsync).mockClear();
-  jest.mocked(TransformRequestManager.addHeader).mockClear();
   // In the background: no queue run starts by itself.
   Object.defineProperty(AppState, "currentState", { value: "background", configurable: true });
 }
@@ -287,8 +284,10 @@ describe("where the map opens (SPEC 3.9)", () => {
     await startApp();
     await fireEvent.press(await screen.findByRole("button", { name: en.log.mapView }));
     await screen.findByText(en.log.mapOpening);
+    await waitFor(() => expect(Location.watchPositionAsync).toHaveBeenCalled());
+    expect(removeWatch).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByRole("button", { name: en.log.listView }));
-    expect(removeWatch).toHaveBeenCalled();
+    await waitFor(() => expect(removeWatch).toHaveBeenCalled());
   });
 });
 

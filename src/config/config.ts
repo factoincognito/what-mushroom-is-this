@@ -57,6 +57,24 @@ export type AppConfig = {
    * another starting value in Settings (docs/SPEC.md 3.9, Lookups).
    */
   readonly photoLookupSavedAtStart: boolean;
+  /** The map's style, from which it loads its tiles (docs/SPEC.md 3.9, The Library). */
+  readonly mapStyleUrl: string;
+  /** The span of the shorter side of the area the map opens on, in metres (SPEC 3.9). */
+  readonly mapOpeningSideM: number;
+  /** How long the map waits for a position fix when it opens, in milliseconds (SPEC 3.9). */
+  readonly mapPositionFixWaitMs: number;
+  /**
+   * How old the phone's last known position may be for the map to open on it, in milliseconds
+   * (SPEC 3.9); kept apart from `lastKnownPositionMaxAgeMs`, which is a find's (SPEC 3.6).
+   */
+  readonly mapLastKnownPositionMaxAgeMs: number;
+  /**
+   * The area the map opens on without the phone's position and without a find with one (SPEC
+   * 3.9), as west, south, east and north in degrees.
+   */
+  readonly mapDefaultArea: readonly [west: number, south: number, east: number, north: number];
+  /** The contact the map's User-Agent names: the repository's address (SPEC 3.9). */
+  readonly mapUserAgentContact: string;
 };
 
 /**
@@ -110,4 +128,16 @@ export const config: AppConfig = Object.freeze({
   textLookupSavedAtStart: false,
   // docs/SPEC.md 3.9: Adam's starting value, "on for a photo lookup".
   photoLookupSavedAtStart: true,
+  // docs/SPEC.md 3.9 and Known unknown 11: OpenFreeMap's style for MapLibre, as PBI-2.1's findings
+  // give it (product office, library/designs/what-mushroom-is-this/phase-2-checks.md, section 1).
+  mapStyleUrl: "https://tiles.openfreemap.org/styles/liberty",
+  // docs/SPEC.md 3.9: Adam's 10 km (a radius of 5 km), the measure Clead's.
+  mapOpeningSideM: 10_000,
+  // docs/SPEC.md 3.9: Clead's limits, kept as configuration as the spec says.
+  mapPositionFixWaitMs: 5_000,
+  mapLastKnownPositionMaxAgeMs: 2 * 60_000,
+  // docs/SPEC.md 3.9 gives no value. Proposed by Crog in PBI-2.8: about the extent of Sweden, for
+  // Clead to confirm.
+  mapDefaultArea: Object.freeze([10.9, 55.3, 24.2, 69.1] as const),
+  mapUserAgentContact: "https://github.com/factoincognito/what-mushroom-is-this",
 });

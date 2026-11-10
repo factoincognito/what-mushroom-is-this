@@ -343,10 +343,17 @@ describe("the licence texts", () => {
       ].map(([, key = "", value = ""]) => [key, value.trim()]),
     );
     const gradle = readFileSync(join(dir, "build.gradle"), "utf8");
-    const google = gradle.indexOf('if (getConfigurableExtOrDefault("locationEngine") == "google")');
+    // The module's own dependencies block, at the start of a line, not the buildscript's, up to
+    // the libraries of Google's location engine in it.
+    const start = gradle.indexOf("\ndependencies {");
+    const google = gradle.indexOf(
+      'if (getConfigurableExtOrDefault("locationEngine") == "google")',
+      start,
+    );
+    expect(start).toBeGreaterThan(0);
+    expect(google).toBeGreaterThan(start);
     const asked = gradle
-      // The module's own dependencies block, at the start of a line, not the buildscript's.
-      .slice(gradle.indexOf("\ndependencies {"), google)
+      .slice(start, google)
       .matchAll(/^\s*implementation\s*\(?\s*"([^":]+):([^":]+)(?::([^"]+))?"/gm);
     return [...asked]
       .map(([, group = "", artifact = "", version = ""]) => ({
@@ -361,7 +368,8 @@ describe("the licence texts", () => {
       }))
       .filter(
         ({ name }) =>
-          name !== "com.facebook.react:react-android" && name !== "org.jetbrains.kotlin:kotlin-stdlib",
+          name !== "com.facebook.react:react-android" &&
+          name !== "org.jetbrains.kotlin:kotlin-stdlib",
       );
   }
 
@@ -534,12 +542,14 @@ describe("the map data credits (SPEC 3.9, PBI-2.8)", () => {
   });
 
   it("are exactly those THIRD-PARTY-NOTICES.md records under Map data, in the same order", () => {
-    const recorded = tableRows("## Map data").map(([name = "", credit = "", licence = "", url = ""]) => ({
-      name: /^`([^`]+)`$/.exec(name)?.[1] ?? name,
-      credit,
-      licence,
-      url,
-    }));
+    const recorded = tableRows("## Map data").map(
+      ([name = "", credit = "", licence = "", url = ""]) => ({
+        name: /^`([^`]+)`$/.exec(name)?.[1] ?? name,
+        credit,
+        licence,
+        url,
+      }),
+    );
     expect(recorded.length).toBeGreaterThan(0);
     expect(NOTICES.mapData).toEqual(recorded);
   });

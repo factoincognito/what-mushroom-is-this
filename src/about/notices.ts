@@ -18,6 +18,21 @@ export type Notices = {
   readonly libraries: readonly Library[];
   /** The licence texts, by ID; libraries whose texts are the same share one. */
   readonly texts: { readonly [id: string]: string };
+  /**
+   * The credits of the map's data and design (docs/SPEC.md 3.9, PBI-2.8), as
+   * `THIRD-PARTY-NOTICES.md` records them under "Map data": the map shows them through its "(i)"
+   * button, and About lists them too.
+   */
+  readonly mapData: readonly MapDataCredit[];
+};
+
+export type MapDataCredit = {
+  readonly name: string;
+  /** The credit as its source asks for it, for example "© OpenStreetMap contributors". */
+  readonly credit: string;
+  readonly licence: string;
+  /** The page the credit links to, for example OpenStreetMap's copyright page. */
+  readonly url: string;
 };
 
 export type Library = {
@@ -99,9 +114,33 @@ function libraryOf(value: unknown, index: number, texts: Fields): Library {
   };
 }
 
+function mapDataOf(value: unknown): MapDataCredit[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new NoticesError("mapData is not a non-empty list");
+  }
+  const credits = value.map((entry: unknown, index) => {
+    const where = `mapData[${index}]`;
+    const credit = fields(entry, where, ["name", "credit", "licence", "url"]);
+    return {
+      name: text(credit.name, `${where}.name`),
+      credit: text(credit.credit, `${where}.credit`),
+      licence: text(credit.licence, `${where}.licence`),
+      url: address(credit.url, `${where}.url`),
+    };
+  });
+  const names = new Set<string>();
+  for (const credit of credits) {
+    if (names.has(credit.name)) {
+      throw new NoticesError(`two map data credits are named ${credit.name}`);
+    }
+    names.add(credit.name);
+  }
+  return credits;
+}
+
 /** Checks the data file's content and gives it typed; anything else throws `NoticesError`. */
 export function parseNotices(value: unknown): Notices {
-  const top = fields(value, "the file", ["app", "libraries", "texts"]);
+  const top = fields(value, "the file", ["app", "libraries", "texts", "mapData"]);
   const texts = textsOf(top.texts);
 
   const appFields = fields(top.app, "app", ["licence", "url", "requiredNotice", "textId"]);
@@ -133,7 +172,7 @@ export function parseNotices(value: unknown): Notices {
       throw new NoticesError(`texts.${id} is not used`);
     }
   }
-  return { app, libraries, texts };
+  return { app, libraries, texts, mapData: mapDataOf(top.mapData) };
 }
 
 /** The app's notices, checked when the module loads. */

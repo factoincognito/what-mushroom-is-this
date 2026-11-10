@@ -199,26 +199,29 @@ describe("the location permission when the map opens (SPEC 3.9)", () => {
   it.each<[string, Answer]>([
     ["refused before", DENIED],
     ["refused for good", BLOCKED],
-  ])("does not ask again when the user %s, watches nothing and opens on the newest find at once", async (_name, answer) => {
-    const asker = permission(answer);
-    const phone = location(reading(1, 1));
-    const opening = startOpening(
-      {
-        permission: asker,
-        location: phone.source,
-        now: () => NOW,
-        entries: [find(2, null), find(1, AT_FIND)],
-      },
-      LIMITS,
-    );
-    await expect(opening.area).resolves.toEqual({
-      from: "find",
-      bounds: squareAround(AT_FIND, 10_000),
-    });
-    expect(asker.request).not.toHaveBeenCalled();
-    expect(phone.source.watch).not.toHaveBeenCalled();
-    expect(phone.source.lastKnown).not.toHaveBeenCalled();
-  });
+  ])(
+    "does not ask again when the user %s, watches nothing and opens on the newest find at once",
+    async (_name, answer) => {
+      const asker = permission(answer);
+      const phone = location(reading(1, 1));
+      const opening = startOpening(
+        {
+          permission: asker,
+          location: phone.source,
+          now: () => NOW,
+          entries: [find(2, null), find(1, AT_FIND)],
+        },
+        LIMITS,
+      );
+      await expect(opening.area).resolves.toEqual({
+        from: "find",
+        bounds: squareAround(AT_FIND, 10_000),
+      });
+      expect(asker.request).not.toHaveBeenCalled();
+      expect(phone.source.watch).not.toHaveBeenCalled();
+      expect(phone.source.lastKnown).not.toHaveBeenCalled();
+    },
+  );
 
   it("goes on to the fallbacks when the user refuses when asked", async () => {
     const asker = permission(UNDETERMINED, DENIED);
@@ -289,6 +292,19 @@ describe("the fallbacks without the phone's position (SPEC 3.9)", () => {
       LIMITS,
     );
     await jest.advanceTimersByTimeAsync(5_000);
+    await expect(opening.area).resolves.toEqual({ from: "default", bounds: DEFAULT_AREA });
+  });
+
+  it("opens on the default area when the newest find's position cannot hold an area, which only a damaged file gives", async () => {
+    const opening = startOpening(
+      {
+        permission: permission(DENIED),
+        location: location().source,
+        now: () => NOW,
+        entries: [find(1, { ...AT_FIND, latitude: 95 })],
+      },
+      LIMITS,
+    );
     await expect(opening.area).resolves.toEqual({ from: "default", bounds: DEFAULT_AREA });
   });
 

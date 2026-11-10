@@ -117,6 +117,8 @@ export interface FindSummary {
   /** The find's first photo; null for a text find without photos (docs/SPEC.md 3.9, PBI-2.4). */
   photoUri: string | null;
   time: FindTime;
+  /** Where the find was made, or null; the Library's map shows it there (SPEC 3.9, PBI-2.8). */
+  position: Position | null;
   analysis: SummaryAnalysis;
   /**
    * The self-check of an answer from the text alone, or null for any other find: the edibility

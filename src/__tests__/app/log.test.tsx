@@ -522,6 +522,7 @@ describe("a find the store cannot read, in the list (PBI-1.16)", () => {
         id: 1,
         photoUri,
         time,
+        position: null,
         analysis: { state: "waiting" },
         selfCheck: null,
         species: null,

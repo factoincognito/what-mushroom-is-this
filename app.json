@@ -56,7 +56,8 @@
             { "domain": "database", "path": "." }
           ]
         }
-      ]
+      ],
+      ["@maplibre/maplibre-react-native", { "android": { "locationEngine": "default" } }]
     ],
     "extra": {
       "eas": {

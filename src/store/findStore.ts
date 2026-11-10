@@ -1018,6 +1018,7 @@ function readSummary(row: Row, find: StoredFind): FindSummary {
     id: find.id,
     photoUri: find.photos[0]?.uri ?? null,
     time: find.time,
+    position: find.position,
     analysis: readSummaryAnalysis(row),
     selfCheck: find.selfCheck,
     species: speciesOf(find.analysis),

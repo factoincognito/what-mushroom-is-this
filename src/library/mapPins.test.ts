@@ -1,6 +1,6 @@
 import { STRINGS } from "../i18n/strings";
 import type { FindSummary, ListedFind, Position } from "../store/find";
-import { ALL, DEFAULT_FILTERS, NOT_IDENTIFIED } from "./filters";
+import { ALL, DEFAULT_FILTERS, type LibraryFilters, NOT_IDENTIFIED } from "./filters";
 import type { MapBounds } from "./mapArea";
 import { formatFindDate, newestWithPosition, pinLabel, pinsInArea } from "./mapPins";
 
@@ -95,7 +95,7 @@ describe("pinsInArea: the finds the map shows (SPEC 3.9)", () => {
     expect(pinsInArea(entries, flyAgaric, AROUND_HOME).map((pin) => pin.id)).toEqual([6]);
     const notIdentified = { ...DEFAULT_FILTERS, species: new Set([NOT_IDENTIFIED]) };
     expect(pinsInArea(entries, notIdentified, AROUND_HOME)).toEqual([]);
-    const otherYear = { species: ALL, years: new Set([2025]), months: ALL };
+    const otherYear: LibraryFilters = { species: ALL, years: new Set([2025]), months: ALL };
     expect(pinsInArea(entries, otherYear, AROUND_HOME)).toEqual([]);
   });
 

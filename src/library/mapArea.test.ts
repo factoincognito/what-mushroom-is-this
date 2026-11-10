@@ -1,8 +1,8 @@
 import {
   EARTH_RADIUS_M,
   isInArea,
-  type MapBounds,
   MAX_MAP_LATITUDE,
+  type MapBounds,
   readViewBounds,
   squareAround,
 } from "./mapArea";
@@ -26,8 +26,14 @@ function sides(bounds: MapBounds): { eastWest: number; northSouth: number } {
   const [west, south, east, north] = bounds;
   const middle = (south + north) / 2;
   return {
-    eastWest: distanceM({ latitude: middle, longitude: west }, { latitude: middle, longitude: east }),
-    northSouth: distanceM({ latitude: south, longitude: west }, { latitude: north, longitude: west }),
+    eastWest: distanceM(
+      { latitude: middle, longitude: west },
+      { latitude: middle, longitude: east },
+    ),
+    northSouth: distanceM(
+      { latitude: south, longitude: west },
+      { latitude: north, longitude: west },
+    ),
   };
 }
 

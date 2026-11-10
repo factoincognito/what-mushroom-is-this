@@ -249,7 +249,9 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
   });
 
   it("the position scenario sees the positions the store gives, not nothing (PBI-2.8)", async () => {
-    const scenario = scenarios.find(([name]) => name.startsWith("the list gives each find's position"));
+    const scenario = scenarios.find(([name]) =>
+      name.startsWith("the list gives each find's position"),
+    );
     if (scenario === undefined) {
       throw new Error("no position scenario");
     }
