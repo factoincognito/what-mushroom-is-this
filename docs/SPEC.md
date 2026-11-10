@@ -508,7 +508,10 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   check, with the check's outcome for the edibility shown, until an answer
   from its photos and text replaces that answer (Batches). From then on it
   has no picture and no check, and the list shows its first photo
-  (**[Clead]**).
+  (**[Clead]**). A check still waiting when a batch completes on its find
+  is not run; if that batch's analysis fails, the check stays waiting,
+  and the edibility "unknown", until an answer replaces the text answer
+  (**[Clead]**, 2026-11-10, #75).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
@@ -556,8 +559,13 @@ answers to Clead's questions, 19:05).
   The picture is resized and checked as a photo is in 3.3; the picture,
   not the user's text, is sent to Anthropic (**[Clead]**). The two match
   when the first two words of their Latin names, genus and species, are
-  the same, ignoring case (**[Clead]**). The check's own confidence is
-  not used (**[Clead]**).
+  the same, ignoring case (**[Clead]**). A Latin name of one word, or
+  whose second word is a rank or uncertainty mark (`sp.`, `spp.`, `cf.`,
+  `aff.`, `ssp.`, `subsp.`, `var.`, `agg.`, with or without the dot),
+  names no species and matches nothing (**[Clead]**, 2026-11-10, #75).
+  The check's own confidence is not used (**[Clead]**). The check's
+  answer is kept only as the check's outcome, never as the find's
+  answer (**[Clead]**, 2026-11-10, #75).
 - On a saved find the queue run that brings the text answer fetches the
   picture and runs the check at once, before it takes the next find
   (**[Clead]**). An unsaved lookup runs them at once after its answer. A
