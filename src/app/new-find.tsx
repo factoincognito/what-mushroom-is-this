@@ -1,12 +1,29 @@
 import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { type NavigationAction, usePreventRemove } from "expo-router/react-navigation";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from "react-native";
 import { config } from "../config/config";
 import { fillIn, parseFindId } from "../find/display";
+import { AnswerView, NoticeView } from "../find/FindScreen";
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Strings } from "../i18n/strings";
-import { cameraPermission, pickFromGallery, takePhoto } from "../newFind/devicePicker";
+import { readPhotoLookupSave } from "../lookup/saveSetting";
+import {
+  cameraPermission,
+  pickFromGallery,
+  removePickedCopy,
+  takePhoto,
+} from "../newFind/devicePicker";
 import {
   INITIAL_VIEW,
   NewFindFlow,
@@ -14,26 +31,41 @@ import {
   type NewFindView,
 } from "../newFind/newFindFlow";
 import { deviceLocationSource, locationPermission } from "../position/deviceLocation";
+import { formatTimeIn } from "../queue/messages";
+import { useQueue } from "../queue/QueueContext";
+import { deviceStore } from "../storage/keyValueStore";
 import { useFindLog } from "../store/FindLogContext";
 
 /**
  * The New find screen (docs/SPEC.md 3.1, 3.9): opens the camera at once; a photo can also be
- * picked from the gallery. The find is saved with its first photo before any analysis, its batch
- * open, and each photo after it is saved to it, up to the most a find holds (3.9, Batches).
- * "Analyse" completes the batch, which the queue then analyses, and opens the find's screen;
- * leaving the screen completes it too. With `?find=<id>` (from a find's screen) the photos are
- * added to that find, as a new batch, and "Analyse" goes back to where the screen was opened from.
+ * picked from the gallery. With `?find=<id>` (from a find's screen) the photos are added to that
+ * find, as a new batch, and "Analyse" goes back to where the screen was opened from.
  *
- * A photo whose save failed is kept, and is dropped only after a question on the screen: when
- * "Discard the photo" is tapped, and when the screen is left in any way (the header's back
- * button, Android's back button or gesture), which waits for the answer (PBI-1.20). A leave while
- * the photo is being saved, the first save or Save again, waits for the save: it goes ahead once
- * the save succeeds, and is asked once it fails (Clead's fix 1 on #32).
+ * Otherwise it is a new photo lookup, with a "Save" switch from its starting value in Settings
+ * (3.9, Lookups; PBI-2.13). With Save on, the find is saved with its first photo before any
+ * analysis, its batch open, and each photo after it is saved to it, up to the most a find holds
+ * (3.9, Batches); "Analyse" completes the batch, which the queue then analyses, and opens the
+ * find's screen; leaving the screen completes it too. Once the lookup is a find, the switch is
+ * shown but cannot be turned off. With Save off, the photos are held on this screen only;
+ * "Analyse" analyses them here and shows the answer as a find's screen would, with SPEC 3.5's
+ * disclaimer and no self-check, or the notice; after a pause or without a key the screen offers to
+ * turn Save on. Turning Save on saves the lookup as a find with its photos. The held photos are
+ * shown, each with "Remove photo n", which asks first and removes only the app's copy (Clead's
+ * decision on #61).
+ *
+ * Photos whose save failed are kept, and are dropped only after a question on the screen: when
+ * "Discard the photo" is tapped, and when the screen is left in any way (the header's back button,
+ * Android's back button or gesture), which waits for the answer (PBI-1.20). Leaving with an
+ * unsaved lookup asks too (3.9). A leave while a photo is being saved, the first save or Save
+ * again, waits for the save: it goes ahead once the save succeeds, and is asked once it fails
+ * (Clead's fix 1 on #32).
  */
 export default function NewFindScreen() {
-  const { strings } = useLanguage();
+  const { language, strings } = useLanguage();
   const t = strings.newFind;
   const findLog = useFindLog();
+  const { analysePhotoLookup } = useQueue();
+  const formatTime = useMemo(() => formatTimeIn(language), [language]);
   const { find } = useLocalSearchParams();
   const [target] = useState<NewFindTarget>(() =>
     find === undefined ? { kind: "new" } : { kind: "add", findId: parseFindId(find) },
@@ -47,6 +79,9 @@ export default function NewFindScreen() {
           camera: { permission: cameraPermission, take: takePhoto },
           gallery: { pick: pickFromGallery },
           location: { permission: locationPermission, source: deviceLocationSource },
+          readSaveSetting: () => readPhotoLookupSave(deviceStore),
+          analyseLookup: analysePhotoLookup,
+          removeCopy: removePickedCopy,
           appConfig: config,
           now: () => new Date(),
         },
@@ -67,24 +102,25 @@ export default function NewFindScreen() {
    * when none waits).
    */
   const [leaving, setLeaving] = useState<NavigationAction | null>(null);
-  // The screen holds a leave while a photo is kept or being saved (Clead's fix 1 on #32).
-  const holdsPhoto = view.canRetrySave || view.phase === "saving";
-  usePreventRemove(holdsPhoto, ({ data }) => {
+  // The screen holds a leave while photos are kept or being saved (Clead's fix 1 on #32), and
+  // while an unsaved lookup holds photos (SPEC 3.9).
+  const { holdsLeave } = view;
+  usePreventRemove(holdsLeave, ({ data }) => {
     if (flow.askToLeave()) {
       setLeaving(data.action);
     }
   });
   // The held leaving goes on once nothing holds the screen: the photo was saved, or dropped. The
-  // hook's `beforeRemove` listener reads `holdsPhoto` through a ref that React updates in an
+  // hook's `beforeRemove` listener reads `holdsLeave` through a ref that React updates in an
   // insertion effect, before any effect of the same render runs, so the listener lets this
   // dispatch through. The hook's own effect, which tells the navigator that the screen no longer
   // prevents removal, is what lifts the native hold (the native stack's `preventNativeDismiss`).
   useEffect(() => {
-    if (leaving !== null && !holdsPhoto) {
+    if (leaving !== null && !holdsLeave) {
       setLeaving(null);
       navigation.dispatch(leaving);
     }
-  }, [leaving, holdsPhoto, navigation]);
+  }, [leaving, holdsLeave, navigation]);
   // "Analyse" completed the batch: on to the find (a new one), or back to where photos were added.
   const { analysed } = view;
   useEffect(() => {
@@ -99,19 +135,39 @@ export default function NewFindScreen() {
   }, [analysed, target]);
 
   const canChoose = view.phase === "ready" || view.phase === "saved";
+  const several = view.kept > 1;
+  const unsaved = view.save?.on === false;
+  // A held photo can be removed while the screen is ready and no question is open.
+  const canRemove = view.phase === "ready" && view.confirming === null;
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       {target.kind === "add" && <Stack.Screen options={{ title: t.addTitle }} />}
       {view.phase === "starting" && <Text style={styles.text}>{t.asking}</Text>}
-      {locationRefused && <Text style={styles.text}>{t.locationDenied}</Text>}
-      {(view.phase === "saving" || view.phase === "busy" || view.phase === "starting") && (
-        <ActivityIndicator testID="new-find-busy" />
+      {view.save !== null && (
+        <>
+          <View style={styles.row}>
+            <Switch
+              accessibilityLabel={t.save}
+              value={view.save.on}
+              disabled={!view.save.changeable}
+              onValueChange={(on) => void flow.setSave(on)}
+            />
+            <Text style={styles.text}>{t.save}</Text>
+          </View>
+          <Text style={styles.note}>{t.saveHint}</Text>
+        </>
       )}
+      {locationRefused && <Text style={styles.text}>{t.locationDenied}</Text>}
+      {(view.phase === "saving" ||
+        view.phase === "busy" ||
+        view.phase === "starting" ||
+        view.phase === "analysing") && <ActivityIndicator testID="new-find-busy" />}
       {view.phase === "saving" && <Text style={styles.text}>{t.saving}</Text>}
+      {view.phase === "analysing" && <Text style={styles.text}>{t.analysing}</Text>}
       {view.message !== null && (
         <Text accessibilityLiveRegion="polite" style={styles.text}>
-          {t[view.message]}
+          {view.message === "saveFailed" && several ? t.savePhotosFailed : t[view.message]}
         </Text>
       )}
       {view.phase === "saved" && (
@@ -119,17 +175,51 @@ export default function NewFindScreen() {
           {t.saved}
         </Text>
       )}
-      {view.photoCount > 0 && (
-        <Text style={styles.text}>
-          {fillIn(t.photoCount, {
-            count: String(view.photoCount),
-            max: String(config.maxPhotosPerFind),
+      {view.held > 0 ? (
+        <>
+          <Text style={styles.text}>
+            {fillIn(t.heldCount, {
+              count: String(view.held),
+              max: String(config.maxPhotosPerFind),
+            })}
+          </Text>
+          {view.heldPhotos.map((uri, index) => {
+            const values = { number: String(index + 1), count: String(view.held) };
+            return (
+              <View key={uri} style={styles.section}>
+                <Image
+                  source={{ uri }}
+                  accessibilityLabel={fillIn(t.heldPhoto, values)}
+                  resizeMode="contain"
+                  style={styles.photo}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canRemove}
+                  onPress={() => flow.askToRemove(index + 1)}
+                  style={[styles.button, !canRemove && styles.disabled]}
+                >
+                  <Text style={styles.buttonText}>{fillIn(strings.find.removePhoto, values)}</Text>
+                </Pressable>
+              </View>
+            );
           })}
-        </Text>
+        </>
+      ) : (
+        view.photoCount > 0 && (
+          <Text style={styles.text}>
+            {fillIn(t.photoCount, {
+              count: String(view.photoCount),
+              max: String(config.maxPhotosPerFind),
+            })}
+          </Text>
+        )
       )}
       {view.confirming !== null ? (
         <Question
           question={view.confirming}
+          removing={view.removing}
+          several={several}
           strings={strings}
           onYes={() => flow.discardPending()}
           onNo={() => {
@@ -138,8 +228,8 @@ export default function NewFindScreen() {
           }}
         />
       ) : view.canRetrySave ? (
-        // The photo whose save failed is kept until it is saved or discarded (SPEC 3.1: a find
-        // is never lost), so no new photo is offered meanwhile.
+        // The photos whose save failed are kept until they are saved or discarded (SPEC 3.1: a
+        // find is never lost), so no new photo is offered meanwhile.
         <>
           <Pressable
             accessibilityRole="button"
@@ -159,7 +249,7 @@ export default function NewFindScreen() {
             onPress={() => flow.askToDiscard()}
             style={[styles.button, !canChoose && styles.disabled]}
           >
-            <Text style={styles.buttonText}>{t.discardPhoto}</Text>
+            <Text style={styles.buttonText}>{several ? t.discardPhotos : t.discardPhoto}</Text>
           </Pressable>
         </>
       ) : (
@@ -185,9 +275,11 @@ export default function NewFindScreen() {
             </>
           ) : (
             view.phase !== "starting" &&
-            view.message !== "findUnavailable" && <Text style={styles.text}>{t.maxReached}</Text>
+            view.message !== "findUnavailable" && (
+              <Text style={styles.text}>{unsaved ? t.heldMaxReached : t.maxReached}</Text>
+            )
           )}
-          {view.batchOpen && (
+          {(view.batchOpen || view.held > 0) && (
             <Pressable
               accessibilityRole="button"
               disabled={!canChoose}
@@ -200,29 +292,67 @@ export default function NewFindScreen() {
           )}
         </>
       )}
+      {view.outcome?.kind === "answer" && (
+        // An unsaved photo lookup's answer is from its photos: SPEC 3.5's disclaimer, no
+        // self-check (SPEC 3.9).
+        <AnswerView
+          answer={view.outcome.answer}
+          selfCheck={null}
+          subject="photo"
+          language={language}
+          strings={strings}
+        />
+      )}
+      {view.outcome?.kind === "notice" && (
+        <View testID="lookup-notice" style={styles.section}>
+          <NoticeView
+            notice={view.outcome.notice}
+            subject="photo"
+            strings={strings}
+            formatTime={formatTime}
+          />
+        </View>
+      )}
+      {view.outcome?.kind === "error" && (
+        <Text accessibilityLiveRegion="polite" style={styles.text}>
+          {t.analysisError}
+        </Text>
+      )}
+      {view.offerSave && (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void flow.turnSaveOn()}
+          style={styles.button}
+        >
+          <Text style={styles.buttonText}>{t.turnSaveOn}</Text>
+        </Pressable>
+      )}
       {(locationRefused || view.message === "cameraBlocked") && (
         <Pressable accessibilityRole="button" onPress={openSettings} style={styles.button}>
           <Text style={styles.buttonText}>{t.openSettings}</Text>
         </Pressable>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 type QuestionProps = {
-  readonly question: "discard" | "leave";
+  readonly question: NonNullable<NewFindView["confirming"]>;
+  /** The number of the held photo a "removeHeld" question is about. */
+  readonly removing: number | null;
+  /** Whether several photos are kept, so the question speaks of the photos. */
+  readonly several: boolean;
   readonly strings: Strings;
   readonly onYes: () => void;
   readonly onNo: () => void;
 };
 
-/** The question asked on the screen before a kept photo is dropped, with its two answers. */
-function Question({ question, strings, onYes, onNo }: QuestionProps) {
-  const t = strings.newFind;
-  const [text, yes, no] =
-    question === "discard"
-      ? [t.discardConfirm, t.discardYes, t.discardCancel]
-      : [t.leaveConfirm, t.leaveYes, t.leaveCancel];
+/**
+ * The question asked on the screen before kept photos, an unsaved lookup, or one of its photos
+ * (with the Find screen's answers, Clead's decision on #61) are dropped.
+ */
+function Question({ question, removing, several, strings, onYes, onNo }: QuestionProps) {
+  const [text, yes, no] = questionTexts(question, removing, several, strings);
   return (
     <>
       <Text accessibilityLiveRegion="polite" style={styles.text}>
@@ -238,18 +368,59 @@ function Question({ question, strings, onYes, onNo }: QuestionProps) {
   );
 }
 
+/** A question's text, and its two answers. */
+function questionTexts(
+  question: QuestionProps["question"],
+  removing: number | null,
+  several: boolean,
+  strings: Strings,
+): [string, string, string] {
+  const t = strings.newFind;
+  switch (question) {
+    case "discard":
+      return several
+        ? [t.discardPhotosConfirm, t.discardYes, t.discardPhotosCancel]
+        : [t.discardConfirm, t.discardYes, t.discardCancel];
+    case "leave":
+      return [several ? t.leavePhotosConfirm : t.leaveConfirm, t.leaveYes, t.leaveCancel];
+    case "leaveLookup":
+      return [t.leaveLookupConfirm, t.leaveYes, t.leaveCancel];
+    case "removeHeld":
+      return [
+        fillIn(t.removeHeldConfirm, { number: String(removing) }),
+        strings.find.removePhotoYes,
+        strings.find.removePhotoCancel,
+      ];
+  }
+}
+
 function openSettings(): void {
   Linking.openSettings().catch(() => undefined);
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 16,
     gap: 16,
   },
+  section: {
+    gap: 8,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   text: {
     fontSize: 16,
+  },
+  photo: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+  },
+  note: {
+    fontSize: 14,
   },
   button: {
     alignItems: "center",

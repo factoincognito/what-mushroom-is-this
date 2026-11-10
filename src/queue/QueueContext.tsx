@@ -38,6 +38,8 @@ export interface QueueContextValue {
   readonly analyseFind: (id: number) => Promise<AnalyseFindResult>;
   /** Analyses an unsaved text lookup at once, from its screen (docs/SPEC.md 3.9). */
   readonly analyseLookup: (text: string) => Promise<AnalyseLookupResult>;
+  /** Analyses an unsaved photo lookup at once, from its screen (docs/SPEC.md 3.9, PBI-2.13). */
+  readonly analysePhotoLookup: (photoUris: readonly string[]) => Promise<AnalyseLookupResult>;
 }
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -138,6 +140,11 @@ export function QueueProvider({
         }),
       analyseLookup: (text) =>
         queue.analyseLookup(text).catch((error: unknown) => {
+          queue.stopForInternalError();
+          throw error;
+        }),
+      analysePhotoLookup: (photoUris) =>
+        queue.analysePhotoLookup(photoUris).catch((error: unknown) => {
           queue.stopForInternalError();
           throw error;
         }),
