@@ -161,7 +161,9 @@ describe("the About view", () => {
     expect(await screen.findByText(t.creditsHeading)).toBeOnTheScreen();
     expect(NOTICES.credits.length).toBeGreaterThan(0);
     for (const entry of NOTICES.credits) {
-      expect(within(screen.getByTestId(`credit-${entry.name}`)).getByText(entry.text)).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId(`credit-${entry.name}`)).getByText(entry.text),
+      ).toBeOnTheScreen();
     }
   });
 

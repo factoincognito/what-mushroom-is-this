@@ -34,7 +34,7 @@ type RegionEvent = { readonly nativeEvent?: { readonly bounds?: unknown } } | un
 /**
  * The Library's map (docs/SPEC.md 3.9, The Library, PBI-2.8). When it opens it sets the app's own
  * User-Agent on the map's requests, and finds its opening area (`startOpening`: the phone's
- * position, the newest find with one, or the default area), saying so while it waits; it then
+ * position, the newest find with one that passes the filters, or the default area), saying so while it waits; it then
  * shows OpenFreeMap's tiles through MapLibre, with the library's attribution "(i)" button and its
  * logo, as they are by default. The pins are the finds that pass the Library's filters and lie in
  * the area shown, which follows each zoom and pan as the map reports it. Tapping a pin shows its
@@ -48,8 +48,11 @@ export function LibraryMap({ entries, filters, language, strings }: LibraryMapPr
   const [area, setArea] = useState<MapBounds | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
-  /** The finds when the map opens, for its fallback; a later read does not move the map. */
-  const openedWith = useRef(entries);
+  /**
+   * The finds and filters when the map opens, for its fallback; a later read or filter change
+   * does not move the map.
+   */
+  const openedWith = useRef({ entries, filters });
 
   useEffect(() => {
     setMapUserAgent(TransformRequestManager, appJson.expo);
@@ -57,7 +60,8 @@ export function LibraryMap({ entries, filters, language, strings }: LibraryMapPr
       permission: locationPermission,
       location: deviceLocationSource,
       now: Date.now,
-      entries: openedWith.current,
+      entries: openedWith.current.entries,
+      filters: openedWith.current.filters,
     });
     let live = true;
     void started.area.then((found) => {

@@ -443,6 +443,8 @@ export type Strings = {
     /** The map data credits (docs/SPEC.md 3.9, PBI-2.8): their heading and what they are. */
     readonly mapDataHeading: string;
     readonly mapDataIntro: string;
+    /** The heading of the credits a licence asks for, such as FreeType's (PBI-2.8). */
+    readonly creditsHeading: string;
   };
 };
 
@@ -839,6 +841,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       hideText: "Dölj licenstexten",
       textMissing: "Licenstexten finns inte i appen ännu.",
       disclaimerHeading: "Ätlighet",
+      creditsHeading: "Erkännanden",
       mapDataHeading: "Kartdata",
       mapDataIntro:
         "Kartan hämtar sina kartbilder från OpenFreeMap. Deras källor anges här, som deras licenser kräver.",
@@ -1175,6 +1178,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       hideText: "Hide the licence text",
       textMissing: "The licence text is not in the app yet.",
       disclaimerHeading: "Edibility",
+      creditsHeading: "Credits",
       mapDataHeading: "Map data",
       mapDataIntro:
         "The map loads its tiles from OpenFreeMap. Their sources are credited here, as their licences ask.",
@@ -1524,6 +1528,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       hideText: "Nascondi il testo della licenza",
       textMissing: "Il testo della licenza non è ancora nell'app.",
       disclaimerHeading: "Commestibilità",
+      creditsHeading: "Riconoscimenti",
       mapDataHeading: "Dati della mappa",
       mapDataIntro:
         "La mappa carica le sue tessere da OpenFreeMap. Le loro fonti sono citate qui, come richiedono le loro licenze.",

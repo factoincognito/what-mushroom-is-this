@@ -353,8 +353,9 @@ describe("the licence texts", () => {
   it("leave no library's licence unread (Clead's reads for PBI-2.8)", () => {
     expect(NOTICES.libraries.filter((entry) => /not read/i.test(entry.licence))).toEqual([]);
     const record = readFileSync(join(ROOT, "THIRD-PARTY-NOTICES.md"), "utf8");
+    // The licence itself, without the notes in brackets some rows carry.
     const rows = tableRows("## In the app").filter(([, , licence = ""]) =>
-      /not read/i.test(licence),
+      /^not read$/i.test(licence.replace(/\s*\([^)]*\)/g, "").trim()),
     );
     expect(rows).toEqual([]);
     expect(record).not.toMatch(/\| not read \|/);
@@ -624,7 +625,10 @@ describe("the credits the licences ask for (PBI-2.8)", () => {
       text: "Portions of this software are copyright © The FreeType Project (https://freetype.org). All rights reserved.",
     });
     // The text the FreeType licence suggests, as MapLibre Native's file carries it, with "<year>".
-    const bundled = readFileSync(join(ROOT, "licenses", "maplibre-native", "LICENSES.core.md"), "utf8");
+    const bundled = readFileSync(
+      join(ROOT, "licenses", "maplibre-native", "LICENSES.core.md"),
+      "utf8",
+    );
     expect(bundled).toContain("Portions of this software are copyright © <year> The FreeType");
   });
 

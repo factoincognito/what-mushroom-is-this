@@ -15,9 +15,7 @@ none of its code.
 
 All the libraries below are under permissive licences (Appendix A.3), except
 Google's Play services libraries, a vendor SDK under Google's terms, which the
-Product Office allowed by decision (their section below), and five Maven
-libraries MapLibre React Native builds in, whose licences PBI-2.8 could not read
-(their section below; to be read before the merge). The copyright and
+Product Office allowed by decision (their section below). The copyright and
 licence texts of the npm packages ship inside each package, in `node_modules/`.
 
 Intended use (Appendix A.1, 3): the libraries under "In the app" are built
@@ -150,27 +148,52 @@ builds in one version of each; which one it resolves was not checked), and for R
 `react-android` and Kotlin's `kotlin-stdlib`, which come with the app. On iOS, the MapLibre
 Native that its `MapLibreReactNative.podspec` names, added through Swift Package Manager.
 
-Read on 2026-11-10. No Gradle cache was at hand. Fetching the POMs and licence pages needed an
-approval that nobody answered, and the GitHub API refused the MapLibre repositories for this
-session; so none of these libraries' own POMs or licence files was read in PBI-2.8. The
-licence of MapLibre Native, Android and iOS, is the one PBI-2.1's findings give for its
-repository (product office, `library/designs/what-mushroom-is-this/phase-2-checks.md`, section
-1: BSD-2-Clause), not read again here; its licence text, which BSD-2-Clause asks to reach the
-user, is not in the app yet. The licences marked "not read" are to be read, and the About view's
-entries completed, before this change merges (policy rule 1, the merge gate). The vulkan flavour of
-`android-sdk` 13.6.1, read for PBI-2.1, declares `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`
-and `ACCESS_WIFI_STATE`; the app keeps blocking `ACCESS_WIFI_STATE` (`app.json`, PBI-1.10).
+Read on 2026-11-10 by Clead (session https://claude.ai/code/session_01RZ8pEJjkkFM9VDxAs7KA6f),
+as the table says for each; no Gradle cache was at hand, and PBI-2.8's own Crog agent could not
+fetch them. All are permissive (Appendix A.3).
+
+**MapLibre Native**, Android and iOS: its `LICENSE.md` at the tags `android-v13.6.1` (commit
+c7506d6) and `ios-v6.31.0` (commit 01791ad) of https://github.com/maplibre/maplibre-native is
+BSD-2-Clause, naming MapLibre contributors, MapTiler.com and Mapbox. The libraries it builds in
+are licensed as its `LICENSES.core.md` at the same tags says, the same file at both, 1,347 lines:
+ISC, BSD-2-Clause and BSD-3-Clause, the Boost Software License 1.0, MIT and "Old MIT", Apache-2.0
+(metal-cpp, FastPFOR), curl's licence (parsedate) and the FreeType Project licence, among others.
+Copies of both files at `android-v13.6.1` are in `licenses/maplibre-native/`; the About view
+gives both texts for the two MapLibre Native rows below (`src/about/maplibreNativeTexts.ts`,
+checked against those copies). BSD-2-Clause, and the BSD and FreeType terms in
+`LICENSES.core.md`, ask for their notices in the documentation; the About view carries them.
+Whether the iOS tag's `LICENSE.md` is byte for byte the Android tag's was not checked here; Clead
+read both as BSD-2-Clause with the same holders.
+
+- **FreeType** asks for a credit in the documentation of a binary, and suggests the text
+  "Portions of this software are copyright © <year> The FreeType Project (https://freetype.org).
+  All rights reserved.", the year to be that of the FreeType version used. `LICENSES.core.md`
+  does not give that year: it gives only the licence's own date (2006-Jan-27) and its copyright
+  lines (1996-2002, 2006, and 1996-2000), not the version MapLibre Native builds in. So the
+  About view gives the credit without a year (its "Credits", below); the version's year is for
+  the release gate (PBI-1.24).
+- **RapidJSON**'s section includes the JSON License ("The Software shall be used for Good, not
+  Evil"). RapidJSON's own text there says that only its `bin/jsonchecker/` directory is under
+  that licence, and that excluding it suffices. MapLibre Native's `vendor/rapidjson.cmake` at
+  `android-v13.6.1` uses only `rapidjson/include`, as an INTERFACE include directory, so the
+  JSON-licensed code is not built in (read by Clead, 2026-11-10). Not an escalation; RapidJSON
+  itself is MIT.
+
+The vulkan flavour of `android-sdk` 13.6.1, read for PBI-2.1, declares `ACCESS_FINE_LOCATION`,
+`ACCESS_COARSE_LOCATION` and `ACCESS_WIFI_STATE`; the app keeps blocking `ACCESS_WIFI_STATE`
+(`app.json`, PBI-1.10). The NOTICE duties of the Apache-2.0 libraries, and the texts of the two
+MapLibre plugins, are PBI-1.24's, as for the earlier items.
 
 | Library | Version | Licence | Mode | Source | Where the licence was read |
 |---|---|---|---|---|---|
-| `org.maplibre.gl:android-sdk-opengl` (Android, MapLibre Native) | 13.6.1 | BSD-2-Clause | depend | https://github.com/maplibre/maplibre-native | not this artefact's POM: MapLibre Native's repository, as PBI-2.1's findings give it; not read again here |
-| `org.maplibre.gl:android-plugin-annotation-v9` (Android) | 3.0.2 | not read (PBI-2.8: the POM could not be fetched) | depend | https://central.sonatype.com/artifact/org.maplibre.gl/android-plugin-annotation-v9 | not read |
-| `org.maplibre.gl:android-plugin-scalebar-v9` (Android) | 3.0.2 | not read (PBI-2.8: the POM could not be fetched) | depend | https://central.sonatype.com/artifact/org.maplibre.gl/android-plugin-scalebar-v9 | not read |
-| `org.maplibre.gl:android-sdk-turf` (Android) | 6.0.1 | not read (PBI-2.8: the POM could not be fetched) | depend | https://central.sonatype.com/artifact/org.maplibre.gl/android-sdk-turf | not read |
-| `com.squareup.okhttp3:okhttp` (Android) | 4.12.0 | not read (PBI-2.8: the POM could not be fetched) | depend | https://central.sonatype.com/artifact/com.squareup.okhttp3/okhttp | not read |
-| `com.squareup.okhttp3:okhttp-urlconnection` (Android) | 4.12.0 | not read (PBI-2.8: the POM could not be fetched) | depend | https://central.sonatype.com/artifact/com.squareup.okhttp3/okhttp-urlconnection | not read |
+| `org.maplibre.gl:android-sdk-opengl` (Android, MapLibre Native) | 13.6.1 | BSD-2-Clause | depend | https://github.com/maplibre/maplibre-native | its `LICENSE.md` and `LICENSES.core.md` at the tag `android-v13.6.1` (commit c7506d6), read by Clead, 2026-11-10; copies in `licenses/maplibre-native/` |
+| `org.maplibre.gl:android-plugin-annotation-v9` (Android) | 3.0.2 | BSD-2-Clause (the POM names "BSD", with the BSD-2-Clause licence's address) | depend | https://central.sonatype.com/artifact/org.maplibre.gl/android-plugin-annotation-v9 | its 3.0.2 POM, on its artifact page on central.sonatype.com, read by Clead, 2026-11-10; its licence text is not in the app yet (PBI-1.24) |
+| `org.maplibre.gl:android-plugin-scalebar-v9` (Android) | 3.0.2 | BSD-2-Clause (the POM names "BSD", with the BSD-2-Clause licence's address) | depend | https://central.sonatype.com/artifact/org.maplibre.gl/android-plugin-scalebar-v9 | its 3.0.2 POM, on its artifact page on central.sonatype.com, read by Clead, 2026-11-10; its licence text is not in the app yet (PBI-1.24) |
+| `org.maplibre.gl:android-sdk-turf` (Android) | 6.0.1 | Apache-2.0 | depend | https://central.sonatype.com/artifact/org.maplibre.gl/android-sdk-turf | its 6.0.1 POM on central.sonatype.com, read by Clead, 2026-11-10 |
+| `com.squareup.okhttp3:okhttp` (Android) | 4.12.0 | Apache-2.0 | depend | https://central.sonatype.com/artifact/com.squareup.okhttp3/okhttp | not this version's POM: mvnrepository's listing of the managed dependencies of 4.12.0, and OkHttp's README, read by Clead, 2026-11-10 |
+| `com.squareup.okhttp3:okhttp-urlconnection` (Android) | 4.12.0 | Apache-2.0 | depend | https://central.sonatype.com/artifact/com.squareup.okhttp3/okhttp-urlconnection | not this version's POM: as for `okhttp` |
 | `androidx.vectordrawable:vectordrawable` (Android) | 1.2.0 | Apache-2.0 | depend | https://android.googlesource.com/platform/frameworks/support/ | not this version's POM: the AndroidX repository it is built from, as for `activity-ktx` |
-| `maplibre-gl-native-distribution` (iOS, MapLibre Native, the Swift package `MapLibre`) | 6.31.0 | BSD-2-Clause | depend | https://github.com/maplibre/maplibre-gl-native-distribution | not this package's licence file: MapLibre Native's repository, as PBI-2.1's findings give it for iOS 6.31.0; not read again here |
+| `maplibre-gl-native-distribution` (iOS, MapLibre Native, the Swift package `MapLibre`) | 6.31.0 | BSD-2-Clause | depend | https://github.com/maplibre/maplibre-gl-native-distribution | MapLibre Native's `LICENSE.md` and `LICENSES.core.md` at the tag `ios-v6.31.0` (commit 01791ad) of https://github.com/maplibre/maplibre-native, read by Clead, 2026-11-10; the app carries the copies of `android-v13.6.1` |
 
 ## Map data
 
@@ -193,6 +216,15 @@ fetch needed an approval nobody answered).
 | `OpenStreetMap` | © OpenStreetMap contributors | Open Database License (ODbL) 1.0 | https://www.openstreetmap.org/copyright |
 | `OpenMapTiles` | © OpenMapTiles | design CC BY 4.0, code BSD-3-Clause | https://github.com/openmaptiles/openmaptiles |
 | `OpenFreeMap Liberty` | OpenFreeMap; the Liberty style, a fork of OSM Liberty, itself a fork of OSM Bright | design CC BY 4.0, code BSD-3-Clause | https://github.com/hyperknot/openfreemap/blob/main/LICENSE.md |
+
+## Credits
+
+Credits a licence asks to reach the user in the documentation; the About view shows them. FreeType's
+is the text its licence suggests, without the year, which `LICENSES.core.md` does not give (above).
+
+| Name | Credit |
+|---|---|
+| `FreeType` | Portions of this software are copyright © The FreeType Project (https://freetype.org). All rights reserved. |
 
 ## Development tools
 

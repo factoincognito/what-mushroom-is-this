@@ -1,7 +1,7 @@
 {
   "ios": {
     "NSCameraUsageDescription": "Kameran tar fotot av en svamp till din fyndlogg.",
-    "NSLocationWhenInUseUsageDescription": "Din plats sparas med varje nytt fynd, så att loggen visar var du hittade det. Den skickas inte någonstans.",
+    "NSLocationWhenInUseUsageDescription": "Din plats sparas med varje nytt fynd, så att loggen visar var du hittade det, och kartan öppnas där du är. Kartans leverantör ser det område som kartan visar.",
     "NSPhotoLibraryUsageDescription": "Ett foto som du väljer i ditt bildbibliotek sparas som ett fynd i din logg."
   }
 }

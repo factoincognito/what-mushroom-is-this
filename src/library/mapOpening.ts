@@ -2,8 +2,8 @@
  * Where the Library's map opens (docs/SPEC.md 3.9, The Library). When the map opens, the app asks
  * for the location permission if it has not yet asked, and then uses a position fix if one comes
  * within the wait limit, otherwise the phone's last known position when it is no older than the
- * age limit. Without either, the map opens on the newest find with a position, at the same scale;
- * with none, on the default area. The area around a position is a square whose side spans the
+ * age limit. Without either, the map opens on the newest find with a position among those that
+ * pass the Library's filters, at the same scale; with none, on the default area (Clead, PBI-2.8). The area around a position is a square whose side spans the
  * opening span, so that the view's shorter side spans it. The limits, the span and the default
  * area are configuration. It renders nothing.
  */
@@ -16,6 +16,7 @@ import {
   startPositionTracker,
 } from "../position/positionTracker";
 import type { ListedFind } from "../store/find";
+import { applyFilters, type LibraryFilters } from "./filters";
 import { type MapBounds, squareAround } from "./mapArea";
 import { newestWithPosition } from "./mapPins";
 
@@ -47,6 +48,8 @@ export interface OpeningDeps {
   readonly now: () => number;
   /** The Library's finds, newest first, as the store lists them. */
   readonly entries: readonly ListedFind[];
+  /** The Library's filters: the fallback takes the newest find that passes them. */
+  readonly filters: LibraryFilters;
 }
 
 export interface Opening {
@@ -76,7 +79,9 @@ export function startOpening(
   let tracker: PositionTracker | null = null;
 
   const withoutPosition = (): OpeningArea => {
-    const newest = newestWithPosition(deps.entries);
+    // Among the finds that pass the filters, so that the map opens where it shows a pin (Clead,
+    // PBI-2.8); with none, the default area.
+    const newest = newestWithPosition(applyFilters(deps.entries, deps.filters));
     return newest === null
       ? { from: "default", bounds: limits.defaultArea }
       : { from: "find", bounds: squareAround(newest, limits.sideM) };

@@ -319,42 +319,42 @@
       "version": "13.6.1",
       "licence": "BSD-2-Clause",
       "source": "https://github.com/maplibre/maplibre-native",
-      "textId": null
+      "textId": "maplibre-native"
     },
     {
       "name": "org.maplibre.gl:android-plugin-annotation-v9",
       "version": "3.0.2",
-      "licence": "not read",
+      "licence": "BSD-2-Clause",
       "source": "https://central.sonatype.com/artifact/org.maplibre.gl/android-plugin-annotation-v9",
       "textId": null
     },
     {
       "name": "org.maplibre.gl:android-plugin-scalebar-v9",
       "version": "3.0.2",
-      "licence": "not read",
+      "licence": "BSD-2-Clause",
       "source": "https://central.sonatype.com/artifact/org.maplibre.gl/android-plugin-scalebar-v9",
       "textId": null
     },
     {
       "name": "org.maplibre.gl:android-sdk-turf",
       "version": "6.0.1",
-      "licence": "not read",
+      "licence": "Apache-2.0",
       "source": "https://central.sonatype.com/artifact/org.maplibre.gl/android-sdk-turf",
-      "textId": null
+      "textId": "Apache-2.0"
     },
     {
       "name": "com.squareup.okhttp3:okhttp",
       "version": "4.12.0",
-      "licence": "not read",
+      "licence": "Apache-2.0",
       "source": "https://central.sonatype.com/artifact/com.squareup.okhttp3/okhttp",
-      "textId": null
+      "textId": "Apache-2.0"
     },
     {
       "name": "com.squareup.okhttp3:okhttp-urlconnection",
       "version": "4.12.0",
-      "licence": "not read",
+      "licence": "Apache-2.0",
       "source": "https://central.sonatype.com/artifact/com.squareup.okhttp3/okhttp-urlconnection",
-      "textId": null
+      "textId": "Apache-2.0"
     },
     {
       "name": "androidx.vectordrawable:vectordrawable",
@@ -368,7 +368,13 @@
       "version": "6.31.0",
       "licence": "BSD-2-Clause",
       "source": "https://github.com/maplibre/maplibre-gl-native-distribution",
-      "textId": null
+      "textId": "maplibre-native"
+    }
+  ],
+  "credits": [
+    {
+      "name": "FreeType",
+      "text": "Portions of this software are copyright © The FreeType Project (https://freetype.org). All rights reserved."
     }
   ],
   "mapData": [

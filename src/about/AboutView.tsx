@@ -58,6 +58,17 @@ export function AboutView({ notices }: AboutViewProps) {
 
       <View style={styles.section}>
         <Text accessibilityRole="header" style={styles.heading}>
+          {t.creditsHeading}
+        </Text>
+        {notices.credits.map((entry) => (
+          <View key={entry.name} style={styles.library} testID={`credit-${entry.name}`}>
+            <Text style={styles.text}>{entry.text}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.section}>
+        <Text accessibilityRole="header" style={styles.heading}>
           {t.librariesHeading}
         </Text>
         <Text style={styles.text}>{t.librariesIntro}</Text>

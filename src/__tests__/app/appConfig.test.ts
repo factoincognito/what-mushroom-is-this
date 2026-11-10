@@ -193,7 +193,11 @@ describe("the iOS permission texts in the app's three languages (PBI-1.20)", () 
   const LOCATION_WORDS: Record<string, { map: RegExp; provider: RegExp; nowhere: RegExp }> = {
     en: { map: /\bmap\b/i, provider: /\bprovider\b/i, nowhere: /not sent anywhere/i },
     sv: { map: /\bkart/i, provider: /leverantör/i, nowhere: /skickas inte någonstans/i },
-    it: { map: /\bmappa\b/i, provider: /fornitore/i, nowhere: /non viene inviata da nessuna parte/i },
+    it: {
+      map: /\bmappa\b/i,
+      provider: /fornitore/i,
+      nowhere: /non viene inviata da nessuna parte/i,
+    },
   };
 
   it.each(["sv", "en", "it"])(

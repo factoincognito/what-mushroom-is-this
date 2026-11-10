@@ -1,3 +1,4 @@
+import { MAPLIBRE_NATIVE_TEXT } from "./maplibreNativeTexts";
 import data from "./notices.json";
 
 /**
@@ -24,6 +25,16 @@ export type Notices = {
    * button, and About lists them too.
    */
   readonly mapData: readonly MapDataCredit[];
+  /**
+   * Credits a licence asks to reach the user in the documentation (PBI-2.8), such as FreeType's,
+   * which MapLibre Native builds in; `THIRD-PARTY-NOTICES.md` records them under "Credits".
+   */
+  readonly credits: readonly Credit[];
+};
+
+export type Credit = {
+  readonly name: string;
+  readonly text: string;
 };
 
 export type MapDataCredit = {
@@ -138,9 +149,28 @@ function mapDataOf(value: unknown): MapDataCredit[] {
   return credits;
 }
 
+function creditsOf(value: unknown): Credit[] {
+  if (!Array.isArray(value)) {
+    throw new NoticesError("credits is not a list");
+  }
+  const credits = value.map((entry: unknown, index) => {
+    const where = `credits[${index}]`;
+    const credit = fields(entry, where, ["name", "text"]);
+    return { name: text(credit.name, `${where}.name`), text: text(credit.text, `${where}.text`) };
+  });
+  const names = new Set<string>();
+  for (const credit of credits) {
+    if (names.has(credit.name)) {
+      throw new NoticesError(`two credits are named ${credit.name}`);
+    }
+    names.add(credit.name);
+  }
+  return credits;
+}
+
 /** Checks the data file's content and gives it typed; anything else throws `NoticesError`. */
 export function parseNotices(value: unknown): Notices {
-  const top = fields(value, "the file", ["app", "libraries", "texts", "mapData"]);
+  const top = fields(value, "the file", ["app", "libraries", "texts", "mapData", "credits"]);
   const texts = textsOf(top.texts);
 
   const appFields = fields(top.app, "app", ["licence", "url", "requiredNotice", "textId"]);
@@ -172,8 +202,25 @@ export function parseNotices(value: unknown): Notices {
       throw new NoticesError(`texts.${id} is not used`);
     }
   }
-  return { app, libraries, texts, mapData: mapDataOf(top.mapData) };
+  return {
+    app,
+    libraries,
+    texts,
+    mapData: mapDataOf(top.mapData),
+    credits: creditsOf(top.credits),
+  };
 }
 
+/**
+ * The licence texts too long to keep in `notices.json`, by ID: MapLibre Native's, with the
+ * licences of the libraries it builds in (PBI-2.8). They join the file's texts.
+ */
+export const LONG_TEXTS: { readonly [id: string]: string } = Object.freeze({
+  "maplibre-native": MAPLIBRE_NATIVE_TEXT,
+});
+
 /** The app's notices, checked when the module loads. */
-export const NOTICES: Notices = parseNotices(data);
+export const NOTICES: Notices = parseNotices({
+  ...data,
+  texts: { ...data.texts, ...LONG_TEXTS },
+});
