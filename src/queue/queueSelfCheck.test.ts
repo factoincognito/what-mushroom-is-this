@@ -505,6 +505,40 @@ describe("waiting checks in the queue run (docs/SPEC.md 3.9)", () => {
     expect(picks.mock.calls.length).toBeLessThan(6);
   });
 
+  it("does not run the skipped check when its picture comes only after the photos' analysis failed: the run fetches the picture, and sends no check then or in the next run (review of #75, fix 1)", async () => {
+    const t = setup();
+    const id = await textFind(t);
+    // The text answer's picture waits, so the check has no picture yet.
+    t.pictures.push({ kind: "waits", cause: "network", retryAtMs: null });
+    await t.queue.trigger();
+    await t.log.addPhoto(id, "file:///cache/a.jpg");
+    await t.log.completeBatch(id);
+    // The photos' analysis fails, and they are not yet analysed.
+    t.replies.push({
+      ok: false,
+      error: { kind: "find-failed", reason: "request-wrong", status: 400, queue: "goes-on" },
+    });
+    const picks = boundedPicks(t);
+    await t.queue.trigger();
+    // The store's pick takes the find again for its waiting picture, which is fetched.
+    expect(t.events.filter((event) => !event.startsWith("prepare"))).toEqual([
+      "analyse text",
+      "picture Cantharellus cibarius",
+      "analyse photos",
+      "picture Cantharellus cibarius",
+    ]);
+    expect(await t.log.getStored(id)).toMatchObject({
+      addedPhotos: "not-analysed",
+      analysis: { answer: MATCH },
+      picture: { uri: PICTURE.uri },
+      selfCheck: { state: "waiting" },
+    });
+    await t.queue.trigger();
+    expect(t.events).not.toContain("check");
+    expect((await t.log.getStored(id))?.selfCheck).toEqual({ state: "waiting" });
+    expect(picks.mock.calls.length).toBeLessThan(8);
+  });
+
   it("ends the run, and does not loop, when the store keeps giving a find whose check it would not store", async () => {
     const t = setup();
     checkWaits(t, 1);

@@ -58,7 +58,8 @@ function setup(options: { saveAtStart?: boolean; permission?: unknown; lastKnown
   const pictureNames: string[] = [];
   const removed: string[] = [];
   let pictureHold: Promise<void> | null = null;
-  const checkReplies: (CheckLookupResult | Error)[] = [];
+  /** A reply, an error to throw, or a reply the check waits for (review of #75, fix 2). */
+  const checkReplies: (CheckLookupResult | Error | Promise<CheckLookupResult>)[] = [];
   const checks: [string, SpeciesNames][] = [];
   let checkHold: Promise<void> | null = null;
 
@@ -110,7 +111,7 @@ function setup(options: { saveAtStart?: boolean; permission?: unknown; lastKnown
         if (reply instanceof Error) {
           throw reply;
         }
-        return reply;
+        return reply instanceof Promise ? await reply : reply;
       },
       readSaveSetting: async () => options.saveAtStart ?? false,
       location: {
@@ -868,6 +869,40 @@ describe("an unsaved lookup's self-check (docs/SPEC.md 3.9; PBI-2.10)", () => {
     releaseLeft();
     await pending;
     expect(left.view()).toBe(before);
+  });
+
+  it("drops the check of an earlier answer that ends after Analyse again brought a new answer and its check (review of #75, fix 2)", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(SHORT);
+    // Answer A's check waits until it is let go; answer B's ends at once.
+    let releaseA: (reply: CheckLookupResult) => void = () => undefined;
+    t.checkReplies.push(
+      new Promise<CheckLookupResult>((resolve) => {
+        releaseA = resolve;
+      }),
+      { ok: true, outcome: { state: "disagreed", names: PORCINI_NAMES } },
+    );
+    const first = t.flow.analyse();
+    await flush();
+    expect(t.view().outcome).toMatchObject({ check: { state: "checking" } });
+    const pictureB = { ...PICTURE, uri: "file:///cache/picture-5.jpg" };
+    t.pictures.push({ kind: "picture", picture: pictureB });
+    await t.flow.analyse();
+    const disagreed = { state: "done", outcome: { state: "disagreed", names: PORCINI_NAMES } };
+    expect(t.view().outcome).toMatchObject({
+      picture: { state: "shown", picture: pictureB },
+      check: disagreed,
+    });
+    releaseA({ ok: true, outcome: { state: "agreed" } });
+    await first;
+    await flush();
+    expect(t.checks.map(([uri]) => uri)).toEqual([PICTURE.uri, pictureB.uri]);
+    expect(t.view().outcome).toMatchObject({
+      picture: { state: "shown", picture: pictureB },
+      check: disagreed,
+    });
+    expect(lookupSelfCheck(t.view().outcome)).toEqual(disagreed.outcome);
   });
 
   it("a new answer brings a new picture and a new check", async () => {
