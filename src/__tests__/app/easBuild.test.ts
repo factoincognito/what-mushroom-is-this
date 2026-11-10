@@ -7,20 +7,33 @@
  * `npx expo config --type introspect` gives it, by running the real config over this project's
  * app.json, as backupRules.test.ts does.
  */
-import { fs, PROJECT_ROOT, path } from "../../testing/projectFiles";
+import { APPLICATION_ID } from "../../testing/appIdentity";
+import { appSourceFiles, fs, PROJECT_ROOT, path } from "../../testing/projectFiles";
 
 const { readFileSync } = fs;
 const { join } = path;
 
 /**
- * The Android application ID of this app, independent of its name: Clead's decision, left to
- * Clead by Adam, recorded in the product office on 2026-11-09 (#40).
+ * The Expo project the builds belong to, `factoincognito/what-mushroom-is-this` (docs/SPEC.md
+ * Known unknown 5): its owner since #39, and its project ID since #42, of the project Adam
+ * recreated on 2026-11-09 (PBI-1.10). `eas build` takes the project from these two.
  */
-const APPLICATION_ID = "com.factoincognito.mushroomlog";
+const EXPO_OWNER = "factoincognito";
+const EXPO_PROJECT_ID = "3b682970-bc59-4ead-8128-9055c1112e2c";
 
 const WIFI_STATE = "android.permission.ACCESS_WIFI_STATE";
 /** "Display over other apps": the app draws over no other app (Clead's decision on #40). */
 const ALERT_WINDOW = "android.permission.SYSTEM_ALERT_WINDOW";
+/**
+ * Reading shared storage, which expo-image-picker's and expo-file-system's own manifests declare
+ * up to Android 12 (`maxSdkVersion` 32). None of the app's picker calls asks for it or reads the
+ * phone's storage by path; they read what the system picker hands back through its content
+ * address. Only the image picker's media-library permission functions ask for it, and the app
+ * calls neither (PBI-1.29; the source lines are in the PR).
+ */
+const READ_STORAGE = "android.permission.READ_EXTERNAL_STORAGE";
+/** Writing shared storage: the image picker asks for it with the camera below Android 10. */
+const WRITE_STORAGE = "android.permission.WRITE_EXTERNAL_STORAGE";
 
 type Permission = { $: Record<string, string> };
 type Manifest = {
@@ -80,6 +93,16 @@ describe("eas.json: the build profile for the test on Adam's phone (PBI-1.10)", 
   });
 });
 
+describe("app.json: the Expo project the builds belong to (PBI-1.29, note 3 on #42)", () => {
+  it("is owned by factoincognito", () => {
+    expect(appJson.expo.owner).toBe(EXPO_OWNER);
+  });
+
+  it("is linked by the project ID of factoincognito/what-mushroom-is-this, and nothing else is in extra", () => {
+    expect(appJson.expo.extra).toEqual({ eas: { projectId: EXPO_PROJECT_ID } });
+  });
+});
+
 /** Runs the real config over app.json, as `npx expo config --type introspect` does. */
 async function introspectedManifest(): Promise<Manifest> {
   const { getPrebuildConfigAsync } = jest.requireActual("@expo/prebuild-config");
@@ -123,8 +146,33 @@ describe("app.json: the Android build (PBI-1.10)", () => {
     expect(manifest.manifest.$.package).toBe(APPLICATION_ID);
   });
 
-  it("blocks ACCESS_WIFI_STATE (#23) and SYSTEM_ALERT_WINDOW (#40), which the app does not use, and no other permission", () => {
-    expect(appJson.expo.android?.blockedPermissions).toEqual([WIFI_STATE, ALERT_WINDOW]);
+  it("blocks ACCESS_WIFI_STATE (#23), SYSTEM_ALERT_WINDOW (#40) and READ_EXTERNAL_STORAGE (PBI-1.29), which the app does not use, and no other permission", () => {
+    expect(appJson.expo.android?.blockedPermissions).toEqual([
+      WIFI_STATE,
+      ALERT_WINDOW,
+      READ_STORAGE,
+    ]);
+  });
+
+  it("removes READ_EXTERNAL_STORAGE in the manifest, which the image picker's and the file system's own manifests add at the merge (PBI-1.29)", () => {
+    expect(libraryPermissions("expo-image-picker")).toContain(READ_STORAGE);
+    expect(libraryPermissions("expo-file-system")).toContain(READ_STORAGE);
+    expect(removed()).toContain(READ_STORAGE);
+    expect(declared()).not.toContain(READ_STORAGE);
+  });
+
+  it("keeps WRITE_EXTERNAL_STORAGE, which the image picker asks for with the camera below Android 10", () => {
+    expect(libraryPermissions("expo-image-picker")).toContain(WRITE_STORAGE);
+    expect(removed()).not.toContain(WRITE_STORAGE);
+  });
+
+  it("is built from source files that call neither of the image picker's media-library permission functions, the only ones that ask for READ_EXTERNAL_STORAGE (PBI-1.29)", () => {
+    const files = appSourceFiles();
+    expect(files).toContain(join(PROJECT_ROOT, "src", "newFind", "devicePicker.ts"));
+    const calling = files.filter((file) =>
+      /MediaLibraryPermissions/.test(readFileSync(file, "utf8")),
+    );
+    expect(calling).toEqual([]);
   });
 
   it("removes ACCESS_WIFI_STATE in the manifest, which expo-network's own manifest adds at the merge", () => {
@@ -164,9 +212,9 @@ describe("app.json: the Android build (PBI-1.10)", () => {
     expect(declared()).not.toContain(ALERT_WINDOW);
   });
 
-  it("removes only ACCESS_WIFI_STATE, SYSTEM_ALERT_WINDOW and the microphone the image picker's options turn off", () => {
+  it("removes only ACCESS_WIFI_STATE, SYSTEM_ALERT_WINDOW, READ_EXTERNAL_STORAGE and the microphone the image picker's options turn off", () => {
     expect(removed().sort()).toEqual(
-      ["android.permission.RECORD_AUDIO", WIFI_STATE, ALERT_WINDOW].sort(),
+      ["android.permission.RECORD_AUDIO", WIFI_STATE, ALERT_WINDOW, READ_STORAGE].sort(),
     );
   });
 

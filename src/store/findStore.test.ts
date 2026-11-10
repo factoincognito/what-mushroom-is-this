@@ -138,9 +138,12 @@ class FakePhotos implements PhotoFiles {
   }
 }
 
-/** One past the highest readable ID, in the table or AUTOINCREMENT's mark (PBI-1.27). */
+/**
+ * One past the highest readable ID, in the table or AUTOINCREMENT's mark (PBI-1.27); when that is
+ * past 2^53 − 1, one past the highest readable ID below it whose next ID is free (PBI-1.29).
+ */
 const NEXT_ID =
-  "1 + MAX( COALESCE((SELECT MAX(id) FROM finds WHERE id BETWEEN 1 AND 9007199254740991), 0), COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'finds' AND seq BETWEEN 1 AND 9007199254740991), 0))";
+  "COALESCE( (SELECT next FROM (SELECT 1 + MAX( COALESCE((SELECT MAX(id) FROM finds WHERE id BETWEEN 1 AND 9007199254740991), 0), COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'finds' AND seq BETWEEN 1 AND 9007199254740991), 0)) AS next) WHERE next <= 9007199254740991), (SELECT 1 + MAX(below.id) FROM (SELECT 0 AS id UNION ALL SELECT id FROM finds WHERE id BETWEEN 1 AND 9007199254740990) AS below WHERE NOT EXISTS (SELECT 1 FROM finds AS taken WHERE taken.id = below.id + 1)))";
 /** A new photo find: its photo the first, in batch 1, the batch complete or open (PBI-2.2). */
 const insertPhotoFind = (batchOpen: 0 | 1) =>
   `INSERT INTO finds (id, taken_at_ms, utc_offset_min, time_source, latitude, longitude, accuracy_m, position_source, photos, batches, batch_open, state) VALUES (${NEXT_ID}, ?, ?, ?, ?, ?, ?, ?, json_array(json_object('file', ?, 'batch', 1)), 1, ${batchOpen}, 'waiting')`;

@@ -8,10 +8,17 @@
  * name are read as `npx expo config --type introspect` gives them, by running the real config over
  * this project's app.json, as easBuild.test.ts does.
  */
+import type * as TypeScript from "typescript";
+
 import notices from "../../about/notices.json";
 import { LANGUAGES } from "../../i18n/languages";
 import { STRINGS } from "../../i18n/strings";
-import { PROJECT_ROOT } from "../../testing/projectFiles";
+import { APPLICATION_ID } from "../../testing/appIdentity";
+import { appSourceFiles, fs, PROJECT_ROOT } from "../../testing/projectFiles";
+
+const { readFileSync } = fs;
+/** TypeScript's own parser, the project's development dependency. */
+const ts: typeof TypeScript = jest.requireActual("typescript");
 
 /** The app's public name, in every language. */
 const APP_NAME = "Washroom";
@@ -47,6 +54,36 @@ const appJson: { expo: ExpoConfig } = jest.requireActual("../../../app.json");
  */
 function namesOfTheApp(text: string): string[] {
   return [...text.matchAll(OLD_NAME), ...text.matchAll(/washroom/gi)].map((match) => match[0]);
+}
+
+/**
+ * The texts written straight into a source file, as TypeScript's own parser reads it (PBI-1.29,
+ * note 1 on #41): its string literals (a JSX attribute's among them), the fixed parts of its
+ * template literals, and its JSX text, with each run of white space as one space, as a screen
+ * shows it. Names and comments are not texts. A text built by joining parts at run time is not
+ * seen whole: the scan reads each part.
+ */
+function literalTexts(source: string): string[] {
+  const file = ts.createSourceFile(
+    "source.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.TSX,
+  );
+  const texts: string[] = [];
+  const visit = (node: TypeScript.Node): void => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      texts.push(node.text);
+    } else if (ts.isTemplateExpression(node)) {
+      texts.push(node.head.text, ...node.templateSpans.map((span) => span.literal.text));
+    } else if (ts.isJsxText(node)) {
+      texts.push(node.text.replace(/\s+/g, " "));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return texts;
 }
 
 /** Every leaf string of a nested object of texts. */
@@ -109,7 +146,7 @@ describe("app.json: the app's public name", () => {
   it("leaves the slug and the scheme, tied to the EAS project and to links, and the Android application ID as they were", () => {
     expect(appJson.expo.slug).toBe("what-mushroom-is-this");
     expect(appJson.expo.scheme).toBe("what-mushroom-is-this");
-    expect(appJson.expo.android?.package).toBe("com.factoincognito.mushroomlog");
+    expect(appJson.expo.android?.package).toBe(APPLICATION_ID);
   });
 });
 
@@ -160,6 +197,38 @@ describe("the name the phone shows under the app's icon", () => {
   });
 });
 
+describe("literalTexts, the scan of the app's source files the tests below use (PBI-1.29)", () => {
+  it("finds a text written straight into a component, as JSX text, with its line breaks as spaces", () => {
+    const source = `export function About() {
+      return <Text>About What mushroom
+        is this?</Text>;
+    }`;
+    expect(literalTexts(source).flatMap(namesOfTheApp)).toEqual(["What mushroom is this"]);
+  });
+
+  it("finds a text in a JSX attribute, a string literal and the fixed parts of a template literal", () => {
+    const source = `const title = "washroom";
+      export const Header = () => <Stack.Screen options={{ title: 'WASHROOM' }} />;
+      export const credit = (year: number) => \`What mushroom is this \${year}, Washroom\`;
+      export const plain = \`Washroom\`;`;
+    expect(literalTexts(source).flatMap(namesOfTheApp)).toEqual([
+      "washroom",
+      "WASHROOM",
+      "What mushroom is this",
+      "Washroom",
+      "Washroom",
+    ]);
+  });
+
+  it("finds nothing in names, comments and code that are not texts", () => {
+    const source = `// What mushroom is this, washroom
+      /** WASHROOM */
+      const washroom = 1;
+      export function WhatMushroomIsThis() { return washroom; }`;
+    expect(literalTexts(source).flatMap(namesOfTheApp)).toEqual([]);
+  });
+});
+
 describe("the texts the app shows to the user", () => {
   let texts: string[];
 
@@ -170,6 +239,7 @@ describe("the texts the app shows to the user", () => {
       ...LANGUAGES.flatMap((language) => leaves(ios[language])),
       ...pluginTexts(),
       ...leaves(notices.app),
+      ...appSourceFiles().flatMap((file) => literalTexts(readFileSync(file, "utf8"))),
     ];
   });
 
@@ -177,6 +247,12 @@ describe("the texts the app shows to the user", () => {
     expect(texts.length).toBeGreaterThan(100);
     expect(texts).toContain(STRINGS.it.disclaimer);
     expect(texts).toContain(notices.app.requiredNotice);
+  });
+
+  it("are read: the texts written straight into the app's source files, its components among them (PBI-1.29, note 1 on #41)", () => {
+    // A screen's route name in src/app/_layout.tsx, and the gallery's error in devicePicker.ts.
+    expect(texts).toContain("text-lookup");
+    expect(texts).toContain("the picker gave no photo");
   });
 
   it("name the app, wherever they do, only as Washroom, in every language: never by its old name and never in another case", () => {
