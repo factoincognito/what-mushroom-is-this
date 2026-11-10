@@ -192,14 +192,7 @@ export async function fetchPicture(
       return null;
     }
     if (status === 429 || status === 503) {
-      const now = deps.now();
-      const at = parseRetryAfter(retryAfter, now, appConfig.retryAfterMaxMs);
-      return {
-        kind: "waits",
-        cause: "picture-source",
-        retryAtMs:
-          at === null || at < now + appConfig.retryWaitMinMs ? now + appConfig.retryWaitMinMs : at,
-      };
+      return throttled(retryAfter);
     }
     if (status >= 500 && status <= 599) {
       return { kind: "waits", cause: "picture-source", retryAtMs: null };
@@ -207,14 +200,48 @@ export async function fetchPicture(
     return { kind: "none", reason: "answer" };
   }
 
+  /** A wait until `Retry-After`, or at least the configured least wait (a 429 or 503). */
+  function throttled(retryAfter: string | null): PictureFetch {
+    const now = deps.now();
+    const at = parseRetryAfter(retryAfter, now, appConfig.retryAfterMaxMs);
+    const least = now + appConfig.retryWaitMinMs;
+    return {
+      kind: "waits",
+      cause: "picture-source",
+      retryAtMs: at === null || at < least ? least : at,
+    };
+  }
+
+  /**
+   * An Action API answer as JSON. One that reports an error (`{"error": {"code": …}}`, which the
+   * API gives with status 200) makes the picture wait when its code is one the configuration
+   * lists as temporary, as a 429 does (Clead's decision on #71); any other error is an answer the
+   * app does not know, and gives no picture.
+   */
   const json = (url: string) =>
     get<unknown>(url, async (response) => {
       const text = await response.text();
+      let value: unknown;
       try {
-        return { ok: true, value: JSON.parse(text) as unknown };
+        value = JSON.parse(text);
       } catch {
         return none("answer");
       }
+      const error =
+        typeof value === "object" && value !== null
+          ? (value as { error?: unknown }).error
+          : undefined;
+      if (error === undefined) {
+        return { ok: true, value };
+      }
+      const code =
+        typeof error === "object" && error !== null
+          ? (error as { code?: unknown }).code
+          : undefined;
+      if (typeof code === "string" && appConfig.temporaryApiErrors.includes(code)) {
+        return { ok: false, outcome: throttled(response.headers.get("retry-after")) };
+      }
+      return none("answer");
     });
 
   const bytes = (url: string) =>

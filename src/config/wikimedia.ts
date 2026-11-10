@@ -42,6 +42,11 @@ export type WikimediaConfig = {
   readonly publicDomainTemplates: readonly string[];
   /** The Creative Commons versions accepted under CC BY and CC BY-SA, their ports included. */
   readonly ccVersions: readonly string[];
+  /**
+   * The Action API's error codes that say Wikimedia is throttling or is temporarily unavailable:
+   * an answer with one of them, whatever its status, makes the picture wait, as a 429 does.
+   */
+  readonly temporaryApiErrors: readonly string[];
 };
 
 export const wikimediaConfig: WikimediaConfig = Object.freeze({
@@ -86,4 +91,11 @@ export const wikimediaConfig: WikimediaConfig = Object.freeze({
   ]),
   // Clead's decision 3: 2.0, 2.5, 3.0 and 4.0, ports such as cc-by-sa-3.0-nl under their family.
   ccVersions: Object.freeze(["2.0", "2.5", "3.0", "4.0"]),
+  // Clead's decision on #71. Read by Crog on 2026-11-10, at addresses WebSearch gave:
+  // https://www.mediawiki.org/wiki/API:Errors_and_warnings, "ratelimited" ("You've exceeded your
+  // rate limit. Please wait some time and try again") and "readonly" ("The wiki is currently in
+  // read-only mode"); https://www.mediawiki.org/wiki/Manual:Maxlag_parameter, "maxlag" (status
+  // 503, but 200 for API requests, with Retry-After). Not listed: "unknownerror", which that
+  // page says to retry until it succeeds but does not call temporary (Crog's reading, for Clead).
+  temporaryApiErrors: Object.freeze(["ratelimited", "maxlag", "readonly"]),
 });

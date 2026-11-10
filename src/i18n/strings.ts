@@ -837,7 +837,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         noSpecies:
           "Ätligheten visas som okänd: en kontroll mot en bild av arten kunde inte ange någon art.",
         failed: "Ätligheten visas som okänd: kontrollen mot en bild av arten misslyckades.",
-        noPicture: "Ätligheten visas som okänd: ingen bild av arten hittades för kontrollen.",
+        noPicture:
+          "Ätligheten visas som okänd: fyndet kunde inte kontrolleras, eftersom ingen användbar bild av arten hittades.",
       },
       picture: {
         label: "Bild av arten {name} från Wikimedia Commons, inte av din svamp",
@@ -1192,7 +1193,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
           "The edibility is shown as unknown: a check on a picture of the species could not name a species.",
         failed: "The edibility is shown as unknown: the check on a picture of the species failed.",
         noPicture:
-          "The edibility is shown as unknown: no picture of the species was found for the check.",
+          "The edibility is shown as unknown: the find could not be checked, as no usable picture of the species was found.",
       },
       picture: {
         label: "Picture of the species {name} from Wikimedia Commons, not of your mushroom",
@@ -1560,7 +1561,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         failed:
           "La commestibilità è indicata come sconosciuta: il controllo su un'immagine della specie non è riuscito.",
         noPicture:
-          "La commestibilità è indicata come sconosciuta: non è stata trovata nessuna immagine della specie per il controllo.",
+          "La commestibilità è indicata come sconosciuta: non è stato possibile controllare il ritrovamento, perché non è stata trovata nessuna immagine utilizzabile della specie.",
       },
       picture: {
         label: "Immagine della specie {name} da Wikimedia Commons, non del tuo fungo",
