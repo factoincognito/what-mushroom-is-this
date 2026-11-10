@@ -1240,6 +1240,17 @@ describe("analysing one find from its screen (SPEC 3.3, 3.4)", () => {
     expect(t.queue.getState().stop).toEqual({ reason: "answer", findMarkedFailed: true });
   });
 
+  it("marks a failed find failed again on such an answer, with the new cause, and the stop says a find is marked failed (PBI-2.14)", async () => {
+    const t = setup();
+    t.log.addFind(1, { state: "failed", failure: { cause: "request", detail: "x" } });
+    t.replies.push(
+      fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
+    );
+    await expect(t.queue.analyseFind(1)).resolves.toMatchObject({ ok: false, answerKept: false });
+    expect(t.log.changes).toEqual(["markFailed 1 answer: bad"]);
+    expect(t.queue.getState().stop).toEqual({ reason: "answer", findMarkedFailed: true });
+  });
+
   it("puts a failed find back to waiting when it meets no network, so the queue tries it", async () => {
     const t = setup();
     t.log.addFind(1, { state: "failed", failure: { cause: "request", detail: "x" } });
