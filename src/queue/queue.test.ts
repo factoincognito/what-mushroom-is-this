@@ -1,6 +1,6 @@
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
 import { analysePhoto } from "../analysis/analyse";
-import type { Answer } from "../analysis/answer";
+import type { ApiAnswer } from "../analysis/answer";
 import type { AnalysisError } from "../analysis/errors";
 import { PhotoPreparationError, type PreparedPhoto } from "../image/prepareForAnalysis";
 import type { ReadKeyResult } from "../key/apiKey";
@@ -15,15 +15,16 @@ import type {
 import { StoreError } from "../store/find";
 import { AnalysisQueue, type QueueDeps, type QueueLog, type QueueState } from "./queue";
 
-const MATCH: Answer = {
+/** An answer as the API gives it: its confidence a number, never a Phase 1 level (PBI-2.12). */
+const MATCH: ApiAnswer = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
-  confidence: "high",
+  confidence: 90,
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [],
 };
-const OTHER_ANSWER: Answer = { result: "cannot_tell" };
+const OTHER_ANSWER: ApiAnswer = { result: "cannot_tell" };
 
 const NOW = Date.UTC(2026, 10, 9, 12, 0, 0);
 const SETTINGS = { apiAddress: "https://api.anthropic.com", timeLimitMs: 60_000 };

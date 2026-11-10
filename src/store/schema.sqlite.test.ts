@@ -5,18 +5,18 @@
  * version 1 in `migration.sqlite.test.ts`.
  */
 
-import { EDIBILITIES, type Match } from "../analysis/answer";
+import { type ApiMatch, EDIBILITIES } from "../analysis/answer";
 import {
   type DatabaseSync,
   memoryPhotos,
   memorySqlite,
   sqliteDatabase,
 } from "../testing/sqliteDatabase";
-import { type AnalysedAnswer, FAILURE_CAUSES, type NewFind } from "./find";
+import { FAILURE_CAUSES, type NewAnalysedAnswer, type NewFind } from "./find";
 import { createFindStore, type FindStore, type LookupStore } from "./findStore";
 import { MIGRATIONS } from "./schema";
 
-const match: Match = {
+const match: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -34,7 +34,11 @@ const match: Match = {
     },
   ],
 };
-const analysed: AnalysedAnswer = { answer: match, model: "claude-model-x", analysedAtMs: 5_000 };
+const analysed: NewAnalysedAnswer = {
+  answer: match,
+  model: "claude-model-x",
+  analysedAtMs: 5_000,
+};
 
 function newFind(takenAtMs: number, position: NewFind["position"] = null): NewFind {
   return {

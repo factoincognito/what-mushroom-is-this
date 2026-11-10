@@ -9,7 +9,7 @@
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
-import type { Answer, Match } from "../analysis/answer";
+import type { ApiAnswer, ApiMatch } from "../analysis/answer";
 import type { PictureFetch } from "../picture/fetchPicture";
 import { StoreError } from "../store/find";
 import { memoryFindLog } from "../testing/memoryFindLog";
@@ -17,7 +17,7 @@ import { AnalysisQueue, type QueueDeps } from "./queue";
 
 const NOW = Date.UTC(2026, 10, 10, 9, 0, 0);
 const MODEL = "claude-opus-5-5";
-const MATCH: Match = {
+const MATCH: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -25,7 +25,7 @@ const MATCH: Match = {
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [],
 };
-const PORCINI: Match = {
+const PORCINI: ApiMatch = {
   ...MATCH,
   names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
 };
@@ -45,7 +45,7 @@ function setup() {
   const log = memoryFindLog();
   const events: string[] = [];
   const analyses: AnalysisInput[] = [];
-  const answers: Answer[] = [];
+  const answers: ApiAnswer[] = [];
   const pictures: PictureReply[] = [];
   const removed: string[] = [];
   let now = NOW;

@@ -1,9 +1,9 @@
 import type { SQLiteBindParams } from "expo-sqlite";
 
-import type { Answer, Match } from "../analysis/answer";
+import type { ApiAnswer, ApiMatch, Match } from "../analysis/answer";
 import { answerToJson } from "./answerJson";
 import type { FindDatabase, SqlRunner } from "./database";
-import { type AnalysedAnswer, type NewFind, StoreError } from "./find";
+import { type NewAnalysedAnswer, type NewFind, StoreError } from "./find";
 import { createFindStore, type FindStore, type LookupStore } from "./findStore";
 import type { PhotoFiles } from "./photoFiles";
 import { MIGRATIONS } from "./schema";
@@ -208,7 +208,7 @@ const SET_POSITION =
   "UPDATE finds SET latitude = ?, longitude = ?, accuracy_m = ?, position_source = ? WHERE id = ? AND position_source IS NULL";
 const POSITION_SOURCE_OF = "SELECT position_source FROM finds WHERE id = ?";
 
-const match: Match = {
+const match: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -220,7 +220,7 @@ const match: Match = {
 /** A match analysed in Phase 1, its confidence a level (SPEC 3.9). */
 const phaseOneMatch: Match = { ...match, confidence: "low" };
 
-const analysed: AnalysedAnswer = {
+const analysed: NewAnalysedAnswer = {
   answer: match,
   model: "claude-model-x",
   analysedAtMs: 1_762_600_000_000,
@@ -1199,6 +1199,7 @@ describe("get", () => {
         model: "claude-model-x",
         analysed_at_ms: 1_762_600_000_000,
         added_photos: "analysed",
+        confidence_score: 90,
       }),
     );
     await expect(store.get(7)).resolves.toMatchObject({
@@ -1919,7 +1920,7 @@ describe("setAnswer", () => {
   });
 
   it("keeps the edibility Claude gave even at low confidence, with the number in place of a level", async () => {
-    const low: Match = { ...match, edibility: "deadly_poisonous", confidence: 12 };
+    const low: ApiMatch = { ...match, edibility: "deadly_poisonous", confidence: 12 };
     await store.setAnswer(7, { ...analysed, answer: low }, SENT_P7);
     const run = events.at(-1);
     expect(run).toMatchObject({ sql: SET_ANSWER });
@@ -1943,7 +1944,7 @@ describe("setAnswer", () => {
     expect(events).toEqual([]);
   });
 
-  it.each<[string, Answer]>([
+  it.each<[string, ApiAnswer]>([
     ["no mushroom", { result: "no_mushroom" }],
     ["cannot tell", { result: "cannot_tell" }],
   ])("saves a '%s' answer with no names, edibility or confidence", async (_, answer) => {
@@ -1969,14 +1970,14 @@ describe("setAnswer", () => {
   });
 
   it("refuses an answer that does not fit the shape, sending nothing", async () => {
-    const empty: Match = { ...match, names: { ...match.names, sv: "" } };
+    const empty: ApiMatch = { ...match, names: { ...match.names, sv: "" } };
     await expect(store.setAnswer(7, { ...analysed, answer: empty }, SENT_P7)).rejects.toMatchObject(
       { code: "invalid-input" },
     );
     expect(events).toEqual([]);
   });
 
-  it.each<[string, AnalysedAnswer]>([
+  it.each<[string, NewAnalysedAnswer]>([
     ["an empty model", { ...analysed, model: "  " }],
     ["a model that is not a string", { ...analysed, model: wrong(4) }],
     ["an analysis time that is not whole", { ...analysed, analysedAtMs: 0.5 }],

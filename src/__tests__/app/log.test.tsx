@@ -10,7 +10,7 @@ import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen, within } from "expo-router/testing-library";
 import { AppState } from "react-native";
 
-import type { Answer, Match } from "../../analysis/answer";
+import type { Answer, ApiMatch } from "../../analysis/answer";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { formatFindTime } from "../../find/display";
 import { STRINGS } from "../../i18n/strings";
@@ -62,7 +62,7 @@ jest.mock("../../picture/devicePicture", () => ({
 const APP_DIR = "./src/app";
 const en = STRINGS.en;
 
-const CHANTERELLE: Match = {
+const CHANTERELLE: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -432,7 +432,7 @@ describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
       time: { takenAtMs: BASE, utcOffsetMinutes: 120, source: "saved" },
       position: null,
     });
-    const porcini: Match = {
+    const porcini: ApiMatch = {
       ...CHANTERELLE,
       names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
     };
@@ -740,7 +740,7 @@ describe("the list follows the log", () => {
   });
 });
 
-const PORCINI: Match = {
+const PORCINI: ApiMatch = {
   ...CHANTERELLE,
   names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
 };

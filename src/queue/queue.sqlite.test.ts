@@ -4,7 +4,7 @@
  */
 
 import type { AnalysisInput } from "../analysis/analyse";
-import type { Answer } from "../analysis/answer";
+import type { ApiAnswer } from "../analysis/answer";
 import { createFindStore, type FindStore, type LookupStore } from "../store/findStore";
 import {
   type DatabaseSync,
@@ -14,7 +14,7 @@ import {
 } from "../testing/sqliteDatabase";
 import { AnalysisQueue } from "./queue";
 
-const MATCH: Answer = {
+const MATCH: ApiAnswer = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",

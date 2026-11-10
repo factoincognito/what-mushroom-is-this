@@ -5,17 +5,17 @@
  * the constraints of schema version 2 that keep them.
  */
 
-import type { Match } from "../analysis/answer";
+import type { ApiMatch } from "../analysis/answer";
 import {
   type DatabaseSync,
   memoryPhotos,
   memorySqlite,
   sqliteDatabase,
 } from "../testing/sqliteDatabase";
-import type { AnalysedAnswer, NewFind, NewPicture, NewTextFind } from "./find";
+import type { NewAnalysedAnswer, NewFind, NewPicture, NewTextFind } from "./find";
 import { createFindStore, type FindStore, type LookupStore } from "./findStore";
 
-const match: Match = {
+const match: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -23,7 +23,11 @@ const match: Match = {
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [],
 };
-const analysed: AnalysedAnswer = { answer: match, model: "claude-model-x", analysedAtMs: 5_000 };
+const analysed: NewAnalysedAnswer = {
+  answer: match,
+  model: "claude-model-x",
+  analysedAtMs: 5_000,
+};
 
 const time = { takenAtMs: 1_000, utcOffsetMinutes: 60, source: "saved" } as const;
 const position = { latitude: 59.64, longitude: 17.08, accuracyM: 12.5, source: "fix" } as const;

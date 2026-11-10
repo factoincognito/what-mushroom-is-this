@@ -2,7 +2,14 @@
  * What a find holds (docs/SPEC.md 3.6, 3.1), the input that adds one, and the store's error.
  */
 
-import type { Answer, Confidence, Edibility, SpeciesNames, Texts } from "../analysis/answer";
+import type {
+  Answer,
+  ApiAnswer,
+  Confidence,
+  Edibility,
+  SpeciesNames,
+  Texts,
+} from "../analysis/answer";
 import { config } from "../config/config";
 
 /**
@@ -51,12 +58,18 @@ export interface FindFailure {
 }
 
 /** An answer, the model that gave it and when. */
-export interface AnalysedAnswer {
-  answer: Answer;
+export interface AnalysedAnswer<A extends Answer = Answer> {
+  answer: A;
   model: string;
   /** Milliseconds since the epoch. */
   analysedAtMs: number;
 }
+
+/**
+ * An answer to store: one from the API, so its confidence is a number, and a Phase 1 level is never
+ * written again (docs/SPEC.md 3.9, PBI-2.12). A stored answer is read as an `AnalysedAnswer`.
+ */
+export type NewAnalysedAnswer = AnalysedAnswer<ApiAnswer>;
 
 /**
  * What the analysis behind an answer sent of the find (review of #49, fix 1): the URIs of the

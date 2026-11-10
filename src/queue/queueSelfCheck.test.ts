@@ -8,7 +8,7 @@
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
-import type { Match } from "../analysis/answer";
+import type { ApiAnswer, ApiMatch } from "../analysis/answer";
 import type { PreparedPhoto } from "../image/prepareForAnalysis";
 import type { ReadKeyResult } from "../key/apiKey";
 import type { PictureFetch } from "../picture/fetchPicture";
@@ -18,7 +18,7 @@ import { AnalysisQueue, type QueueDeps } from "./queue";
 
 const NOW = Date.UTC(2026, 10, 10, 9, 0, 0);
 const MODEL = "claude-opus-5-5";
-const MATCH: Match = {
+const MATCH: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -26,7 +26,7 @@ const MATCH: Match = {
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [],
 };
-const PORCINI: Match = {
+const PORCINI: ApiMatch = {
   ...MATCH,
   names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
   edibility: "edible",
@@ -46,7 +46,7 @@ const PICTURES = "file:///photos/picture-";
 const PICTURE_B64 = "UElDVFVSRQ==";
 const PHOTO_B64 = "AAAA";
 
-const ok = (answer: Match | { result: "no_mushroom" | "cannot_tell" }): AnalysisCallResult => ({
+const ok = (answer: ApiAnswer): AnalysisCallResult => ({
   ok: true,
   answer,
 });

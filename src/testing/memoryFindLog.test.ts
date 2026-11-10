@@ -6,14 +6,14 @@
  * each gives is compared, the photos by their batches, since the store names its own copies.
  */
 
-import type { Match } from "../analysis/answer";
-import type { AnalysedAnswer, NewFind, NewTextFind, StoredFind } from "../store/find";
+import type { ApiMatch } from "../analysis/answer";
+import type { NewAnalysedAnswer, NewFind, NewTextFind, StoredFind } from "../store/find";
 import { StoreError } from "../store/find";
 import { createFindStore, type FindLog } from "../store/findStore";
 import { memoryFindLog } from "./memoryFindLog";
 import { memoryPhotos, memorySqlite, sqliteDatabase } from "./sqliteDatabase";
 
-const match: Match = {
+const match: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -21,11 +21,15 @@ const match: Match = {
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [],
 };
-const porcini: Match = {
+const porcini: ApiMatch = {
   ...match,
   names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
 };
-const analysed: AnalysedAnswer = { answer: match, model: "claude-model-x", analysedAtMs: 5_000 };
+const analysed: NewAnalysedAnswer = {
+  answer: match,
+  model: "claude-model-x",
+  analysedAtMs: 5_000,
+};
 const time = { takenAtMs: 1_000, utcOffsetMinutes: 60, source: "saved" } as const;
 const photoFind: NewFind = { photoUri: "file:///cache/a.jpg", time, position: null };
 const textFind: NewTextFind = { text: "A yellow funnel.", time, position: null };
