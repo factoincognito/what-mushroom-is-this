@@ -53,6 +53,11 @@ jest.mock("../../image/prepareForAnalysis", () => ({
 /** The find log in memory. (Named `mock…` so that the hoisted factory may use it.) */
 const mockLog = memoryFindLog();
 jest.mock("../../store/deviceFindStore", () => ({ openFindLog: jest.fn(async () => mockLog) }));
+/* Wikimedia, at the boundary of the picture's fetch: the picture waits (PBI-2.9). */
+jest.mock("../../picture/devicePicture", () => ({
+  fetchDevicePicture: jest.fn(async () => ({ kind: "waits", cause: "network", retryAtMs: null })),
+  removePictureCopy: jest.fn(),
+}));
 
 const APP_DIR = "./src/app";
 const en = STRINGS.en;
@@ -338,6 +343,61 @@ describe("a text find in the Log (SPEC 3.9, PBI-2.4)", () => {
     expect(within(await screen.findByTestId("find-row-1")).getByText(text)).toBeOnTheScreen();
   });
 
+  it("shows its representative picture in place of the text mark, labelled as a picture of the species, with its credit (SPEC 3.9, The Library; PBI-2.9)", async () => {
+    const picture = {
+      uri: "file:///photos/picture-1.jpg",
+      author: "Example Photographer",
+      licence: "cc-by-4.0",
+      page: "https://commons.wikimedia.org/wiki/File:Chanterelle.jpg",
+    };
+    mockLog.finds.set(1, { ...textFind(1, 0, done(CHANTERELLE)), picture });
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(
+      row.getByLabelText(en.find.picture.label.replace("{name}", CHANTERELLE.names.en)),
+    ).toHaveProp("source", { uri: picture.uri });
+    expect(row.queryByLabelText(en.log.textMarkLabel)).not.toBeOnTheScreen();
+    const credit = within(screen.getByTestId("picture-credit-1"));
+    expect(credit.getByText(en.find.picture.caption)).toBeOnTheScreen();
+    expect(
+      credit.getByText(en.find.picture.author.replace("{author}", picture.author)),
+    ).toBeOnTheScreen();
+    expect(
+      credit.getByRole("link", { name: en.find.picture.licence.replace("{licence}", "CC BY 4.0") }),
+    ).toBeOnTheScreen();
+    expect(credit.getByRole("link", { name: en.find.picture.page })).toBeOnTheScreen();
+  });
+
+  it("with photos and an answer from its text alone, shows its picture, not its first photo, while it has one (SPEC 3.9, #63)", async () => {
+    const picture = {
+      uri: "file:///photos/picture-1.jpg",
+      author: "Example Photographer",
+      licence: "cc0",
+      page: "https://commons.wikimedia.org/wiki/File:Chanterelle.jpg",
+    };
+    mockLog.finds.set(1, {
+      ...textFind(1, 0, done(CHANTERELLE)),
+      photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+      addedPhotos: "waiting",
+      picture,
+    });
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(
+      row.getByLabelText(en.find.picture.label.replace("{name}", CHANTERELLE.names.en)),
+    ).toBeOnTheScreen();
+    expect(row.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+  });
+
+  it("without a picture, shows the text mark and no credit", async () => {
+    mockLog.finds.set(1, textFind(1, 0, done(CHANTERELLE), { state: "no-picture" }));
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(row.getByLabelText(en.log.textMarkLabel)).toBeOnTheScreen();
+    expect(screen.queryByTestId("picture-credit-1")).not.toBeOnTheScreen();
+    expect(row.getByText(en.find.selfCheck.noPicture)).toBeOnTheScreen();
+  });
+
   it("opens the text find's own screen from its row", async () => {
     mockLog.finds.set(4, textFind(4, 0, { state: "waiting" }));
     const app = await startApp();
@@ -526,6 +586,7 @@ describe("a find the store cannot read, in the list (PBI-1.16)", () => {
         analysis: { state: "waiting" },
         selfCheck: null,
         species: null,
+        picture: null,
       },
     ];
     jest.spyOn(mockLog, "list").mockResolvedValue(entries);

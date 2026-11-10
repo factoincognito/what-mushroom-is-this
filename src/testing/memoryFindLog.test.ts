@@ -53,9 +53,23 @@ function view(find: StoredFind | null): unknown {
  */
 async function listView(log: Log): Promise<unknown[]> {
   return (await log.list()).map((entry) =>
-    entry.readable ? { ...entry, photoUri: entry.photoUri !== null } : entry,
+    entry.readable
+      ? {
+          ...entry,
+          photoUri: entry.photoUri !== null,
+          // The store keeps its own copy of the picture (PBI-2.9); its credit is compared.
+          picture: entry.picture === null ? null : { ...entry.picture, uri: "copy" },
+        }
+      : entry,
   );
 }
+
+const newPicture = {
+  sourceUri: "file:///cache/picture-1.jpg",
+  author: "Example Photographer",
+  licence: "cc-by-sa-3.0",
+  page: "https://commons.wikimedia.org/wiki/File:Chanterelle.jpg",
+};
 
 /** The outcome of a change: "ok", or the store's error code. */
 async function outcome(change: () => Promise<unknown>): Promise<string> {
@@ -207,6 +221,63 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
     },
   ],
   [
+    "a text answer's picture: the pick takes its find until it has one or its check has none, and the list gives it (PBI-2.9)",
+    async (log) => {
+      const pictured = await log.addText(textFind);
+      await log.setAnswer(pictured, analysed, { photoUris: [] });
+      const without = await log.addText({ ...textFind, time: { ...time, takenAtMs: 2_000 } });
+      await log.setAnswer(without, analysed, { photoUris: [] });
+      const seen: unknown[] = [await log.oldestWaiting(), view(await log.getStored(pictured))];
+      seen.push(await outcome(() => log.setPicture(pictured, newPicture)));
+      seen.push(
+        view(await log.getStored(pictured)),
+        await log.oldestWaiting(),
+        await listView(log),
+      );
+      seen.push(await outcome(() => log.setPicture(pictured, newPicture)));
+      seen.push(await outcome(() => log.setSelfCheck(pictured, { state: "no-picture" })));
+      seen.push(await outcome(() => log.setSelfCheck(without, { state: "agreed" })));
+      seen.push(await outcome(() => log.setSelfCheck(without, { state: "no-picture" })));
+      seen.push(view(await log.getStored(without)), await log.oldestWaiting());
+      seen.push(await outcome(() => log.setSelfCheck(without, { state: "no-picture" })));
+      seen.push(await outcome(() => log.setPicture(without, newPicture)));
+      seen.push(await listView(log));
+      return seen;
+    },
+  ],
+  [
+    "a picture is set only beside a waiting check: not on a photo find's answer, nor a find there is not (PBI-2.9)",
+    async (log) => {
+      const photo = await log.add(photoFind);
+      const seen: unknown[] = [await outcome(() => log.setPicture(photo, newPicture))];
+      await log.setAnswer(photo, analysed, await sentAll(log, photo));
+      seen.push(await outcome(() => log.setPicture(photo, newPicture)));
+      seen.push(await outcome(() => log.setSelfCheck(photo, { state: "no-picture" })));
+      seen.push(await outcome(() => log.setPicture(99, newPicture)));
+      seen.push(await outcome(() => log.setSelfCheck(99, { state: "no-picture" })));
+      seen.push(view(await log.getStored(photo)), await log.oldestWaiting());
+      return seen;
+    },
+  ],
+  [
+    "a new answer drops the picture and its check waits again; photos added keep it until their answer (PBI-2.9)",
+    async (log) => {
+      const id = await log.addText(textFind);
+      await log.setAnswer(id, analysed, { photoUris: [] });
+      await log.setPicture(id, newPicture);
+      await log.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 }, { photoUris: [] });
+      const seen: unknown[] = [view(await log.getStored(id)), await log.oldestWaiting()];
+      await log.setPicture(id, newPicture);
+      await log.addPhoto(id, "file:///cache/a.jpg");
+      seen.push(view(await log.getStored(id)), await log.oldestWaiting());
+      await log.completeBatch(id);
+      seen.push(view(await log.getStored(id)), await log.oldestWaiting(), await listView(log));
+      await log.replaceAnswer(id, { ...analysed, analysedAtMs: 7_000 }, await sentAll(log, id));
+      seen.push(view(await log.getStored(id)), await log.oldestWaiting(), await listView(log));
+      return seen;
+    },
+  ],
+  [
     "the most photos a find holds, and the refusals",
     async (log) => {
       const id = await log.addWithOpenBatch(photoFind);
@@ -260,6 +331,42 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
       { latitude: 59.64, longitude: 17.08, accuracyM: null, source: "last-known" },
       null,
       { latitude: 59.64, longitude: 17.08, accuracyM: 12, source: "fix" },
+    ]);
+  });
+
+  it("the picture scenario sees the store's pick and credit, not nothing (PBI-2.9)", async () => {
+    const scenario = scenarios.find(([name]) => name.startsWith("a text answer's picture"));
+    if (scenario === undefined) {
+      throw new Error("no picture scenario");
+    }
+    const seen = await scenario[1](await realStore());
+    expect(seen.slice(0, 5)).toEqual([
+      1,
+      expect.objectContaining({ selfCheck: { state: "waiting" }, picture: false }),
+      "ok",
+      expect.objectContaining({ selfCheck: { state: "waiting" }, picture: true }),
+      2,
+    ]);
+    expect(seen.slice(6, 11)).toEqual([
+      "wrong-state",
+      "wrong-state",
+      "wrong-state",
+      "ok",
+      expect.anything(),
+    ]);
+    expect(seen[10]).toMatchObject({ selfCheck: { state: "no-picture" }, picture: false });
+    expect(seen[11]).toBeNull();
+    expect(seen.at(-1)).toEqual([
+      expect.objectContaining({ id: 2, picture: null, selfCheck: { state: "no-picture" } }),
+      expect.objectContaining({
+        id: 1,
+        picture: {
+          uri: "copy",
+          author: newPicture.author,
+          licence: newPicture.licence,
+          page: newPicture.page,
+        },
+      }),
     ]);
   });
 

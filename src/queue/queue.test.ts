@@ -154,6 +154,15 @@ class FakeLog implements QueueLog {
     this.change(id, { state: "waiting" });
   }
 
+  /** Never reached here: no answer in these tests starts a self-check (`queuePicture.test.ts`). */
+  async setPicture(id: number): Promise<void> {
+    this.changes.push(`setPicture ${id}`);
+  }
+
+  async setSelfCheck(id: number): Promise<void> {
+    this.changes.push(`setSelfCheck ${id}`);
+  }
+
   private change(id: number, analysis: Analysis): void {
     const find = this.finds.get(id);
     if (find === undefined) {
@@ -215,6 +224,11 @@ function setup() {
         timer.cancelled = true;
       };
     },
+    // The fake log starts no self-check, so no picture is fetched (`queuePicture.test.ts`).
+    fetchPicture: async () => {
+      throw new Error("no picture is fetched in these tests");
+    },
+    removePictureCopy: () => undefined,
   };
   const queue = new AnalysisQueue(deps, SETTINGS);
   const states: QueueState[] = [];

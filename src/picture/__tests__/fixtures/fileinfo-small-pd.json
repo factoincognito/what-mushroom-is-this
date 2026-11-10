@@ -1,0 +1,32 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {
+        "pageid": 3002,
+        "ns": 6,
+        "title": "File:Small chanterelle.png",
+        "templates": [
+          { "ns": 10, "title": "Template:Information" },
+          { "ns": 10, "title": "Template:PD-self" },
+          { "ns": 10, "title": "Template:PD-release" }
+        ],
+        "imagerepository": "local",
+        "imageinfo": [
+          {
+            "size": 512000,
+            "width": 800,
+            "height": 600,
+            "url": "https://upload.wikimedia.org/wikipedia/commons/2/2b/Small_chanterelle.png?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+            "descriptionurl": "https://commons.wikimedia.org/wiki/File:Small_chanterelle.png",
+            "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=3002",
+            "mime": "image/png",
+            "extmetadata": {
+              "Artist": { "value": "Ann Exempel", "source": "commons-desc-page" }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

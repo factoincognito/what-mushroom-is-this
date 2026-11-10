@@ -37,6 +37,7 @@ const NOTICES: readonly QueueNotice[] = [
   { kind: "paused", cause: "network" },
   { kind: "paused", cause: "time-out" },
   { kind: "paused", cause: "server" },
+  { kind: "paused", cause: "picture-source" },
   ...STOPS.map((stop): QueueNotice => ({ kind: "stopped", stop })),
   { kind: "find-failed", failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" } },
   { kind: "find-failed", failure: { cause: "request", detail: "request-wrong (status 400)" } },
@@ -60,6 +61,20 @@ describe("noticeMessage", () => {
         expect(message).not.toMatch(/[{}]/);
         expect(message.trim()).not.toBe("");
       }
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "says in %s that a picture waits for Wikimedia Commons, not for the Claude API (PBI-2.9)",
+    (language) => {
+      const message = noticeMessage(
+        { kind: "paused", cause: "picture-source" },
+        STRINGS[language],
+        formatTime,
+      );
+      expect(message).toBe(STRINGS[language].queue.paused.pictureSource);
+      expect(message).toContain("Wikimedia Commons");
+      expect(message).not.toContain("Claude");
     },
   );
 

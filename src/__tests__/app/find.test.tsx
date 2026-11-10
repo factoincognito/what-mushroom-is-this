@@ -18,6 +18,7 @@ import { fillIn, formatFindTime, mapLink } from "../../find/display";
 import { STRINGS } from "../../i18n/strings";
 import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
+import { fetchDevicePicture } from "../../picture/devicePicture";
 import { answerToJson } from "../../store/answerJson";
 import { openFindLog } from "../../store/deviceFindStore";
 import { type Find, type StoredFind, StoreError } from "../../store/find";
@@ -63,6 +64,11 @@ jest.mock("../../image/prepareForAnalysis", () => ({
 /** The find log in memory. (Named `mock…` so that the hoisted factory may use it.) */
 const mockLog = memoryFindLog();
 jest.mock("../../store/deviceFindStore", () => ({ openFindLog: jest.fn(async () => mockLog) }));
+/* Wikimedia, at the boundary of the picture's fetch; by default the picture waits (PBI-2.9). */
+jest.mock("../../picture/devicePicture", () => ({
+  fetchDevicePicture: jest.fn(),
+  removePictureCopy: jest.fn(),
+}));
 
 const APP_DIR = "./src/app";
 const en = STRINGS.en;
@@ -180,6 +186,10 @@ async function resetStandIns(): Promise<void> {
   jest
     .mocked(preparePhotoForAnalysis)
     .mockResolvedValue({ ok: true, imageBase64: "AAAA", width: 2212, height: 1659 });
+  jest.mocked(fetchDevicePicture).mockReset();
+  jest
+    .mocked(fetchDevicePicture)
+    .mockResolvedValue({ kind: "waits", cause: "network", retryAtMs: null });
   Object.defineProperty(AppState, "currentState", { value: "background", configurable: true });
 }
 
@@ -963,6 +973,107 @@ describe("a text find (SPEC 3.9, PBI-2.4)", () => {
     expect(screen.getByText(en.find.waiting)).toBeOnTheScreen();
     expect(screen.getByText(en.find.noPosition)).toBeOnTheScreen();
     sqlite.close();
+  });
+});
+
+describe("a text find's representative picture (SPEC 3.9; PBI-2.9)", () => {
+  const PICTURE = {
+    uri: "file:///photos/picture-1.jpg",
+    author: "Example Photographer",
+    licence: "cc-by-sa-3.0-nl",
+    page: "https://commons.wikimedia.org/wiki/File:Chanterelle_Cantharellus_cibarius.jpg",
+  };
+  const label = en.find.picture.label.replace("{name}", CHANTERELLE.names.en);
+
+  it("is shown apart from the photos, labelled as a picture of the species, not of the user's mushroom, with its author, licence and page on Commons", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind(done(CHANTERELLE), { selfCheck: { state: "waiting" }, picture: PICTURE }),
+    );
+    const openURL = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    await startApp();
+    expect(await screen.findByLabelText(label)).toHaveProp("source", { uri: PICTURE.uri });
+    expect(screen.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+    expect(screen.getByText(en.find.picture.caption)).toBeOnTheScreen();
+    expect(
+      screen.getByText(en.find.picture.author.replace("{author}", PICTURE.author)),
+    ).toBeOnTheScreen();
+    expect(screen.getByText(en.find.picture.resized)).toBeOnTheScreen();
+    await fireEvent.press(
+      screen.getByRole("link", {
+        name: en.find.picture.licence.replace("{licence}", "CC BY-SA 3.0 NL"),
+      }),
+    );
+    expect(openURL).toHaveBeenCalledWith("https://creativecommons.org/licenses/by-sa/3.0/nl/");
+    await fireEvent.press(screen.getByRole("link", { name: en.find.picture.page }));
+    expect(openURL).toHaveBeenLastCalledWith(PICTURE.page);
+    // Until the check agrees, the edibility stays unknown (SPEC 3.9; the check is PBI-2.10's).
+    const edibility = within(screen.getByTestId("match-edibility"));
+    expect(
+      edibility.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+  });
+
+  it("is shown beside the photos a text find got after its text answer", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind(done(CHANTERELLE), {
+        photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+        addedPhotos: "waiting",
+        selfCheck: { state: "waiting" },
+        picture: PICTURE,
+      }),
+    );
+    await startApp();
+    expect(await screen.findByLabelText(label)).toBeOnTheScreen();
+    expect(screen.getByLabelText(en.find.photo)).toBeOnTheScreen();
+  });
+
+  it("says a link that cannot be opened could not be opened", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind(done(CHANTERELLE), { selfCheck: { state: "waiting" }, picture: PICTURE }),
+    );
+    jest.spyOn(Linking, "openURL").mockRejectedValue(new Error("no browser"));
+    await startApp();
+    await fireEvent.press(await screen.findByRole("link", { name: en.find.picture.page }));
+    await act(async () => undefined);
+    expect(screen.getByText(en.find.picture.linkFailed)).toBeOnTheScreen();
+  });
+
+  it("gives public domain by name, without a link", async () => {
+    mockLog.finds.set(
+      1,
+      aTextFind(done(CHANTERELLE), {
+        selfCheck: { state: "waiting" },
+        picture: { ...PICTURE, licence: "pd" },
+      }),
+    );
+    await startApp();
+    const text = en.find.picture.licence.replace("{licence}", en.find.picture.publicDomain);
+    expect(await screen.findByText(text)).toBeOnTheScreen();
+    expect(screen.queryByRole("link", { name: text })).not.toBeOnTheScreen();
+  });
+
+  it("is fetched when the find is analysed from its screen, and shown", async () => {
+    mockLog.finds.set(1, aTextFind({ state: "waiting" }));
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    jest.mocked(fetchDevicePicture).mockResolvedValueOnce({
+      kind: "picture",
+      picture: { ...PICTURE, uri: "file:///cache/picture-2.jpg" },
+    });
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
+    expect(await screen.findByLabelText(label)).toBeOnTheScreen();
+    expect(fetchDevicePicture).toHaveBeenCalledWith("Cantharellus cibarius", "claude-opus-5-5");
+    expect((mockLog.finds.get(1) as StoredFind).picture?.author).toBe(PICTURE.author);
+  });
+
+  it("is not shown on a find without one", async () => {
+    mockLog.finds.set(1, aTextFind(done(CHANTERELLE), { selfCheck: { state: "no-picture" } }));
+    await startApp();
+    await screen.findByTestId("match-edibility");
+    expect(screen.queryByText(en.find.picture.caption)).not.toBeOnTheScreen();
   });
 });
 

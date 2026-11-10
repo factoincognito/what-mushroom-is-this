@@ -1,0 +1,23 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {
+        "pageid": 3001,
+        "ns": 6,
+        "title": "File:Chanterelle Cantharellus cibarius.jpg",
+        "imagerepository": "local",
+        "imageinfo": [
+          {
+            "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/Chanterelle_Cantharellus_cibarius.jpg/3840px-Chanterelle_Cantharellus_cibarius.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail",
+            "thumbwidth": 3840,
+            "thumbheight": 2880,
+            "url": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Chanterelle_Cantharellus_cibarius.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+            "descriptionurl": "https://commons.wikimedia.org/wiki/File:Chanterelle_Cantharellus_cibarius.jpg",
+            "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=3001"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -98,6 +98,43 @@ describe("NOT_CHECKED_BY_A_SPEAKER", () => {
   });
 });
 
+describe("the strings of the representative picture (SPEC 3.9; PBI-2.9)", () => {
+  it.each(LANGUAGES)(
+    "in %s, name Wikimedia Commons as the source, and fill in the species, author and licence",
+    (language) => {
+      const t = STRINGS[language].find.picture;
+      expect(t.caption).toContain("Wikimedia Commons");
+      expect(t.label).toContain("Wikimedia Commons");
+      expect(t.page).toContain("Wikimedia Commons");
+      expect(t.label).toContain("{name}");
+      expect(t.author).toContain("{author}");
+      expect(t.licence).toContain("{licence}");
+      expect(STRINGS[language].queue.paused.pictureSource).toContain("Wikimedia Commons");
+      expect(STRINGS[language].lookup.pictureWaits).toContain("Wikimedia Commons");
+    },
+  );
+
+  it("say in English that the picture is of the species, not of the user's mushroom, and was resized", () => {
+    const t = STRINGS.en.find.picture;
+    expect(t.caption).toBe(
+      "A picture of the species from Wikimedia Commons, not of your mushroom.",
+    );
+    expect(t.label).toBe(
+      "Picture of the species {name} from Wikimedia Commons, not of your mushroom",
+    );
+    expect(t.resized).toBe("Resized by the app.");
+    expect(STRINGS.en.lookup.checkAgain).toBe("Check again");
+  });
+
+  it("are new strings in groups not checked by a speaker in Swedish and Italian", () => {
+    for (const language of ["sv", "it"] as const) {
+      expect(NOT_CHECKED_BY_A_SPEAKER[language]).toEqual(
+        expect.arrayContaining(["find", "lookup", "queue"]),
+      );
+    }
+  });
+});
+
 describe("the strings of the key and model settings", () => {
   it.each(LANGUAGES)("are all there in %s", (language) => {
     const paths = keyPaths(STRINGS[language]);

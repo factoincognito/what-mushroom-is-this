@@ -11,7 +11,7 @@ import { getLocales } from "expo-localization";
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen, within } from "expo-router/testing-library";
-import { AppState } from "react-native";
+import { AppState, Linking } from "react-native";
 
 import type { Answer, Match } from "../../analysis/answer";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
@@ -19,6 +19,7 @@ import { STRINGS } from "../../i18n/strings";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { TEXT_LOOKUP_SAVE_KEY } from "../../lookup/saveSetting";
 import { phoneTimeNow } from "../../newFind/saveFind";
+import { fetchDevicePicture, removePictureCopy } from "../../picture/devicePicture";
 import { answerToJson } from "../../store/answerJson";
 import type { StoredFind } from "../../store/find";
 import { memoryFindLog } from "../../testing/memoryFindLog";
@@ -54,6 +55,14 @@ jest.mock("expo-location", () => ({
 /** The find log in memory. (Named `mock…` so that the hoisted factory may use it.) */
 const mockLog = memoryFindLog();
 jest.mock("../../store/deviceFindStore", () => ({ openFindLog: jest.fn(async () => mockLog) }));
+/*
+ * Wikimedia, at the boundary of the picture's fetch (`src/picture/fetchPicture.test.ts` tests the
+ * fetch itself): by default the picture waits, so the self-check waits as before PBI-2.9.
+ */
+jest.mock("../../picture/devicePicture", () => ({
+  fetchDevicePicture: jest.fn(),
+  removePictureCopy: jest.fn(),
+}));
 
 const APP_DIR = "./src/app";
 const en = STRINGS.en;
@@ -138,6 +147,9 @@ async function resetStandIns(): Promise<void> {
     };
   });
   jest.mocked(Location.getLastKnownPositionAsync).mockResolvedValue(null);
+  jest
+    .mocked(fetchDevicePicture)
+    .mockResolvedValue({ kind: "waits", cause: "network", retryAtMs: null });
   Object.defineProperty(AppState, "currentState", { value: "background", configurable: true });
 }
 
@@ -455,6 +467,111 @@ describe("a saved lookup (Save on)", () => {
     expect(screen.queryByText(/locked/)).not.toBeOnTheScreen();
     expect(app.pathname()).toBe("/text-lookup");
     expect(screen.getByLabelText(en.lookup.input)).toHaveProp("value", DESCRIPTION);
+  });
+});
+
+describe("an unsaved lookup's representative picture (SPEC 3.9; PBI-2.9)", () => {
+  const PICTURE = {
+    uri: "file:///cache/picture-2.jpg",
+    author: "Example Photographer",
+    licence: "cc-by-sa-3.0",
+    page: "https://commons.wikimedia.org/wiki/File:Chanterelle_Cantharellus_cibarius.jpg",
+  };
+  const label = en.find.picture.label.replace("{name}", CHANTERELLE.names.en);
+
+  it("shows the species' picture, labelled as not of the user's mushroom, with its author, licence and page, from Wikimedia Commons; the check waits", async () => {
+    jest.mocked(fetchDevicePicture).mockResolvedValueOnce({ kind: "picture", picture: PICTURE });
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    const openURL = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    await openLookup();
+    await describe_(DESCRIPTION);
+    await analyse();
+    expect(await screen.findByLabelText(label)).toHaveProp("source", { uri: PICTURE.uri });
+    expect(screen.getByText(en.find.picture.caption)).toBeOnTheScreen();
+    expect(
+      screen.getByText(en.find.picture.author.replace("{author}", PICTURE.author)),
+    ).toBeOnTheScreen();
+    expect(screen.getByText(en.find.picture.resized)).toBeOnTheScreen();
+    await fireEvent.press(
+      screen.getByRole("link", {
+        name: en.find.picture.licence.replace("{licence}", "CC BY-SA 3.0"),
+      }),
+    );
+    expect(openURL).toHaveBeenCalledWith("https://creativecommons.org/licenses/by-sa/3.0/");
+    await fireEvent.press(screen.getByRole("link", { name: en.find.picture.page }));
+    expect(openURL).toHaveBeenLastCalledWith(PICTURE.page);
+    // Only the Latin name goes to Wikimedia; the check on the picture is PBI-2.10's.
+    expect(fetchDevicePicture).toHaveBeenCalledWith("Cantharellus cibarius", "claude-opus-5-5");
+    const edibility = within(screen.getByTestId("match-edibility"));
+    expect(edibility.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
+    expect(mockLog.finds.size).toBe(0);
+  });
+
+  it("removes the app's copy when the screen is left", async () => {
+    jest.mocked(fetchDevicePicture).mockResolvedValueOnce({ kind: "picture", picture: PICTURE });
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await openLookup();
+    await describe_(DESCRIPTION);
+    await analyse();
+    await screen.findByLabelText(label);
+    expect(removePictureCopy).not.toHaveBeenCalled();
+    await goBack();
+    await fireEvent.press(screen.getByRole("button", { name: en.lookup.leaveYes }));
+    await settle();
+    await runTimers();
+    await settle();
+    expect(removePictureCopy).toHaveBeenCalledWith(PICTURE.uri);
+  });
+
+  it("when the picture waits, says so and offers Check again, which shows it", async () => {
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await openLookup();
+    await describe_(DESCRIPTION);
+    await analyse();
+    expect(await screen.findByText(en.lookup.pictureWaits)).toBeOnTheScreen();
+    jest.mocked(fetchDevicePicture).mockResolvedValueOnce({ kind: "picture", picture: PICTURE });
+    await fireEvent.press(screen.getByRole("button", { name: en.lookup.checkAgain }));
+    await settle();
+    expect(await screen.findByLabelText(label)).toBeOnTheScreen();
+    expect(screen.queryByText(en.lookup.pictureWaits)).not.toBeOnTheScreen();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("with no picture for the answer, says the edibility could not be checked", async () => {
+    jest.mocked(fetchDevicePicture).mockResolvedValueOnce({ kind: "none", reason: "licence" });
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await openLookup();
+    await describe_(DESCRIPTION);
+    await analyse();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(en.find.selfCheck.noPicture)).toBeOnTheScreen();
+    expect(
+      edibility.getByText(en.find.edibility.replace("{edibility}", en.find.edibilities.unknown)),
+    ).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.lookup.checkAgain })).not.toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)("credits the picture in %s", async (lang) => {
+    phoneIn(lang);
+    const t = STRINGS[lang];
+    jest
+      .mocked(fetchDevicePicture)
+      .mockResolvedValueOnce({ kind: "picture", picture: { ...PICTURE, licence: "pd" } });
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    const app = renderRouter(APP_DIR, { initialUrl: "/" });
+    await app;
+    await fireEvent.press(await screen.findByRole("link", { name: t.log.textLookup }));
+    await settle();
+    await fireEvent.changeText(screen.getByLabelText(t.lookup.input), DESCRIPTION);
+    await fireEvent.press(screen.getByRole("button", { name: t.lookup.analyse }));
+    await settle();
+    expect(
+      await screen.findByLabelText(t.find.picture.label.replace("{name}", CHANTERELLE.names[lang])),
+    ).toBeOnTheScreen();
+    expect(screen.getByText(t.find.picture.caption)).toBeOnTheScreen();
+    expect(
+      screen.getByText(t.find.picture.licence.replace("{licence}", t.find.picture.publicDomain)),
+    ).toBeOnTheScreen();
   });
 });
 

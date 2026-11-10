@@ -114,6 +114,9 @@ export async function analysisFailure(outcome: Outcome): Promise<FindFailure> {
       analyse: async () => classifyOutcome(outcome, 0),
       now: () => 0,
       schedule: () => () => undefined,
+      // A photo find's failure: no answer, so no picture (PBI-2.9).
+      fetchPicture: async () => ({ kind: "none", reason: "no-item" }),
+      removePictureCopy: () => undefined,
     },
     { apiAddress: "https://api.anthropic.com/v1/messages", timeLimitMs: 60_000 },
   );

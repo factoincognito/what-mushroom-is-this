@@ -1,5 +1,6 @@
 import { config } from "../config/config";
 import { preparePhotoForAnalysis } from "../image/prepareForAnalysis";
+import { fetchDevicePicture, removePictureCopy } from "../picture/devicePicture";
 import type { StoredFind } from "../store/find";
 import { createDeviceQueue } from "./deviceQueue";
 import type { QueueLog } from "./queue";
@@ -16,6 +17,10 @@ jest.mock("../image/prepareForAnalysis", () => ({
     width: 1,
     height: 1,
   })),
+}));
+jest.mock("../picture/devicePicture", () => ({
+  fetchDevicePicture: jest.fn(async () => ({ kind: "none", reason: "no-item" })),
+  removePictureCopy: jest.fn(),
 }));
 
 const FIND: StoredFind = {
@@ -43,6 +48,8 @@ function log(): QueueLog & { waiting: boolean } {
     markFailed: jest.fn(),
     markWaiting: jest.fn(),
     setAddedPhotos: jest.fn(),
+    setPicture: jest.fn(),
+    setSelfCheck: jest.fn(),
   };
   return store;
 }
@@ -115,6 +122,20 @@ describe("createDeviceQueue", () => {
     await run;
     expect(queue.getState()).toEqual({ running: false, stop: null, pause: "time-out" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches a lookup's picture, for the model setting's default, and removes its copy, through the phone's parts (PBI-2.9)", async () => {
+    const queue = createDeviceQueue({
+      findLog: async () => log(),
+      readKey: async () => ({ ok: true, key: "sk-ant-k" }),
+    });
+    await expect(queue.fetchLookupPicture("Cantharellus cibarius")).resolves.toEqual({
+      kind: "none",
+      reason: "no-item",
+    });
+    expect(fetchDevicePicture).toHaveBeenCalledWith("Cantharellus cibarius", config.defaultModelId);
+    queue.removePictureCopy("file:///cache/picture-1.jpg");
+    expect(removePictureCopy).toHaveBeenCalledWith("file:///cache/picture-1.jpg");
   });
 
   it("starts again by itself when a 429's retry-after has passed, and can cancel that", async () => {
