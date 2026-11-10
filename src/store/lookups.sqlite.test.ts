@@ -209,6 +209,7 @@ describe("a text find (PBI-2.2)", () => {
       time,
       position,
       analysis: { state: "waiting" },
+      answerBasis: null,
       addedPhotos: null,
       picture: null,
       selfCheck: null,
@@ -227,6 +228,7 @@ describe("a text find (PBI-2.2)", () => {
         time,
         position,
         analysis: { state: "waiting" },
+        answerBasis: null,
         selfCheck: null,
         species: null,
         picture: null,
@@ -251,6 +253,7 @@ describe("a text find (PBI-2.2)", () => {
           edibility: "edible",
           confidence: 90,
         },
+        answerBasis: "text",
         selfCheck: { state: "waiting" },
         // The text answer's species, for the Library's filters while the check waits (PBI-2.7).
         species: match.names,
@@ -899,6 +902,130 @@ describe("the self-check of a text find (PBI-2.2)", () => {
       picture: null,
       selfCheck: { state: "waiting" },
     });
+  });
+});
+
+describe("what an answer was based on (docs/SPEC.md 3.9, Answers; PBI-2.15)", () => {
+  const noMushroom: NewAnalysedAnswer = { ...analysed, answer: { result: "no_mushroom" } };
+  const cannotTell: NewAnalysedAnswer = { ...analysed, answer: { result: "cannot_tell" } };
+
+  async function basisOf(id: number): Promise<unknown> {
+    return (await store.getStored(id))?.answerBasis;
+  }
+
+  it.each([
+    ["names a species", analysed],
+    ["sees no mushroom", noMushroom],
+    ["cannot tell", cannotTell],
+  ] as const)(
+    "records an answer from the text alone that %s as one from the text, in the find and the list",
+    async (_, given) => {
+      const id = await store.addText(textFind);
+      await store.setAnswer(id, given, TEXT_ONLY);
+      await expect(basisOf(id)).resolves.toBe("text");
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ id, answerBasis: "text" }),
+      ]);
+    },
+  );
+
+  it.each([
+    ["names a species", analysed],
+    ["sees no mushroom", noMushroom],
+    ["cannot tell", cannotTell],
+  ] as const)(
+    "records an answer from photos that %s as one from photos, with or without text",
+    async (_, given) => {
+      const photo = await store.add(photoFind());
+      await store.setAnswer(photo, given, await sentAll(photo));
+      const text = await store.addText(textFind);
+      await store.addPhoto(text, "file:///cache/a.jpg");
+      await store.completeBatch(text);
+      await store.setAnswer(text, given, await sentAll(text));
+      await expect(basisOf(photo)).resolves.toBe("photos");
+      await expect(basisOf(text)).resolves.toBe("photos");
+    },
+  );
+
+  it("records an answer as one from photos when every photo it sent was removed while it ran", async () => {
+    const id = await store.addText(textFind);
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.completeBatch(id);
+    const sent = await sentAll(id);
+    await store.removePhoto(id, 1);
+    await store.setAnswer(id, noMushroom, sent);
+    await expect(basisOf(id)).resolves.toBe("photos");
+  });
+
+  it("records an answer from the text alone as one from the text, though a photo was added while it ran", async () => {
+    const id = await store.addText(textFind);
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.setAnswer(id, cannotTell, TEXT_ONLY);
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      answerBasis: "text",
+      addedPhotos: "waiting",
+    });
+  });
+
+  it("keeps the basis while the find gets photos, loses them, gets a picture and a check outcome, and its added photos change state", async () => {
+    const text = await answeredTextFind();
+    await store.setPicture(text, newPicture);
+    await store.setSelfCheck(text, { state: "agreed" });
+    await store.addPhoto(text, "file:///cache/a.jpg");
+    await store.completeBatch(text);
+    await store.setAddedPhotos(text, "not-analysed");
+    await store.removePhoto(text, 1);
+    await expect(basisOf(text)).resolves.toBe("text");
+    const photo = await store.addText(textFind);
+    await store.addPhoto(photo, "file:///cache/b.jpg");
+    await store.completeBatch(photo);
+    await store.setAnswer(photo, noMushroom, await sentAll(photo));
+    await store.removePhoto(photo, 1);
+    await expect(basisOf(photo)).resolves.toBe("photos");
+  });
+
+  it("replaces the basis with the next answer's: from the text to photos, and from photos back to the text", async () => {
+    const id = await store.addText(textFind);
+    await store.setAnswer(id, noMushroom, TEXT_ONLY);
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.completeBatch(id);
+    await store.replaceAnswer(id, cannotTell, await sentAll(id));
+    await expect(basisOf(id)).resolves.toBe("photos");
+    await store.removePhoto(id, 1);
+    await store.replaceAnswer(id, noMushroom, TEXT_ONLY);
+    await expect(basisOf(id)).resolves.toBe("text");
+  });
+
+  it("refuses, as wrong-state, an answer from the text alone for a find without text, and stores nothing", async () => {
+    const id = await store.add(photoFind());
+    await expect(store.setAnswer(id, noMushroom, TEXT_ONLY)).rejects.toMatchObject({
+      code: "wrong-state",
+    });
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      analysis: { state: "waiting" },
+      answerBasis: null,
+    });
+    await store.setAnswer(id, analysed, await sentAll(id));
+    await expect(store.replaceAnswer(id, cannotTell, TEXT_ONLY)).rejects.toMatchObject({
+      code: "wrong-state",
+    });
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      analysis: { answer: match },
+      answerBasis: "photos",
+    });
+  });
+
+  it("says no find has the ID before it judges an answer from the text alone", async () => {
+    await expect(store.setAnswer(99, noMushroom, TEXT_ONLY)).rejects.toMatchObject({
+      code: "not-found",
+    });
+  });
+
+  it("gives a find without an answer no basis, waiting or failed", async () => {
+    const id = await store.addText(textFind);
+    await expect(basisOf(id)).resolves.toBeNull();
+    await store.markFailed(id, { cause: "refused", detail: "stop_reason refusal" });
+    await expect(basisOf(id)).resolves.toBeNull();
   });
 });
 

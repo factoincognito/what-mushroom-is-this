@@ -309,6 +309,36 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
     },
   ],
   [
+    "the basis of each answer: from the text alone or from photos, kept while photos come and go, replaced with the answer, refused for a find without text (PBI-2.15)",
+    async (log) => {
+      const text = await log.addText(textFind);
+      await log.setAnswer(
+        text,
+        { ...analysed, answer: { result: "no_mushroom" } },
+        { photoUris: [] },
+      );
+      const seen: unknown[] = [view(await log.getStored(text))];
+      await log.addPhoto(text, "file:///cache/a.jpg");
+      await log.completeBatch(text);
+      seen.push(view(await log.getStored(text)));
+      await log.replaceAnswer(
+        text,
+        { ...analysed, answer: { result: "cannot_tell" } },
+        await sentAll(log, text),
+      );
+      seen.push(view(await log.getStored(text)));
+      await log.removePhoto(text, 1);
+      seen.push(view(await log.getStored(text)), await listView(log));
+      const photo = await log.add(photoFind);
+      seen.push(await outcome(() => log.setAnswer(photo, analysed, { photoUris: [] })));
+      seen.push(view(await log.getStored(photo)));
+      await log.setAnswer(photo, analysed, await sentAll(log, photo));
+      seen.push(await outcome(() => log.replaceAnswer(photo, analysed, { photoUris: [] })));
+      seen.push(view(await log.getStored(photo)), await listView(log));
+      return seen;
+    },
+  ],
+  [
     "the most photos a find holds, and the refusals",
     async (log) => {
       const id = await log.addWithOpenBatch(photoFind);
@@ -421,6 +451,21 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
     ]);
     expect(seen[6]).toMatchObject({ selfCheck: { state: "waiting" }, addedPhotos: "not-analysed" });
     expect(seen.slice(7, 9)).toEqual([null, "wrong-state"]);
+  });
+
+  it("the basis scenario sees the basis the store gives and its refusals, not nothing (PBI-2.15)", async () => {
+    const scenario = scenarios.find(([name]) => name.startsWith("the basis of each answer"));
+    if (scenario === undefined) {
+      throw new Error("no basis scenario");
+    }
+    const seen = await scenario[1](await realStore());
+    const basis = (index: number) => (seen[index] as { answerBasis?: unknown }).answerBasis;
+    expect([basis(0), basis(1), basis(2), basis(3)]).toEqual(["text", "text", "photos", "photos"]);
+    expect(seen[4]).toEqual([expect.objectContaining({ id: 1, answerBasis: "photos" })]);
+    expect(seen[5]).toBe("wrong-state");
+    expect(basis(6)).toBeNull();
+    expect(seen[7]).toBe("wrong-state");
+    expect(basis(8)).toBe("photos");
   });
 
   it("the list scenario sees the species the store gives, not nothing (PBI-2.7)", async () => {

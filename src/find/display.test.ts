@@ -2,6 +2,7 @@ import { EDIBILITIES } from "../analysis/answer";
 import { STRINGS } from "../i18n/strings";
 import { POSITION_SOURCES, TIME_SOURCES } from "../store/find";
 import {
+  answerSubject,
   checkedEdibility,
   confidenceText,
   edibilityText,
@@ -11,7 +12,6 @@ import {
   formatFindTime,
   formatUtcOffset,
   mapLink,
-  matchBasis,
   parseFindId,
   positionSourceText,
   selfCheckReason,
@@ -225,21 +225,24 @@ describe("the texts of a find's values", () => {
   });
 });
 
-describe("matchBasis: what an answer naming a species was based on (Clead's decision 3 on #57)", () => {
-  it.each(["waiting", "agreed", "no-species", "failed", "no-picture"] as const)(
-    "is the description for an answer with a self-check that is %s: the text alone",
-    (state) => {
-      expect(matchBasis({ state })).toBe("described");
+describe("answerSubject: what an answer's wording speaks of, by what it was based on (Clead's decision 3 on #57; PBI-2.15)", () => {
+  it.each([true, false])(
+    "is the description for an answer from the text alone, whether or not the find has photos now (%s)",
+    (hasPhotos) => {
+      expect(answerSubject("text", hasPhotos)).toBe("described");
     },
   );
 
-  it("is the description for an answer whose self-check disagreed", () => {
-    const names = { sv: "a", en: "b", la: "c d", it: "e" };
-    expect(matchBasis({ state: "disagreed", names })).toBe("described");
-  });
+  it.each([true, false])(
+    "is a photo for an answer from photos, whether or not the find has photos now (%s)",
+    (hasPhotos) => {
+      expect(answerSubject("photos", hasPhotos)).toBe("photo");
+    },
+  );
 
-  it("is a photo for an answer without a self-check: from photos, with or without text", () => {
-    expect(matchBasis(null)).toBe("photo");
+  it("follows whether the find has photos for an answer whose basis the store does not hold (one stored before schema version 3)", () => {
+    expect(answerSubject(null, true)).toBe("photo");
+    expect(answerSubject(null, false)).toBe("described");
   });
 });
 

@@ -162,7 +162,7 @@ const SAFE_OFFSET =
   "CASE WHEN utc_offset_min BETWEEN -1080 AND 1080 THEN utc_offset_min END AS utc_offset_min";
 /** The ID, given back only as a positive safe integer, else as NULL (PBI-1.26). */
 const SAFE_ID = "CASE WHEN id BETWEEN 1 AND 9007199254740991 THEN id END AS id";
-const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES}, ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}, added_photos, picture_file, picture_author, picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it, confidence, confidence_score`;
+const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source, latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES}, ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model, ${safeTime("analysed_at_ms")}, answer_basis, added_photos, picture_file, picture_author, picture_licence, picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it, confidence, confidence_score`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
 const NEXT_WAITING = `SELECT ${FIND_COLUMNS} FROM finds WHERE (state = 'waiting' OR (state = 'done' AND (added_photos = 'waiting' OR (self_check = 'waiting' AND (picture_file IS NULL OR ${PHOTO_COUNT} = 0))))) AND batch_open = 0 AND finds.id > ? AND finds.id <= 9007199254740991 ORDER BY finds.id ASC LIMIT 1`;
 const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv, name_en, name_it, edibility FROM finds ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
@@ -172,9 +172,10 @@ const FILES_OF_STORED = `SELECT photos, picture_file FROM finds WHERE CAST(id AS
 const DELETE_STORED = `DELETE FROM finds WHERE CAST(id AS TEXT) = ? AND ${UNREADABLE_ID}`;
 /**
  * An answer's columns (review of #49, fix 1): the photos added since are waiting when the find now
- * holds one the analysis did not send; the self-check waits only for a match from no photo.
+ * holds one the analysis did not send; the self-check waits only for a match from no photo. The
+ * answer's basis, from the text alone or from photos, is written with it (PBI-2.15).
  */
-const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL, answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?, name_it = ?, edibility = ?, confidence = ?, confidence_score = ?, added_photos = CASE WHEN EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(finds.photos) THEN finds.photos ELSE '[]' END) WHERE json_extract(value, '$.file') NOT IN (SELECT value FROM json_each(?))) THEN 'waiting' ELSE 'analysed' END, picture_file = NULL, picture_author = NULL, picture_licence = NULL, picture_page = NULL, self_check = CASE WHEN ? = 0 AND ? = 'match' AND text IS NOT NULL THEN 'waiting' END, check_name_sv = NULL, check_name_en = NULL, check_name_la = NULL, check_name_it = NULL`;
+const ANSWER_COLUMNS = `state = 'done', failure_cause = NULL, failure_detail = NULL, answer_json = ?, model = ?, analysed_at_ms = ?, result = ?, name_sv = ?, name_en = ?, name_it = ?, edibility = ?, confidence = ?, confidence_score = ?, answer_basis = ?, added_photos = CASE WHEN EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(finds.photos) THEN finds.photos ELSE '[]' END) WHERE json_extract(value, '$.file') NOT IN (SELECT value FROM json_each(?))) THEN 'waiting' ELSE 'analysed' END, picture_file = NULL, picture_author = NULL, picture_licence = NULL, picture_page = NULL, self_check = CASE WHEN ? = 0 AND ? = 'match' AND text IS NOT NULL THEN 'waiting' END, check_name_sv = NULL, check_name_en = NULL, check_name_la = NULL, check_name_it = NULL`;
 const SET_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state IN ('waiting', 'failed')`;
 const REPLACE_ANSWER = `UPDATE finds SET ${ANSWER_COLUMNS} WHERE id = ? AND state = 'done'`;
 const MARK_FAILED =
@@ -252,6 +253,7 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     answer_json: null,
     model: null,
     analysed_at_ms: null,
+    answer_basis: null,
     added_photos: null,
     picture_file: null,
     picture_author: null,
@@ -270,7 +272,7 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
 
 /**
  * A done row whose answer is the match, as the store writes it: its confidence also in its column
- * (PBI-2.12).
+ * (PBI-2.12), and from the find's photo (PBI-2.15).
  */
 function doneRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return row({
@@ -278,6 +280,7 @@ function doneRow(overrides: Record<string, unknown> = {}): Record<string, unknow
     answer_json: answerToJson(match),
     model: "claude-model-x",
     analysed_at_ms: 1_762_600_000_000,
+    answer_basis: "photos",
     added_photos: "analysed",
     confidence_score: 90,
     ...overrides,
@@ -306,6 +309,7 @@ function textRow(overrides: Record<string, unknown> = {}): Record<string, unknow
     text: "A yellow funnel with false gills.",
     photos: "[]",
     batches: 0,
+    answer_basis: "text",
     self_check: "waiting",
     ...overrides,
   });
@@ -332,6 +336,7 @@ function doneMatchRow(overrides: Record<string, unknown> = {}): Record<string, u
     answer_json: answerToJson(match),
     model: "claude-model-x",
     analysed_at_ms: 1_762_600_000_000,
+    answer_basis: "photos",
     added_photos: "analysed",
     result: "match",
     name_sv: "Kantarell",
@@ -1069,11 +1074,32 @@ describe("getStored (PBI-2.2)", () => {
       time: { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" },
       position: { latitude: 59.64, longitude: 17.08, accuracyM: 12.5, source: "fix" },
       analysis: { state: "done", ...analysed },
+      answerBasis: "photos",
       addedPhotos: "not-analysed",
       picture: null,
       selfCheck: null,
     });
     expect(events).toEqual([{ method: "first", sql: GET, params: [7] }]);
+  });
+
+  it.each([
+    ["from the text alone", textRow(), "text"],
+    ["from photos", doneRow(), "photos"],
+    [
+      "left empty by the migration, on a text find that has had a photo, naming no species",
+      textRow({
+        answer_json: answerToJson({ result: "no_mushroom" }),
+        confidence_score: null,
+        self_check: null,
+        batches: 1,
+        answer_basis: null,
+      }),
+      null,
+    ],
+    ["of a find without an answer", row(), null],
+  ] as const)("reads the basis of an answer %s (PBI-2.15)", async (_, stored, basis) => {
+    db.reply("first", GET, stored);
+    await expect(store.getStored(7)).resolves.toMatchObject({ answerBasis: basis });
   });
 
   it("reads a text find without photos, its picture and a disagreeing self-check", async () => {
@@ -1431,6 +1457,7 @@ describe("list", () => {
         answer_json: answerToJson({ result: "no_mushroom" }),
         model: "m",
         analysed_at_ms: 1,
+        answer_basis: "photos",
         added_photos: "analysed",
         result: "no_mushroom",
       }),
@@ -1447,6 +1474,8 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         position,
+        // What each answer was based on, for its wording (PBI-2.15).
+        answerBasis: "photos",
         selfCheck: null,
         species: match.names,
         picture: null,
@@ -1464,6 +1493,7 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         position,
+        answerBasis: "photos",
         selfCheck: null,
         species: match.names,
         picture: null,
@@ -1481,6 +1511,7 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         position,
+        answerBasis: "photos",
         selfCheck: null,
         species: null,
         picture: null,
@@ -1492,6 +1523,7 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         position,
+        answerBasis: null,
         selfCheck: null,
         species: null,
         picture: null,
@@ -1503,6 +1535,7 @@ describe("list", () => {
         photoUri: "file:///doc/photos/p7.jpg",
         time,
         position,
+        answerBasis: null,
         selfCheck: null,
         species: null,
         picture: null,
@@ -1531,6 +1564,7 @@ describe("list", () => {
         answer_json: answerToJson({ result: "cannot_tell" }),
         model: "m",
         analysed_at_ms: 1,
+        answer_basis: "photos",
         added_photos: "analysed",
         result: "cannot_tell",
       }),
@@ -1578,6 +1612,7 @@ describe("list", () => {
         time: { takenAtMs: 1_762_590_000_000, utcOffsetMinutes: 60, source: "saved" },
         position: { latitude: 59.64, longitude: 17.08, accuracyM: 12.5, source: "fix" },
         analysis: { state: "waiting" },
+        answerBasis: null,
         selfCheck: null,
         species: null,
         picture: null,
@@ -1587,6 +1622,7 @@ describe("list", () => {
         id: 7,
         photoUri: null,
         analysis: expect.objectContaining({ state: "done", result: "match", confidence: 90 }),
+        answerBasis: "text",
         // The answer is from the text alone, so the Log shows "unknown" until it agrees (3.9).
         selfCheck: { state: "waiting" },
       }),
@@ -1868,7 +1904,7 @@ describe("setAnswer", () => {
     db.reply("first", PHOTOS_OF, ONE_PHOTO_ROW);
   });
 
-  it("reads the find's photos, then saves the answer as JSON with the Log's fields, the names of the photos sent, their number and the result once more, for a waiting or failed find", async () => {
+  it("reads the find's photos, then saves the answer as JSON with the Log's fields, its basis, the names of the photos sent, their number and the result once more, for a waiting or failed find", async () => {
     await store.setAnswer(7, analysed, SENT_P7);
     expect(events).toEqual([
       { method: "first", sql: PHOTOS_OF, params: [7] },
@@ -1886,6 +1922,8 @@ describe("setAnswer", () => {
           "edible",
           null,
           90,
+          // From photos, since the analysis sent one (PBI-2.15).
+          "photos",
           '["p7.jpg"]',
           1,
           "match",
@@ -1895,10 +1933,41 @@ describe("setAnswer", () => {
     ]);
   });
 
-  it("names no photo, and counts none, for an analysis of the text alone (review of #49, fix 1)", async () => {
+  it("names no photo, counts none, and records the answer as one from the text, for an analysis of the text alone (review of #49, fix 1; PBI-2.15)", async () => {
     db.reply("first", PHOTOS_OF, { text: "A yellow funnel.", photos: "[]", batches: 0 });
     await store.setAnswer(7, analysed, { photoUris: [] });
-    expect(events.at(-1)).toMatchObject({ params: expect.arrayContaining(["[]", 0, "match", 7]) });
+    const run = events.at(-1);
+    expect(run !== undefined && "params" in run && run.params.slice(10)).toEqual([
+      "text",
+      "[]",
+      0,
+      "match",
+      7,
+    ]);
+  });
+
+  it("records an answer from the text alone as one from the text on a text find that holds photos, which it did not send (PBI-2.15)", async () => {
+    db.reply("first", PHOTOS_OF, {
+      text: "A yellow funnel.",
+      photos: '[{"file":"p7.jpg","batch":1}]',
+      batches: 1,
+    });
+    await store.setAnswer(7, { ...analysed, answer: { result: "cannot_tell" } }, { photoUris: [] });
+    const run = events.at(-1);
+    expect(run !== undefined && "params" in run && run.params.slice(10)).toEqual([
+      "text",
+      "[]",
+      0,
+      "cannot_tell",
+      7,
+    ]);
+  });
+
+  it("refuses, as wrong-state, an analysis of the text alone for a find without text, and stores nothing (PBI-2.15)", async () => {
+    await expect(
+      store.setAnswer(7, { ...analysed, answer: { result: "no_mushroom" } }, { photoUris: [] }),
+    ).rejects.toMatchObject({ code: "wrong-state", message: "find 7 has no text to analyse alone" });
+    expect(events).toEqual([{ method: "first", sql: PHOTOS_OF, params: [7] }]);
   });
 
   it("names, in the order sent, the photos the find holds, and counts every photo sent, also one removed since (review of #49, fix 1)", async () => {
@@ -1961,6 +2030,7 @@ describe("setAnswer", () => {
         null,
         null,
         null,
+        "photos",
         '["p7.jpg"]',
         1,
         answer.result,
@@ -2038,16 +2108,27 @@ describe("replaceAnswer", () => {
     db.reply("first", PHOTOS_OF, ONE_PHOTO_ROW);
   });
 
-  it("replaces the answer of a done find only, with what the analysis sent", async () => {
+  it("replaces the answer of a done find only, with what the analysis sent and its basis", async () => {
     await store.replaceAnswer(7, analysed, SENT_P7);
     expect(events).toEqual([
       { method: "first", sql: PHOTOS_OF, params: [7] },
-      expect.objectContaining({
-        method: "run",
-        sql: REPLACE_ANSWER,
-        params: expect.arrayContaining(['["p7.jpg"]', 1, "match", 7]),
-      }),
+      expect.objectContaining({ method: "run", sql: REPLACE_ANSWER }),
     ]);
+    const run = events.at(-1);
+    expect(run !== undefined && "params" in run && run.params.slice(10)).toEqual([
+      "photos",
+      '["p7.jpg"]',
+      1,
+      "match",
+      7,
+    ]);
+  });
+
+  it("refuses, as wrong-state, an analysis of the text alone for a find without text, and replaces nothing (PBI-2.15)", async () => {
+    await expect(store.replaceAnswer(7, analysed, { photoUris: [] })).rejects.toMatchObject({
+      code: "wrong-state",
+    });
+    expect(events).not.toContainEqual(expect.objectContaining({ sql: REPLACE_ANSWER }));
   });
 
   it("says the find is in the wrong state when it has no answer yet", async () => {

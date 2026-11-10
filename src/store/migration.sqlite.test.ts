@@ -185,12 +185,12 @@ const analysedMatch = (answer: Answer) => ({
 });
 
 describe("the migration to schema version 2, on a version 1 database (PBI-2.2)", () => {
-  it("brings the database to version 2 when the store opens it", async () => {
+  it("brings the database to version 2, and on to version 3 (PBI-2.15), when the store opens it", async () => {
     await versionOne();
     phaseOneFinds();
     expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({ user_version: 1 });
     await open();
-    expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({ user_version: 2 });
+    expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({ user_version: 3 });
     expect(
       sqlite.prepare("SELECT strict FROM pragma_table_list WHERE name = 'finds'").get(),
     ).toEqual({ strict: 1 });
@@ -286,6 +286,8 @@ describe("the migration to schema version 2, on a version 1 database (PBI-2.2)",
       time: time(3_000, "photo"),
       position: null,
       analysis: analysedMatch(match),
+      // Version 3: a Phase 1 answer is from its photo (PBI-2.15).
+      answerBasis: "photos",
       addedPhotos: "analysed",
       picture: null,
       selfCheck: null,
@@ -342,6 +344,7 @@ describe("the migration to schema version 2, on a version 1 database (PBI-2.2)",
       photoUri: "file:///photos/d.jpg",
       time: time(4_000),
       position: null,
+      answerBasis: "photos",
       selfCheck: null,
       // The Latin name, from the stored answer, for the Library's species filter (PBI-2.7).
       species: match.names,
@@ -526,7 +529,7 @@ describe("the migration to schema version 2, on a version 1 database (PBI-2.2)",
     expect(photos.files.size).toBe(9);
   });
 
-  it("runs only once: opening the store again leaves version 2 as it is", async () => {
+  it("runs only once: opening the store again leaves the database as it is", async () => {
     await versionOne();
     const ids = phaseOneFinds();
     await open();

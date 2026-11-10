@@ -50,13 +50,13 @@ class VersionedDatabase implements FindDatabase {
 }
 
 describe("migrate", () => {
-  it("knows two schema versions (PBI-2.2)", () => {
-    expect(MIGRATIONS).toHaveLength(2);
+  it("knows three schema versions (PBI-2.2, PBI-2.15)", () => {
+    expect(MIGRATIONS).toHaveLength(3);
   });
 
   it("creates the current schema on an empty database, each version in one exclusive transaction", async () => {
     const db = new VersionedDatabase(0);
-    await expect(migrate(db)).resolves.toBe(2);
+    await expect(migrate(db)).resolves.toBe(3);
     expect(db.events).toEqual([
       { first: "PRAGMA user_version" },
       { tx: "begin" },
@@ -67,18 +67,50 @@ describe("migrate", () => {
       { exec: MIGRATIONS[1] },
       { exec: "PRAGMA user_version = 2" },
       { tx: "commit" },
+      { tx: "begin" },
+      { exec: MIGRATIONS[2] },
+      { exec: "PRAGMA user_version = 3" },
+      { tx: "commit" },
     ]);
   });
 
-  it("takes a version 1 database to version 2 by the second migration alone (PBI-2.2)", async () => {
+  it("takes a version 1 database to version 3 by the second migration and then the third, each in its own transaction (PBI-2.2, PBI-2.15)", async () => {
     const db = new VersionedDatabase(1);
-    await expect(migrate(db)).resolves.toBe(2);
+    await expect(migrate(db)).resolves.toBe(3);
     expect(db.events).toEqual([
       { first: "PRAGMA user_version" },
       { tx: "begin" },
       { exec: MIGRATIONS[1] },
       { exec: "PRAGMA user_version = 2" },
       { tx: "commit" },
+      { tx: "begin" },
+      { exec: MIGRATIONS[2] },
+      { exec: "PRAGMA user_version = 3" },
+      { tx: "commit" },
+    ]);
+  });
+
+  it("takes a version 2 database to version 3 by the third migration alone (PBI-2.15)", async () => {
+    const db = new VersionedDatabase(2);
+    await expect(migrate(db)).resolves.toBe(3);
+    expect(db.events).toEqual([
+      { first: "PRAGMA user_version" },
+      { tx: "begin" },
+      { exec: MIGRATIONS[2] },
+      { exec: "PRAGMA user_version = 3" },
+      { tx: "commit" },
+    ]);
+  });
+
+  it("keeps a version 2 database at version 2 when the third migration fails, rolled back (PBI-2.15)", async () => {
+    const db = new VersionedDatabase(2);
+    db.failOn = "finds_v3";
+    await expect(migrate(db)).rejects.toThrow("disk I/O error");
+    expect(db.events).toEqual([
+      { first: "PRAGMA user_version" },
+      { tx: "begin" },
+      { exec: MIGRATIONS[2] },
+      { tx: "rollback" },
     ]);
   });
 
@@ -125,8 +157,8 @@ describe("migrate", () => {
     expect(db.events).not.toContainEqual({ exec: "THREE;" });
   });
 
-  it("refuses a database at a version past 2, and sends nothing to it (PBI-2.2)", async () => {
-    const db = new VersionedDatabase(3);
+  it("refuses a database at a version past 3, and sends nothing to it (PBI-2.2, PBI-2.15)", async () => {
+    const db = new VersionedDatabase(4);
     await expect(migrate(db)).rejects.toMatchObject({ code: "newer-schema" });
     expect(db.events).toEqual([{ first: "PRAGMA user_version" }]);
   });
@@ -228,5 +260,64 @@ describe("schema version 2 (PBI-2.2)", () => {
 
   it("indexes the finds in the Log's order again", () => {
     expect(v2).toContain("CREATE INDEX finds_newest_first ON finds (taken_at_ms DESC, id DESC)");
+  });
+});
+
+describe("schema version 3 (PBI-2.15)", () => {
+  const v3 = (MIGRATIONS[2] ?? "").replace(/\s+/g, " ");
+
+  it("rebuilds the finds table, still STRICT and with IDs that are never used again, keeping the high-water mark", () => {
+    expect(v3).toContain("CREATE TABLE finds_v3 ( id INTEGER PRIMARY KEY AUTOINCREMENT");
+    expect(v3).toMatch(/\) STRICT;/);
+    expect(v3).toContain(
+      "INSERT INTO sqlite_sequence (name, seq) SELECT 'finds_v3', seq FROM sqlite_sequence WHERE name = 'finds';",
+    );
+    expect(v3).toContain("DROP TABLE finds;");
+    expect(v3).toContain("ALTER TABLE finds_v3 RENAME TO finds;");
+  });
+
+  it("keeps every column and every CHECK of version 2, as version 2 wrote them", () => {
+    const v2 = MIGRATIONS[1] ?? "";
+    const body = v2.slice(v2.indexOf("CREATE TABLE finds_v2 ("), v2.indexOf(") STRICT;"));
+    // Each line after the CREATE TABLE line: a column or a CHECK.
+    const lines = body
+      .split("\n")
+      .slice(1)
+      .map((line) => line.trim().replace(/,$/, ""))
+      .filter((line) => line.length > 0);
+    expect(lines.length).toBeGreaterThan(40);
+    for (const line of lines) {
+      expect(v3).toContain(line.replace(/\s+/g, " "));
+    }
+  });
+
+  it("copies the finds past the CHECKs, so a damaged row is kept as it is, and turns the CHECKs on again", () => {
+    expect(v3.indexOf("PRAGMA ignore_check_constraints = ON;")).toBeLessThan(
+      v3.indexOf("INSERT INTO finds_v3"),
+    );
+    expect(v3.trim().endsWith("PRAGMA ignore_check_constraints = OFF;")).toBe(true);
+  });
+
+  it("lets the database refuse a basis it does not know, and one that does not fit the find's other columns", () => {
+    expect(v3).toContain("answer_basis TEXT CHECK (answer_basis IN ('text', 'photos'))");
+    expect(v3).toContain("CHECK (answer_basis IS NULL OR answer_json IS NOT NULL)");
+    expect(v3).toContain("CHECK (COALESCE(answer_basis, '') <> 'text' OR text IS NOT NULL)");
+    expect(v3).toContain("CHECK (COALESCE(answer_basis, '') <> 'photos' OR self_check IS NULL)");
+    expect(v3).toContain(
+      "CHECK (COALESCE(answer_basis, '') <> 'text' OR COALESCE(result, '') <> 'match' OR self_check IS NOT NULL)",
+    );
+    expect(v3).toContain(
+      "CHECK (answer_basis IS NOT NULL OR answer_json IS NULL OR (text IS NOT NULL AND COALESCE(result, '') <> 'match' AND batches > 0))",
+    );
+  });
+
+  it("fills the basis only where the stored data proves it, and leaves it empty otherwise", () => {
+    expect(v3).toContain(
+      "CASE WHEN answer_json IS NULL THEN NULL WHEN text IS NULL THEN 'photos' WHEN self_check IS NOT NULL THEN 'text' WHEN result = 'match' THEN 'photos' WHEN batches = 0 THEN 'text' END",
+    );
+  });
+
+  it("indexes the finds in the Log's order again", () => {
+    expect(v3).toContain("CREATE INDEX finds_newest_first ON finds (taken_at_ms DESC, id DESC)");
   });
 });
