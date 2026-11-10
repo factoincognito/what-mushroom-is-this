@@ -831,15 +831,6 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
     ],
     ["a latitude past 90 (PBI-2.16, #68)", (photo) => insertWaitingAt(90.5, 17.08, photo)],
     ["a latitude below -90 (PBI-2.16, #68)", (photo) => insertWaitingAt(-91, 17.08, photo)],
-    [
-      "an edibility, though it has no answer (PBI-2.17)",
-      (photo) =>
-        insertPastChecks(
-          `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, ${PHOTO_COLUMNS}, state,
-            edibility) VALUES (9000000, 0, 'saved', ${PHOTO}, 'waiting', 'edible')`,
-          photo,
-        ),
-    ],
   ];
 
   it("reads the finds the store saved at the edges of the position's range, in the list, the queue's pick and get (PBI-2.16)", async () => {

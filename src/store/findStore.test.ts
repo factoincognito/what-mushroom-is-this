@@ -1411,9 +1411,6 @@ describe("get", () => {
         confidence_score: null,
       }),
     ],
-    ["a result on a find without an answer", row({ result: "match" })],
-    ["a name on a find without an answer", row({ name_en: "Chanterelle" })],
-    ["an edibility on a find without an answer", row({ edibility: "edible" })],
   ])(
     "refuses as corrupt a find whose answer columns hold %s, as get and getStored both read it (PBI-2.17)",
     async (_, stored) => {
@@ -1422,6 +1419,22 @@ describe("get", () => {
       if (stored.text === null) {
         await expect(store.get(7)).rejects.toMatchObject({ code: "corrupt" });
       }
+    },
+  );
+
+  it.each<[string, Record<string, unknown>]>([
+    ["a result", row({ result: "match" })],
+    ["a name", row({ name_en: "Chanterelle" })],
+    ["an edibility", row({ edibility: "edible" })],
+    [
+      "an edibility, failed",
+      row({ state: "failed", failure_cause: "request", failure_detail: "400", edibility: "edible" }),
+    ],
+  ])(
+    "reads a find without an answer by its state, though a damaged file gives it %s, which nothing shows and its next answer rewrites (review of #84, fix 1; PBI-2.17)",
+    async (_, stored) => {
+      db.reply("first", GET, stored);
+      await expect(store.getStored(7)).resolves.toMatchObject({ id: 7 });
     },
   );
 
@@ -1860,7 +1873,6 @@ describe("list", () => {
         result: "cannot_tell",
       }),
     ],
-    ["a waiting find with an edibility (PBI-2.17)", summaryRow({ edibility: "edible" })],
     [
       "a done find whose stored answer is not of the shape (Clead's review of #26, decision 2)",
       doneMatchRow({ answer_json: '{"result":"maybe"}' }),
