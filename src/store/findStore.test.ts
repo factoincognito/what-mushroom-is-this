@@ -1,6 +1,7 @@
 import type { SQLiteBindParams } from "expo-sqlite";
 
 import type { ApiAnswer, ApiMatch, Match } from "../analysis/answer";
+import { config } from "../config/config";
 import { answerToJson } from "./answerJson";
 import type { FindDatabase, SqlRunner } from "./database";
 import { type NewAnalysedAnswer, type NewFind, StoreError } from "./find";
@@ -286,6 +287,45 @@ function doneRow(overrides: Record<string, unknown> = {}): Record<string, unknow
     ...overrides,
   });
 }
+
+/** A stored list of `count` photos, all in batch 1, as the store writes one (PBI-2.2). */
+function photoList(count: number): string {
+  return JSON.stringify(
+    Array.from({ length: count }, (_, index) => ({ file: `p${index + 1}.jpg`, batch: 1 })),
+  );
+}
+
+/** One photo past the most a find holds, which only a damaged file can store (PBI-2.16). */
+const PHOTOS_PAST_LIMIT = photoList(config.maxPhotosPerFind + 1);
+/** One character past the longest text a lookup takes (PBI-2.14, note 1). */
+const TEXT_PAST_LIMIT = "a".repeat(config.lookupTextMaxLength + 1);
+/**
+ * The longest text a lookup takes, in characters each outside the Basic Multilingual Plane, so
+ * twice as many UTF-16 units: the store counts code points, as the flow and the counter do.
+ */
+const TEXT_AT_LIMIT = "\u{1F344}".repeat(config.lookupTextMaxLength);
+
+/**
+ * The rows a damaged file can hold past the store's limits, each a waiting find with a photo,
+ * which the store reads as unreadable (PBI-2.14 note 1, PBI-2.16 note 1, and #68's longitude).
+ */
+const PAST_LIMITS: [string, Record<string, unknown>][] = [
+  ["more photos than a find holds (PBI-2.16)", { photos: PHOTOS_PAST_LIMIT }],
+  ["a text longer than a lookup takes (PBI-2.14)", { text: TEXT_PAST_LIMIT }],
+  ["a longitude past 180 (#68)", { longitude: 180.5 }],
+  ["a longitude below -180 (#68)", { longitude: -181 }],
+  ["a longitude the map would wrap onto the Earth (#68)", { longitude: 540 }],
+  ["a latitude past 90 (#68)", { latitude: 90.5 }],
+  ["a latitude below -90 (#68)", { latitude: -91 }],
+];
+
+/** The rows at the store's limits, which its own writes can produce and it reads. */
+const AT_LIMITS: [string, Record<string, unknown>][] = [
+  ["as many photos as a find holds", { photos: photoList(config.maxPhotosPerFind) }],
+  ["a text as long as a lookup takes, in code points", { text: TEXT_AT_LIMIT }],
+  ["the position at 90 and 180", { latitude: 90, longitude: 180 }],
+  ["the position at -90 and -180", { latitude: -90, longitude: -180 }],
+];
 
 /** A representative picture's columns, as `setPicture` writes them (PBI-2.2). */
 const picture = {
@@ -1295,6 +1335,26 @@ describe("get", () => {
     },
   );
 
+  it.each(PAST_LIMITS)(
+    "refuses as corrupt a find with %s, as get and getStored both read it",
+    async (_, overrides) => {
+      db.reply("first", GET, row(overrides));
+      await expect(store.get(7)).rejects.toMatchObject({ code: "corrupt" });
+      await expect(store.getStored(7)).rejects.toMatchObject({ code: "corrupt" });
+    },
+  );
+
+  it("refuses as corrupt a text find without photos whose text is longer than a lookup takes (PBI-2.14)", async () => {
+    db.reply("first", GET, row({ text: TEXT_PAST_LIMIT, photos: "[]", batches: 0 }));
+    await expect(store.getStored(7)).rejects.toMatchObject({ code: "corrupt" });
+  });
+
+  it.each(AT_LIMITS)("reads a find with %s, as get and getStored", async (_, overrides) => {
+    db.reply("first", GET, row(overrides));
+    await expect(store.get(7)).resolves.toMatchObject({ id: 7 });
+    await expect(store.getStored(7)).resolves.toMatchObject({ id: 7 });
+  });
+
   it.each<[string, string]>([
     ["0", '"confidence":0'],
     ["101", '"confidence":101'],
@@ -1727,6 +1787,29 @@ describe("list", () => {
     },
   );
 
+  it.each(PAST_LIMITS)(
+    "marks a stored row with %s as unreadable, by its ID, and lists the others",
+    async (_, overrides) => {
+      db.reply("all", LIST, [
+        summaryRow({ id: 9 }),
+        summaryRow({ ...overrides, id: 8 }),
+        summaryRow({ id: 7 }),
+      ]);
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: 9 }),
+        { readable: false, id: 8 },
+        expect.objectContaining({ readable: true, id: 7 }),
+      ]);
+    },
+  );
+
+  it.each(AT_LIMITS)("lists a row with %s as readable", async (_, overrides) => {
+    db.reply("all", LIST, [summaryRow({ ...overrides, id: 8 })]);
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id: 8 }),
+    ]);
+  });
+
   it.each<[string, unknown]>([
     ["a row that is not an object", "a row"],
     ["a row without an ID", summaryRow({ id: null })],
@@ -1856,6 +1939,26 @@ describe("oldestWaiting (PBI-1.7, PBI-1.16)", () => {
       return params[0] === 2 ? doneRow({ id: 5, added_photos: "waiting" }) : null;
     });
     await expect(store.oldestWaiting()).resolves.toBe(5);
+  });
+
+  it.each(PAST_LIMITS)(
+    "passes over a waiting find with %s, as one it cannot read, and gives the next",
+    async (_, overrides) => {
+      db.reply("first", NEXT_WAITING, (params: readonly unknown[]) => {
+        if (params[0] === 0) {
+          return row({ ...overrides, id: 2 });
+        }
+        return params[0] === 2 ? row({ id: 5 }) : null;
+      });
+      await expect(store.oldestWaiting()).resolves.toBe(5);
+    },
+  );
+
+  it.each(AT_LIMITS)("gives a waiting find with %s", async (_, overrides) => {
+    db.reply("first", NEXT_WAITING, (params: readonly unknown[]) =>
+      params[0] === 0 ? row({ ...overrides, id: 4 }) : null,
+    );
+    await expect(store.oldestWaiting()).resolves.toBe(4);
   });
 
   it("gives null when every waiting find is one it cannot read", async () => {

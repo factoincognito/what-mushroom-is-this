@@ -140,6 +140,18 @@ function insertWaitingWithUnreadablePosition(photo: string): number {
   );
 }
 
+/** Inserts a waiting find, taken latest, at the position given, past the CHECKs (#68). */
+function insertWaitingAt(latitude: number, longitude: number, photo: string): number {
+  return insertPastChecks(
+    `INSERT INTO finds (taken_at_ms, utc_offset_min, time_source, latitude, longitude,
+      position_source, ${PHOTO_COLUMNS}, state)
+      VALUES (9000000, 0, 'saved', ?, ?, 'fix', ${PHOTO}, 'waiting')`,
+    latitude,
+    longitude,
+    photo,
+  );
+}
+
 /** 2^53 + 1, the first integer past JavaScript's safe range that is not 2^53 itself. */
 const PAST_SAFE = 2n ** 53n + 1n;
 
@@ -811,7 +823,41 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
     ],
     ["a UTC offset below -18 hours (PBI-1.26)", (photo) => insertWaitingWithOffset(-1081, photo)],
     ["a UTC offset below -2^53 (PBI-1.26)", (photo) => insertWaitingWithOffset(-PAST_SAFE, photo)],
+    ["a longitude past 180 (PBI-2.16, #68)", (photo) => insertWaitingAt(59.64, 180.5, photo)],
+    ["a longitude below -180 (PBI-2.16, #68)", (photo) => insertWaitingAt(59.64, -181, photo)],
+    [
+      "a longitude the map would wrap onto the Earth (PBI-2.16, #68)",
+      (photo) => insertWaitingAt(59.64, 540, photo),
+    ],
+    ["a latitude past 90 (PBI-2.16, #68)", (photo) => insertWaitingAt(90.5, 17.08, photo)],
+    ["a latitude below -90 (PBI-2.16, #68)", (photo) => insertWaitingAt(-91, 17.08, photo)],
   ];
+
+  it("reads the finds the store saved at the edges of the position's range, in the list, the queue's pick and get (PBI-2.16)", async () => {
+    const north = await store.add(
+      newFind(1_000, { latitude: 90, longitude: 180, accuracyM: 0, source: "fix" }),
+    );
+    const south = await store.add(
+      newFind(2_000, { latitude: -90, longitude: -180, accuracyM: null, source: "last-known" }),
+    );
+    const later = await store.add(newFind(3_000));
+    await store.setPosition(later, { latitude: -90, longitude: 180, accuracyM: 5, source: "fix" });
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id: later }),
+      expect.objectContaining({ readable: true, id: south }),
+      expect.objectContaining({ readable: true, id: north }),
+    ]);
+    await expect(store.oldestWaiting()).resolves.toBe(north);
+    await expect(store.get(north)).resolves.toMatchObject({
+      position: { latitude: 90, longitude: 180 },
+    });
+    await expect(store.get(south)).resolves.toMatchObject({
+      position: { latitude: -90, longitude: -180 },
+    });
+    await expect(store.get(later)).resolves.toMatchObject({
+      position: { latitude: -90, longitude: 180 },
+    });
+  });
 
   it.each(unreadableWaiting)(
     "judges a waiting row with %s the same way in the list, the queue's pick and get",

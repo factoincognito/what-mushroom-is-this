@@ -6,6 +6,7 @@
  */
 
 import type { ApiMatch } from "../analysis/answer";
+import { config } from "../config/config";
 import {
   type DatabaseSync,
   memoryPhotos,
@@ -1129,5 +1130,88 @@ describe("the constraints of schema version 2 on a real SQLite (PBI-2.2)", () =>
         "picture_file = 'p1.jpg', picture_author = 'a', picture_licence = 'l', picture_page = 'p'",
       ),
     ).toThrow(/UNIQUE constraint failed/);
+  });
+});
+
+/** A stored list of `count` photos, all in batch 1, as the store writes one. */
+function photoList(count: number): string {
+  return JSON.stringify(
+    Array.from({ length: count }, (_, index) => ({ file: `d${index + 1}.jpg`, batch: 1 })),
+  );
+}
+
+describe("a find a damaged file holds past the store's limits (PBI-2.14 note 1, PBI-2.16 note 1)", () => {
+  /**
+   * Ways to damage a waiting find the store saved; each gives the find's ID. The CHECKs set no
+   * limit on either, so a plain UPDATE stores it, as a damaged file can hold it.
+   */
+  const damaged: [string, () => Promise<number>][] = [
+    [
+      "more photos than a find holds",
+      async () => {
+        const id = await store.add(photoFind());
+        sqlite
+          .prepare("UPDATE finds SET photos = ? WHERE id = ?")
+          .run(photoList(config.maxPhotosPerFind + 1), id);
+        return id;
+      },
+    ],
+    [
+      "a text longer than a lookup takes",
+      async () => {
+        const id = await store.addText(textFind);
+        sqlite
+          .prepare("UPDATE finds SET text = ? WHERE id = ?")
+          .run("a".repeat(config.lookupTextMaxLength + 1), id);
+        return id;
+      },
+    ],
+  ];
+
+  it.each(damaged)(
+    "lists a waiting find with %s as unreadable, by its ID; getStored refuses it, the queue's pick passes over it and it stays waiting, and delete removes it",
+    async (_, damageFind) => {
+      const id = await damageFind();
+      const next = await store.add(photoFind("file:///cache/next.jpg"));
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: next }),
+        { readable: false, id },
+      ]);
+      await expect(store.getStored(id)).rejects.toMatchObject({ code: "corrupt" });
+      await expect(store.oldestWaiting()).resolves.toBe(next);
+      expect(sqlite.prepare("SELECT state FROM finds WHERE id = ?").get(id)).toEqual({
+        state: "waiting",
+      });
+      await expect(store.delete(id)).resolves.toEqual({ photoRemoved: true });
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({ readable: true, id: next }),
+      ]);
+    },
+  );
+
+  it("reads a find the store filled with as many photos as a find holds, and refuses one more", async () => {
+    const id = await store.addWithOpenBatch(photoFind());
+    for (let photo = 2; photo <= config.maxPhotosPerFind; photo += 1) {
+      await store.addPhoto(id, `file:///cache/${photo}.jpg`);
+    }
+    await expect(store.addPhoto(id, "file:///cache/past.jpg")).rejects.toMatchObject({
+      code: "wrong-state",
+    });
+    await store.completeBatch(id);
+    await expect(photosOf(id)).resolves.toHaveLength(config.maxPhotosPerFind);
+    await expect(store.list()).resolves.toEqual([expect.objectContaining({ readable: true, id })]);
+    await expect(store.oldestWaiting()).resolves.toBe(id);
+  });
+
+  it("reads a text find the store saved with a text as long as a lookup takes, counted in code points, and refuses one longer", async () => {
+    // Each character is outside the Basic Multilingual Plane: two UTF-16 units, one code point.
+    const longest = "\u{1F344}".repeat(config.lookupTextMaxLength);
+    const id = await store.addText({ ...textFind, text: longest });
+    await expect(store.addText({ ...textFind, text: `${longest}a` })).rejects.toMatchObject({
+      code: "invalid-input",
+    });
+    await expect(store.getStored(id)).resolves.toMatchObject({ text: longest });
+    await expect(store.list()).resolves.toEqual([expect.objectContaining({ readable: true, id })]);
+    await expect(store.oldestWaiting()).resolves.toBe(id);
   });
 });

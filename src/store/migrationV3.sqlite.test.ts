@@ -635,6 +635,34 @@ describe("a Phase 1 database, through versions 2 and 3 (PBI-2.15)", () => {
       answerBasis: "photos",
     });
   });
+
+  it("brings Phase 1 finds at the edges of the position's range to version 3, readable in getStored, the list and the queue's pick (PBI-2.16)", async () => {
+    await migrate(sqliteDatabase(sqlite), [MIGRATIONS[0] ?? ""]);
+    const north = insertV1("a.jpg", 1_000, {
+      ...doneV1(phaseOneMatch),
+      latitude: 90,
+      longitude: 180,
+      accuracy_m: 0,
+      position_source: "fix",
+    });
+    const south = insertV1("b.jpg", 2_000, {
+      latitude: -90,
+      longitude: -180,
+      position_source: "photo",
+    });
+    const store = await open();
+    await expect(store.getStored(north)).resolves.toMatchObject({
+      position: { latitude: 90, longitude: 180, accuracyM: 0, source: "fix" },
+    });
+    await expect(store.getStored(south)).resolves.toMatchObject({
+      position: { latitude: -90, longitude: -180, accuracyM: null, source: "photo" },
+    });
+    await expect(store.list()).resolves.toEqual([
+      expect.objectContaining({ readable: true, id: south }),
+      expect.objectContaining({ readable: true, id: north }),
+    ]);
+    await expect(store.oldestWaiting()).resolves.toBe(south);
+  });
 });
 
 describe("the constraints of schema version 3 on a real SQLite (PBI-2.15)", () => {
