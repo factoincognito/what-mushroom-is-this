@@ -2,9 +2,10 @@
  * The queue and a text answer's representative picture (docs/SPEC.md 3.9; PBI-2.9): the run that
  * brings the answer fetches it at once, before the next find; a picture that waits waits for the
  * next run, and not before Wikimedia's Retry-After; a find analysed from its screen gets its
- * picture too; an unsaved lookup's is fetched and given back, never stored. The self-check itself
- * is PBI-2.10's: here it stays waiting, or becomes "no picture". The find log is the in-memory
- * one, which `memoryFindLog.test.ts` holds to the real store.
+ * picture too; an unsaved lookup's is fetched and given back, never stored. The check on the
+ * picture, which follows it at once (PBI-2.10), is in `queueSelfCheck.test.ts`; here it shows only
+ * as one more request ("analyse photos") after the picture. The find log is the in-memory one,
+ * which `memoryFindLog.test.ts` holds to the real store.
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
@@ -123,6 +124,8 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
     expect(t.events).toEqual([
       "analyse text",
       `picture Cantharellus cibarius ${MODEL}`,
+      // The check on the picture, at once (PBI-2.10).
+      "analyse photos",
       "analyse photos",
     ]);
     const stored = await t.log.getStored(text);
@@ -133,8 +136,7 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
       page: PICTURE.page,
     });
     expect(stored?.photos).toEqual([]);
-    // The check on the picture is PBI-2.10's: it waits.
-    expect(stored?.selfCheck).toEqual({ state: "waiting" });
+    expect(stored?.selfCheck).toEqual({ state: "agreed" });
     expect(t.removed).toEqual([PICTURE.uri]);
     // An answer from a photo has no check, so no picture is fetched for it.
     expect((await t.log.getStored(photo))?.picture).toBeNull();
@@ -173,7 +175,11 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
       selfCheck: { state: "waiting" },
     });
     await t.queue.trigger();
-    expect(t.events.slice(2)).toEqual([`picture Cantharellus cibarius ${MODEL}`, "analyse photos"]);
+    expect(t.events.slice(2)).toEqual([
+      `picture Cantharellus cibarius ${MODEL}`,
+      "analyse photos",
+      "analyse photos",
+    ]);
     expect((await t.log.getStored(text))?.picture).not.toBeNull();
     expect(t.queue.getState().pause).toBeNull();
   });
@@ -191,7 +197,11 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
     expect(t.queue.getState().pause).toBe("picture-source");
     t.setNow(NOW + 30_000);
     await t.queue.trigger();
-    expect(t.events.slice(2)).toEqual([`picture Cantharellus cibarius ${MODEL}`, "analyse photos"]);
+    expect(t.events.slice(2)).toEqual([
+      `picture Cantharellus cibarius ${MODEL}`,
+      "analyse photos",
+      "analyse photos",
+    ]);
   });
 
   it("a fault without Retry-After lets the next run ask at once", async () => {
@@ -204,6 +214,7 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
       "analyse text",
       `picture Cantharellus cibarius ${MODEL}`,
       `picture Cantharellus cibarius ${MODEL}`,
+      "analyse photos",
     ]);
   });
 
@@ -273,6 +284,8 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
     await stale.queue.trigger();
     expect(stale.events.slice(2)).toEqual([
       `picture Cantharellus cibarius ${MODEL}`,
+      // The check on the picture, at once (PBI-2.10).
+      "analyse photos",
       "analyse photos",
     ]);
 
@@ -353,8 +366,10 @@ describe("a text find analysed from its screen (docs/SPEC.md 3.9)", () => {
     expect(t.events).toEqual([
       "analyse text",
       `picture Cantharellus cibarius ${MODEL}`,
+      "analyse photos",
       "analyse text",
       `picture Boletus edulis ${MODEL}`,
+      "analyse photos",
     ]);
     expect((await t.log.getStored(id))?.picture?.author).toBe("Another");
     expect(t.removed).toEqual([PICTURE.uri, "file:///cache/picture-3.jpg"]);

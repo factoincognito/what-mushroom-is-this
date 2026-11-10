@@ -523,15 +523,44 @@ describe("the queue's pick of an analysed find with new photos (SPEC 3.9, Batche
   });
 });
 
-describe("the queue's pick of a text answer whose picture waits (docs/SPEC.md 3.9, Fetching it; PBI-2.9)", () => {
-  it("takes it until it has its picture, or its check has none", async () => {
+describe("the queue's pick of a text answer whose picture or check waits (docs/SPEC.md 3.9; PBI-2.9, PBI-2.10)", () => {
+  it("takes it until its check has an outcome, or has no picture", async () => {
     const pictured = await answeredTextFind();
     const without = await answeredTextFind();
     await expect(store.oldestWaiting()).resolves.toBe(pictured);
     await store.setPicture(pictured, newPicture);
+    // Its check waits on the picture: still taken (PBI-2.10).
+    await expect(store.oldestWaiting()).resolves.toBe(pictured);
+    await store.setSelfCheck(pictured, { state: "agreed" });
     await expect(store.oldestWaiting()).resolves.toBe(without);
     await store.setSelfCheck(without, { state: "no-picture" });
     await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
+  it.each([
+    ["disagreed", { state: "disagreed", names: falseChanterelle }],
+    ["could not name a species", { state: "no-species" }],
+    ["failed", { state: "failed" }],
+  ] as const)("does not take it once its check %s", async (_name, outcome) => {
+    const id = await answeredTextFind();
+    await store.setPicture(id, newPicture);
+    await store.setSelfCheck(id, outcome);
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
+  it("does not take a waiting check on a find that got photos since its answer, also once their analysis failed: that check is skipped (PBI-2.10)", async () => {
+    const id = await answeredTextFind();
+    await store.setPicture(id, newPicture);
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.completeBatch(id);
+    // Taken for its photos.
+    await expect(store.oldestWaiting()).resolves.toBe(id);
+    await store.setAddedPhotos(id, "not-analysed");
+    await expect(store.oldestWaiting()).resolves.toBeNull();
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      selfCheck: { state: "waiting" },
+      addedPhotos: "not-analysed",
+    });
   });
 
   it("takes the finds oldest first by ID, waiting ones and those whose picture waits alike", async () => {
@@ -555,9 +584,10 @@ describe("the queue's pick of a text answer whose picture waits (docs/SPEC.md 3.
     });
   });
 
-  it("does not take a text answer whose picture is stored, nor one from photos, nor a photo find's", async () => {
+  it("does not take a text answer whose check agreed, nor one from photos, nor a photo find's", async () => {
     const id = await answeredTextFind();
     await store.setPicture(id, newPicture);
+    await store.setSelfCheck(id, { state: "agreed" });
     const photo = await store.add(photoFind());
     await store.setAnswer(photo, analysed, await sentAll(photo));
     await expect(store.oldestWaiting()).resolves.toBeNull();

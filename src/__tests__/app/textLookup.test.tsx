@@ -16,6 +16,7 @@ import { AppState, Linking } from "react-native";
 import type { Answer, Match } from "../../analysis/answer";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { STRINGS } from "../../i18n/strings";
+import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { TEXT_LOOKUP_SAVE_KEY } from "../../lookup/saveSetting";
 import { phoneTimeNow } from "../../newFind/saveFind";
@@ -63,6 +64,11 @@ jest.mock("../../picture/devicePicture", () => ({
   fetchDevicePicture: jest.fn(),
   removePictureCopy: jest.fn(),
 }));
+/** The picture prepared for the self-check, as the phone's encoder would give it (PBI-2.10). */
+jest.mock("../../image/prepareForAnalysis", () => ({
+  ...jest.requireActual("../../image/prepareForAnalysis"),
+  preparePhotoForAnalysis: jest.fn(),
+}));
 
 const APP_DIR = "./src/app";
 const en = STRINGS.en;
@@ -91,6 +97,9 @@ function apiAnswer(answer: Answer) {
     }),
   );
 }
+
+/** The picture's bytes as the self-check sends them (PBI-2.10). */
+const PICTURE_B64 = "UElDVFVSRQ==";
 
 const BAD_REQUEST = reply(
   400,
@@ -150,6 +159,9 @@ async function resetStandIns(): Promise<void> {
   jest
     .mocked(fetchDevicePicture)
     .mockResolvedValue({ kind: "waits", cause: "network", retryAtMs: null });
+  jest
+    .mocked(preparePhotoForAnalysis)
+    .mockResolvedValue({ ok: true, imageBase64: PICTURE_B64, width: 1270, height: 952 });
   Object.defineProperty(AppState, "currentState", { value: "background", configurable: true });
 }
 
@@ -479,9 +491,11 @@ describe("an unsaved lookup's representative picture (SPEC 3.9; PBI-2.9)", () =>
   };
   const label = en.find.picture.label.replace("{name}", CHANTERELLE.names.en);
 
-  it("shows the species' picture, labelled as not of the user's mushroom, with its author, licence and page, from Wikimedia Commons; the check waits", async () => {
+  it("shows the species' picture, labelled as not of the user's mushroom, with its author, licence and page, from Wikimedia Commons", async () => {
     jest.mocked(fetchDevicePicture).mockResolvedValueOnce({ kind: "picture", picture: PICTURE });
     fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    // The self-check's request does not get through, so the check waits.
+    fetchMock.mockRejectedValueOnce(new TypeError("Network request failed"));
     const openURL = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
     await openLookup();
     await describe_(DESCRIPTION);
@@ -500,7 +514,7 @@ describe("an unsaved lookup's representative picture (SPEC 3.9; PBI-2.9)", () =>
     expect(openURL).toHaveBeenCalledWith("https://creativecommons.org/licenses/by-sa/3.0/");
     await fireEvent.press(screen.getByRole("link", { name: en.find.picture.page }));
     expect(openURL).toHaveBeenLastCalledWith(PICTURE.page);
-    // Only the Latin name goes to Wikimedia; the check on the picture is PBI-2.10's.
+    // Only the Latin name goes to Wikimedia.
     expect(fetchDevicePicture).toHaveBeenCalledWith("Cantharellus cibarius", "claude-opus-5-5");
     const edibility = within(screen.getByTestId("match-edibility"));
     expect(edibility.getByText(en.find.selfCheck.waiting)).toBeOnTheScreen();
@@ -530,11 +544,14 @@ describe("an unsaved lookup's representative picture (SPEC 3.9; PBI-2.9)", () =>
     await analyse();
     expect(await screen.findByText(en.lookup.pictureWaits)).toBeOnTheScreen();
     jest.mocked(fetchDevicePicture).mockResolvedValueOnce({ kind: "picture", picture: PICTURE });
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
     await fireEvent.press(screen.getByRole("button", { name: en.lookup.checkAgain }));
     await settle();
     expect(await screen.findByLabelText(label)).toBeOnTheScreen();
     expect(screen.queryByText(en.lookup.pictureWaits)).not.toBeOnTheScreen();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // The description was analysed once; the second request is the check on the picture.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(en.find.selfCheck.agreed)).toBeOnTheScreen();
   });
 
   it("with no picture for the answer, says the edibility could not be checked", async () => {
@@ -572,6 +589,142 @@ describe("an unsaved lookup's representative picture (SPEC 3.9; PBI-2.9)", () =>
     expect(
       screen.getByText(t.find.picture.licence.replace("{licence}", t.find.picture.publicDomain)),
     ).toBeOnTheScreen();
+  });
+});
+
+describe("an unsaved lookup's self-check (SPEC 3.9; PBI-2.10)", () => {
+  const PICTURE = {
+    uri: "file:///cache/picture-2.jpg",
+    author: "Example Photographer",
+    licence: "cc-by-sa-3.0",
+    page: "https://commons.wikimedia.org/wiki/File:Chanterelle_Cantharellus_cibarius.jpg",
+  };
+  const FALSE_CHANTERELLE: Match = {
+    ...CHANTERELLE,
+    names: {
+      sv: "Narrkantarell",
+      en: "False chanterelle",
+      la: "Hygrophoropsis aurantiaca",
+      it: "Falso gallinaccio",
+    },
+  };
+  const shown = (edibility: string) =>
+    en.find.edibility.replace("{edibility}", en.find.edibilities[edibility as "edible"]);
+
+  /** Analyses the description; the check's request gets `checkReply`. */
+  async function lookUp(checkReply: unknown): Promise<void> {
+    jest.mocked(fetchDevicePicture).mockResolvedValueOnce({ kind: "picture", picture: PICTURE });
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    if (checkReply instanceof Error) {
+      fetchMock.mockRejectedValueOnce(checkReply);
+    } else {
+      fetchMock.mockResolvedValueOnce(checkReply);
+    }
+    await openLookup();
+    await describe_(DESCRIPTION);
+    await analyse();
+    await settle();
+  }
+
+  /** The body of the self-check's request, the second the screen sent. */
+  function checkRequest(): { messages: { content: unknown[] }[] } {
+    return JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+  }
+
+  it("runs at once on the picture alone, as Image 1:, without the description; when it agrees, says so and shows the answer's edibility", async () => {
+    await lookUp(apiAnswer(CHANTERELLE));
+    expect(preparePhotoForAnalysis).toHaveBeenCalledWith(
+      PICTURE.uri,
+      "claude-opus-5-5",
+      expect.anything(),
+    );
+    const content = checkRequest().messages[0]?.content ?? [];
+    expect(content.slice(0, 2)).toEqual([
+      { type: "text", text: "Image 1:" },
+      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: PICTURE_B64 } },
+    ]);
+    expect(JSON.stringify(content)).not.toContain(DESCRIPTION);
+    const edibility = within(screen.getByTestId("match-edibility"));
+    expect(edibility.getByText(en.find.selfCheck.agreed)).toBeOnTheScreen();
+    expect(edibility.getByText(shown("edible"))).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.lookup.checkAgain })).not.toBeOnTheScreen();
+    expect(mockLog.finds.size).toBe(0);
+  });
+
+  it("when the check names another species, says so, names both, and the edibility is unknown", async () => {
+    await lookUp(apiAnswer(FALSE_CHANTERELLE));
+    const edibility = within(screen.getByTestId("match-edibility"));
+    expect(
+      edibility.getByText(
+        en.find.selfCheck.disagreed
+          .replace("{matched}", CHANTERELLE.names.en)
+          .replace("{named}", FALSE_CHANTERELLE.names.en),
+      ),
+    ).toBeOnTheScreen();
+    expect(edibility.getByText(shown("unknown"))).toBeOnTheScreen();
+  });
+
+  it("when the check cannot name a species, says so, and the edibility is unknown", async () => {
+    await lookUp(apiAnswer({ result: "no_mushroom" }));
+    const edibility = within(screen.getByTestId("match-edibility"));
+    expect(edibility.getByText(en.find.selfCheck.noSpecies)).toBeOnTheScreen();
+    expect(edibility.getByText(shown("unknown"))).toBeOnTheScreen();
+  });
+
+  it("without a network, says the check waits, why, and offers Check again, which runs the check alone", async () => {
+    await lookUp(new TypeError("Network request failed"));
+    expect(screen.getByText(en.lookup.checkWaits)).toBeOnTheScreen();
+    expect(screen.getByText(en.queue.paused.network)).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId("match-edibility")).getByText(shown("unknown")),
+    ).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.lookup.turnSaveOn })).not.toBeOnTheScreen();
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await fireEvent.press(screen.getByRole("button", { name: en.lookup.checkAgain }));
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchDevicePicture).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(en.lookup.checkWaits)).not.toBeOnTheScreen();
+    expect(screen.getByText(en.find.selfCheck.agreed)).toBeOnTheScreen();
+  });
+
+  it("a 401 stops the queue as for a find: the check waits with the same message and a link to Settings", async () => {
+    await lookUp(
+      reply(
+        401,
+        JSON.stringify({
+          type: "error",
+          error: { type: "authentication_error", message: "invalid x-api-key" },
+        }),
+      ),
+    );
+    expect(screen.getByText(en.lookup.checkWaits)).toBeOnTheScreen();
+    expect(screen.getByText(en.queue.stopped.keyRefused)).toBeOnTheScreen();
+    expect(screen.getByRole("link", { name: en.queue.openSettings })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: en.lookup.checkAgain })).toBeOnTheScreen();
+  });
+
+  it("a 400 marks the check failed: the find says it could not be checked, with no Check again", async () => {
+    await lookUp(BAD_REQUEST);
+    const edibility = within(screen.getByTestId("match-edibility"));
+    expect(edibility.getByText(en.find.selfCheck.failed)).toBeOnTheScreen();
+    expect(edibility.getByText(shown("unknown"))).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.lookup.checkAgain })).not.toBeOnTheScreen();
+  });
+
+  it("an error in the app while checking: says so, and offers Check again", async () => {
+    jest
+      .mocked(preparePhotoForAnalysis)
+      .mockRejectedValueOnce(new Error("No space left on device"));
+    jest.mocked(fetchDevicePicture).mockResolvedValueOnce({ kind: "picture", picture: PICTURE });
+    fetchMock.mockResolvedValueOnce(apiAnswer(CHANTERELLE));
+    await openLookup();
+    await describe_(DESCRIPTION);
+    await analyse();
+    await settle();
+    expect(screen.getByText(en.lookup.checkError)).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: en.lookup.checkAgain })).toBeOnTheScreen();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

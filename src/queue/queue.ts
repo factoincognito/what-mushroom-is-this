@@ -52,19 +52,42 @@
  * still gives the find ends the run rather than looping (review of #71). From the find's screen, a
  * picture that waits sets no pause.
  * The fetch's copy is removed once the store has its own. An unsaved lookup's picture is fetched
- * on its screen's asking (`fetchLookupPicture`), and not stored; the screen removes its copy. The
- * check on the picture is PBI-2.10's: until then the self-check waits, or has no picture. A picture
- * that cannot be loaded counts neither toward the count of failed loads nor ends it.
+ * on its screen's asking (`fetchLookupPicture`), and not stored; the screen removes its copy. A
+ * picture that cannot be loaded counts neither toward the count of failed loads nor ends it.
+ *
+ * The self-check (docs/SPEC.md 3.9, "The self-check of a text lookup"; PBI-2.10): once the picture
+ * is stored, the check runs at once, before the next find, in the run and from the find's screen
+ * alike: a photo lookup on the picture, without the text, through the request of a photo find (the
+ * picture prepared for the model in use as a photo is, then sent as "Image 1:"), and the species it
+ * names compared with the text answer's (`selfCheckOutcome`). Its answer is stored only as the
+ * check's outcome, never as the find's answer. Its error classes fall in the three groups of an
+ * unsaved lookup: one that leaves a find waiting leaves the check waiting, and in a run ends the
+ * run with its pause, as a find that waits does; one that stops the queue stops it, and the check
+ * waits; any other, or a picture that cannot be loaded, decoded or sized or fails the segment
+ * check, fails the check. A check picture that cannot be loaded neither counts toward the count of
+ * failed loads nor ends it. The store's pick takes a find whose check waits, oldest first among the
+ * waiting finds; a run asks a find's picture and check once at most, as for the picture alone. A
+ * check still waiting on a find that got photos since its answer is not run: the analysis of those
+ * photos with the text is to replace the answer, and the check with it (the backlog note on
+ * PBI-2.10). An unsaved lookup's check runs on its screen's asking (`checkLookupPicture`), on the
+ * picture shown, and nothing of it is stored.
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
-import type { Answer } from "../analysis/answer";
+import type { Answer, SpeciesNames } from "../analysis/answer";
 import type { AnalysisError } from "../analysis/errors";
+import { selfCheckOutcome } from "../analysis/selfCheck";
 import { config } from "../config/config";
 import type { PreparedPhoto } from "../image/prepareForAnalysis";
 import type { ReadKeyResult } from "../key/apiKey";
 import type { PictureFetch } from "../picture/fetchPicture";
-import { type AnalysisSent, type FindFailure, type StoredFind, StoreError } from "../store/find";
+import {
+  type AnalysisSent,
+  type FindFailure,
+  type SelfCheckOutcome,
+  type StoredFind,
+  StoreError,
+} from "../store/find";
 import type { FindStore, LookupStore } from "../store/findStore";
 
 /**
@@ -135,6 +158,15 @@ export type AnalyseLookupResult =
   | { ok: false; notice: QueueNotice };
 
 /**
+ * What an unsaved lookup's self-check came to on its screen (docs/SPEC.md 3.9): its outcome
+ * (agreed, disagreed, no species, or failed), or the notice it waits with: a pause, or the stop
+ * of the queue, a missing key's too.
+ */
+export type CheckLookupResult =
+  | { ok: true; outcome: SelfCheckOutcome }
+  | { ok: false; notice: Extract<QueueNotice, { kind: "paused" | "stopped" }> };
+
+/**
  * The part of the find log the queue uses. It reads a find as `getStored` does, so that a text
  * find without photos, which Phase 1's `get` cannot show, is analysed (PBI-2.4).
  */
@@ -185,6 +217,15 @@ type Attempt =
    */
   | { type: "stop"; stop: QueueStop; photosWait: boolean };
 
+/**
+ * What a self-check came to (docs/SPEC.md 3.9), by the three groups of its error classes: an
+ * outcome to store, a wait, or a stop of the queue; the check waits for either of the last two.
+ */
+type CheckAttempt =
+  | { type: "outcome"; outcome: SelfCheckOutcome }
+  | { type: "waits"; cause: PauseCause }
+  | { type: "stop"; stop: QueueStop };
+
 /** What preparing a find's photos came to (docs/SPEC.md 3.9, Batches). */
 type PreparedPhotos = {
   /** Whether every photo prepared loaded; false once one did not. */
@@ -202,10 +243,11 @@ interface RunCount {
   /** The finds in a row, in this run, whose photo did not load. */
   failedLoads: number;
   /**
-   * The finds whose picture this run has asked for already. The store's pick gives the same find
-   * again while it still waits for its picture, so taking one twice ends the run (review of #71).
+   * The finds whose picture or check this run has asked for already. The store's pick gives the
+   * same find again while its picture or check still waits, so taking one twice ends the run
+   * (review of #71).
    */
-  picturesTried: Set<number>;
+  selfChecksTried: Set<number>;
 }
 
 export class AnalysisQueue {
@@ -289,11 +331,18 @@ export class AnalysisQueue {
       const analysed = find.analysis.state === "done";
       const attempt = await this.attempt(find, null);
       switch (attempt.type) {
-        case "answered":
+        case "answered": {
           await this.storeAnswer(log, find, attempt);
-          // A picture that waits is left to the queue's next run; the screen sets no pause.
-          await this.pictureAfterAnswer(log, id);
+          // A picture or a check that waits is left to the queue's next run, and the screen sets
+          // no pause; a check that meets a class that stops the queue stops it (docs/SPEC.md 3.9).
+          if ((await this.pictureAfterAnswer(log, id)) === null) {
+            const check = await this.checkAfterPicture(log, id);
+            if (check?.type === "stop") {
+              this.setStop(check.stop);
+            }
+          }
           return { ok: true };
+        }
         case "find-failed":
           if (analysed) {
             await this.addedNotAnalysed(log, find);
@@ -384,6 +433,29 @@ export class AnalysisQueue {
     return this.exclusive(() => this.picture(latinName));
   }
 
+  /**
+   * Runs an unsaved text lookup's self-check at once, from its screen (docs/SPEC.md 3.9), on the
+   * picture shown (`pictureUri`, the app's copy), against the species the answer named
+   * (`matched`), also while the queue is stopped, and stores nothing. A class that leaves a find
+   * waiting gives its pause and sets none on the queue; one that stops the queue stops it, as does
+   * a missing key; either way the check waits, for "Check again". Any other class, or a picture
+   * that cannot be prepared, fails the check. An error the queue does not handle rejects.
+   */
+  checkLookupPicture(pictureUri: string, matched: SpeciesNames): Promise<CheckLookupResult> {
+    return this.exclusive(async () => {
+      const check = await this.checkPicture(pictureUri, matched);
+      switch (check.type) {
+        case "outcome":
+          return { ok: true, outcome: check.outcome };
+        case "waits":
+          return { ok: false, notice: { kind: "paused", cause: check.cause } };
+        case "stop":
+          this.setStop(check.stop);
+          return { ok: false, notice: { kind: "stopped", stop: check.stop } };
+      }
+    });
+  }
+
   /** Removes a copy of a fetched picture, for a screen that showed it. */
   removePictureCopy(uri: string): void {
     this.deps.removePictureCopy(uri);
@@ -419,7 +491,7 @@ export class AnalysisQueue {
   }
 
   private async runLoop(): Promise<void> {
-    const count: RunCount = { failedLoads: 0, picturesTried: new Set() };
+    const count: RunCount = { failedLoads: 0, selfChecksTried: new Set() };
     while (this.inFront && this.state.stop === null) {
       this.triggered = false;
       const step = await this.exclusive(() => this.stepOldest(count));
@@ -442,23 +514,20 @@ export class AnalysisQueue {
       return "next";
     }
     if (!waitsForTheQueue(find)) {
-      // Its picture waits (PBI-2.9), or it was analysed from its screen since: take the next.
-      return picturePending(find) ? this.pictureStep(log, find, count) : "next";
+      // Its picture or its check waits (PBI-2.9, PBI-2.10), or it was analysed from its screen
+      // since: take the next. A waiting check the queue would not run, which only a store that
+      // judges otherwise gives, goes through the same step, so the run takes it once at most.
+      return selfCheckWaits(find) ? this.selfCheckStep(log, find, count) : "next";
     }
     const analysed = find.analysis.state === "done";
     const attempt = await this.attempt(find, count);
     switch (attempt.type) {
-      case "answered": {
+      case "answered":
         await this.storeAnswer(log, find, attempt);
-        // The run that brings a text answer fetches its picture at once (docs/SPEC.md 3.9).
-        count.picturesTried.add(id);
-        const pause = await this.pictureAfterAnswer(log, id);
-        if (pause === null) {
-          return "next";
-        }
-        this.setState({ pause });
-        return "end";
-      }
+        // The run that brings a text answer fetches its picture and runs the check at once,
+        // before it takes the next find (docs/SPEC.md 3.9).
+        count.selfChecksTried.add(id);
+        return this.selfCheckSteps(log, id);
       case "find-failed":
         if (analysed) {
           await this.addedNotAnalysed(log, find);
@@ -561,27 +630,91 @@ export class AnalysisQueue {
   }
 
   /**
-   * A run's step for a find whose picture waits: fetches it, and ends the run when it waits. A find
-   * this run has asked a picture for already, which the store still gives, ends the run, so that
-   * the run never takes the same find without end; the next run asks again.
+   * A run's step for a find whose picture or check waits: the picture, then the check
+   * (`selfCheckSteps`). A find this run has asked a picture or a check for already, which the store
+   * still gives, ends the run, so that the run never takes the same find without end; the next run
+   * asks again.
    */
-  private async pictureStep(log: QueueLog, find: StoredFind, count: RunCount): Promise<Step> {
-    if (count.picturesTried.has(find.id)) {
+  private async selfCheckStep(log: QueueLog, find: StoredFind, count: RunCount): Promise<Step> {
+    if (count.selfChecksTried.has(find.id)) {
       return "end";
     }
-    count.picturesTried.add(find.id);
-    const pause = await this.storePicture(log, find);
-    if (pause === null) {
-      return "next";
-    }
-    this.setState({ pause });
-    return "end";
+    count.selfChecksTried.add(find.id);
+    return this.selfCheckSteps(log, find.id);
   }
 
   /**
-   * After an answer is stored: when the store started a self-check with no picture (an answer from
-   * the text alone naming a species), fetches and stores the picture. Gives the pause when the
-   * picture waits, or null.
+   * In a run, after a text answer is stored, or for a find whose picture or check waits: fetches
+   * and stores the picture when it waits, then runs and stores the check when it waits, at once.
+   * A picture or a check that waits ends the run with its pause; a check that stops the queue ends
+   * it with the stop (docs/SPEC.md 3.9).
+   */
+  private async selfCheckSteps(log: QueueLog, id: number): Promise<Step> {
+    const pause = await this.pictureAfterAnswer(log, id);
+    if (pause !== null) {
+      this.setState({ pause });
+      return "end";
+    }
+    const check = await this.checkAfterPicture(log, id);
+    switch (check?.type) {
+      case undefined:
+      case "outcome":
+        return "next";
+      case "waits":
+        this.setState({ pause: check.cause });
+        return "end";
+      case "stop":
+        this.setStop(check.stop);
+        return "end";
+    }
+  }
+
+  /**
+   * After the picture is stored: when the find's check waits on it (`pendingCheck`), runs the check
+   * and stores its outcome. Gives what the check came to, or null when no check was due. A find
+   * deleted or changed meanwhile keeps nothing of it.
+   */
+  private async checkAfterPicture(log: QueueLog, id: number): Promise<CheckAttempt | null> {
+    const find = await log.getStored(id);
+    const pending = find === null ? null : pendingCheck(find);
+    if (pending === null) {
+      return null;
+    }
+    const check = await this.checkPicture(pending.pictureUri, pending.matched);
+    if (check.type === "outcome") {
+      try {
+        await log.setSelfCheck(id, check.outcome);
+      } catch (error) {
+        if (!isGone(error)) {
+          throw error;
+        }
+      }
+    }
+    return check;
+  }
+
+  /**
+   * The self-check on a picture (docs/SPEC.md 3.9): the picture prepared for the model in use as a
+   * photo is for analysis (3.3) and sent alone, as a photo lookup without the text, then the
+   * species its answer names compared with `matched`. Stores nothing. A picture that cannot be
+   * prepared fails the check without a request, and plays no part in the count of failed loads.
+   */
+  private async checkPicture(pictureUri: string, matched: SpeciesNames): Promise<CheckAttempt> {
+    const access = await this.access();
+    if (!access.ok) {
+      return checkOf(access.attempt, matched);
+    }
+    const prepared = await this.deps.preparePhoto(pictureUri, access.model);
+    if (!prepared.ok) {
+      return { type: "outcome", outcome: { state: "failed" } };
+    }
+    return checkOf(await this.send({ imagesBase64: [prepared.imageBase64] }, access), matched);
+  }
+
+  /**
+   * After an answer is stored, or for a find whose picture waits: when the store started a
+   * self-check with no picture (an answer from the text alone naming a species), fetches and
+   * stores the picture. Gives the pause when the picture waits, or null.
    */
   private async pictureAfterAnswer(log: QueueLog, id: number): Promise<PauseCause | null> {
     const stored = await log.getStored(id);
@@ -790,6 +923,55 @@ function picturePending(find: StoredFind): boolean {
     find.selfCheck?.state === "waiting" &&
     find.picture === null
   );
+}
+
+/** An analysed find, its batch complete, whose self-check waits, for its picture or on it. */
+function selfCheckWaits(find: StoredFind): boolean {
+  return !find.batchOpen && find.analysis.state === "done" && find.selfCheck?.state === "waiting";
+}
+
+/**
+ * The picture and the species of a find whose self-check waits for the queue (docs/SPEC.md 3.9;
+ * PBI-2.10), as the store's pick judges it, or null: an answer naming a species, a check that
+ * waits and its picture stored, its batch complete, and no photo on the find. A text find's photos
+ * all came after its answer from the text alone, so a check still waiting on a find that holds one
+ * is skipped: the analysis of its photos with the text is to replace that answer, and the check
+ * with it (the backlog note on PBI-2.10).
+ */
+function pendingCheck(find: StoredFind): { pictureUri: string; matched: SpeciesNames } | null {
+  const { analysis, picture } = find;
+  if (
+    find.batchOpen ||
+    find.photos.length > 0 ||
+    analysis.state !== "done" ||
+    analysis.answer.result !== "match" ||
+    find.selfCheck?.state !== "waiting" ||
+    picture === null
+  ) {
+    return null;
+  }
+  return { pictureUri: picture.uri, matched: analysis.answer.names };
+}
+
+/**
+ * What an attempt with the picture comes to for the self-check (docs/SPEC.md 3.9), by the three
+ * groups of an unsaved lookup: an answer gives the outcome of its comparison; a class that leaves
+ * a find waiting leaves the check waiting; a class that stops the queue (a missing key, and an
+ * answer not of the shape, too) stops it; any other fails the check.
+ */
+function checkOf(attempt: Attempt, matched: SpeciesNames): CheckAttempt {
+  switch (attempt.type) {
+    case "answered":
+      return { type: "outcome", outcome: selfCheckOutcome(matched, attempt.answer) };
+    case "find-failed":
+      return attempt.stop === null
+        ? { type: "outcome", outcome: { state: "failed" } }
+        : { type: "stop", stop: attempt.stop };
+    case "stays-waiting":
+      return { type: "waits", cause: attempt.cause };
+    case "stop":
+      return { type: "stop", stop: attempt.stop };
+  }
 }
 
 /** A change that applied to no find: the find was deleted, or its state changed meanwhile. */

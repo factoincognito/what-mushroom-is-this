@@ -31,6 +31,14 @@ const NEW_TEXT_FIND: NewTextFind = {
   position: null,
 };
 
+/** The names of a text answer's species, for the self-check of an unsaved lookup (PBI-2.10). */
+const CHANTERELLE_NAMES = {
+  sv: "Kantarell",
+  en: "Chanterelle",
+  la: "Cantharellus cibarius",
+  it: "Gallinaccio",
+};
+
 /** A waiting find with one photo, as the store reads it in full. */
 const WAITING: StoredFind = {
   id: 1,
@@ -410,6 +418,19 @@ describe("QueueProvider, what it gives the screens", () => {
     current().removePictureCopy("file:///cache/picture-1.jpg");
     expect(removePictureCopy).toHaveBeenCalledWith("file:///cache/picture-1.jpg");
   });
+
+  it("checks an unsaved lookup's picture on asking (PBI-2.10)", async () => {
+    const { queue } = await renderQueue();
+    const result = { ok: true, outcome: { state: "agreed" } } as const;
+    const checkLookupPicture = jest.spyOn(queue, "checkLookupPicture").mockResolvedValue(result);
+    await expect(
+      current().checkLookupPicture("file:///cache/picture-1.jpg", CHANTERELLE_NAMES),
+    ).resolves.toEqual(result);
+    expect(checkLookupPicture).toHaveBeenCalledWith(
+      "file:///cache/picture-1.jpg",
+      CHANTERELLE_NAMES,
+    );
+  });
 });
 
 describe("QueueProvider, once it is gone", () => {
@@ -522,6 +543,17 @@ describe("QueueProvider, a run that rejects (Clead's decision on #17)", () => {
     jest.spyOn(queue, "fetchLookupPicture").mockRejectedValue(new Error("ENOSPC"));
     await act(async () => {
       await expect(current().fetchLookupPicture("Cantharellus cibarius")).rejects.toThrow("ENOSPC");
+    });
+    expect(shownState()).toEqual(INTERNAL);
+  });
+
+  it("checking an unsaved lookup's picture: stops the queue, and the screen still gets the rejection (PBI-2.10)", async () => {
+    const { queue } = await renderQueue();
+    jest.spyOn(queue, "checkLookupPicture").mockRejectedValue(new Error("ENOSPC"));
+    await act(async () => {
+      await expect(
+        current().checkLookupPicture("file:///cache/picture-1.jpg", CHANTERELLE_NAMES),
+      ).rejects.toThrow("ENOSPC");
     });
     expect(shownState()).toEqual(INTERNAL);
   });

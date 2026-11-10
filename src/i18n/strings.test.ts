@@ -150,6 +150,42 @@ describe("the strings of the representative picture (SPEC 3.9; PBI-2.9)", () => 
   });
 });
 
+describe("the strings of the self-check (SPEC 3.9; PBI-2.10)", () => {
+  it("say in English that the check agreed, and what an unsaved lookup's check is doing", () => {
+    expect(STRINGS.en.find.selfCheck.agreed).toBe(
+      "A check on a picture of the species agreed with this match.",
+    );
+    expect(STRINGS.en.lookup.checking).toBe(
+      "Checking the match against the picture of the species…",
+    );
+    expect(STRINGS.en.lookup.checkWaits).toBe(
+      "The check on the picture of the species could not be made just now, so it waits.",
+    );
+    expect(STRINGS.en.lookup.checkError).toBe(
+      "The check on the picture of the species could not be made because of an error in the app.",
+    );
+  });
+
+  it.each([
+    ["sv", /bekräftade/, /väntar/, /fel i appen/],
+    ["it", /ha confermato/, /in attesa/, /errore nell'app/],
+  ] as const)("say it in %s too", (language, agreed, waits, error) => {
+    const t = STRINGS[language];
+    expect(t.find.selfCheck.agreed).toMatch(agreed);
+    expect(t.lookup.checkWaits).toMatch(waits);
+    expect(t.lookup.checkError).toMatch(error);
+    expect(t.lookup.checking.length).toBeGreaterThan(0);
+  });
+
+  it("are new strings in groups not checked by a speaker in Swedish and Italian", () => {
+    for (const language of ["sv", "it"] as const) {
+      expect(NOT_CHECKED_BY_A_SPEAKER[language]).toEqual(
+        expect.arrayContaining(["find", "lookup"]),
+      );
+    }
+  });
+});
+
 describe("the strings of the key and model settings", () => {
   it.each(LANGUAGES)("are all there in %s", (language) => {
     const paths = keyPaths(STRINGS[language]);
@@ -412,6 +448,7 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       "find.removePhotoConfirm",
       "find.removePhotoFailed",
       "find.removePhotoYes",
+      "find.selfCheck.agreed",
       "find.selfCheck.disagreed",
       "find.selfCheck.failed",
       "find.selfCheck.noPicture",
@@ -509,6 +546,9 @@ describe("the strings of the text lookup (PBI-2.4)", () => {
       "lookup.analysisError",
       "lookup.asking",
       "lookup.checkAgain",
+      "lookup.checkError",
+      "lookup.checkWaits",
+      "lookup.checking",
       "lookup.count",
       "lookup.empty",
       "lookup.input",

@@ -9,6 +9,7 @@ import {
 } from "react";
 import { AppState } from "react-native";
 
+import type { SpeciesNames } from "../analysis/answer";
 import { useApiKey } from "../key/KeyContext";
 import type { PictureFetch } from "../picture/fetchPicture";
 import { FindLogProvider, useFindLog } from "../store/FindLogContext";
@@ -19,6 +20,7 @@ import type {
   AnalyseFindResult,
   AnalyseLookupResult,
   AnalysisQueue,
+  CheckLookupResult,
   QueueDeps,
   QueueState,
 } from "./queue";
@@ -45,6 +47,14 @@ export interface QueueContextValue {
   readonly fetchLookupPicture: (latinName: string) => Promise<PictureFetch>;
   /** Removes the copy of a picture the screen showed. */
   readonly removePictureCopy: (uri: string) => void;
+  /**
+   * Runs an unsaved text lookup's self-check on the picture shown, against the species its answer
+   * named (docs/SPEC.md 3.9, PBI-2.10).
+   */
+  readonly checkLookupPicture: (
+    pictureUri: string,
+    matched: SpeciesNames,
+  ) => Promise<CheckLookupResult>;
 }
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -159,6 +169,11 @@ export function QueueProvider({
           throw error;
         }),
       removePictureCopy: (uri) => queue.removePictureCopy(uri),
+      checkLookupPicture: (pictureUri, matched) =>
+        queue.checkLookupPicture(pictureUri, matched).catch((error: unknown) => {
+          queue.stopForInternalError();
+          throw error;
+        }),
     }),
     [state, queue],
   );

@@ -21,16 +21,17 @@ import type { Strings } from "../i18n/strings";
 import { readTextLookupSave } from "../lookup/saveSetting";
 import {
   INITIAL_TEXT_LOOKUP_VIEW,
+  type LookupCheck,
   type LookupPicture,
+  lookupSelfCheck,
   TextLookupFlow,
   type TextLookupView,
 } from "../lookup/textLookupFlow";
 import { deviceLocationSource, locationPermission } from "../position/deviceLocation";
-import { formatTimeIn } from "../queue/messages";
+import { type FormatTime, formatTimeIn } from "../queue/messages";
 import { useQueue } from "../queue/QueueContext";
 import { deviceStore } from "../storage/keyValueStore";
 import { useFindLog } from "../store/FindLogContext";
-import type { SelfCheck } from "../store/find";
 
 /**
  * The text lookup screen (docs/SPEC.md 3.9, Lookups): a description of up to the configured
@@ -40,13 +41,14 @@ import type { SelfCheck } from "../store/find";
  * analyses it here and shows the answer as a find's screen would, with the disclaimer for a
  * lookup without photos; leaving with text entered asks first, on the screen (as SPEC 3.1 does
  * for a photo). An answer naming a species shows its representative picture from Wikimedia
- * Commons, with its credit, or "Check again" when it waits (SPEC 3.9; PBI-2.9).
+ * Commons, with its credit, or "Check again" when it waits (SPEC 3.9; PBI-2.9); then the self-check
+ * on that picture, with "Check again" when it waits or met an error in the app (PBI-2.10).
  */
 export default function TextLookupScreen() {
   const { language, strings } = useLanguage();
   const t = strings.lookup;
   const findLog = useFindLog();
-  const { analyseLookup, fetchLookupPicture, removePictureCopy } = useQueue();
+  const { analyseLookup, fetchLookupPicture, removePictureCopy, checkLookupPicture } = useQueue();
   const formatTime = useMemo(() => formatTimeIn(language), [language]);
   const [view, setView] = useState<TextLookupView>(INITIAL_TEXT_LOOKUP_VIEW);
   const [flow] = useState(
@@ -57,6 +59,7 @@ export default function TextLookupScreen() {
           analyseLookup,
           fetchPicture: fetchLookupPicture,
           removePictureCopy,
+          checkPicture: checkLookupPicture,
           readSaveSetting: () => readTextLookupSave(deviceStore),
           location: { permission: locationPermission, source: deviceLocationSource },
           appConfig: config,
@@ -182,20 +185,27 @@ export default function TextLookupScreen() {
         </Text>
       )}
       {view.outcome?.kind === "answer" && view.outcome.answer.result === "match" && (
-        <LookupPictureView
-          picture={view.outcome.picture}
-          speciesName={view.outcome.answer.names[language]}
-          strings={strings}
-          onCheckAgain={() => void flow.checkAgain()}
-        />
+        <>
+          <LookupPictureView
+            picture={view.outcome.picture}
+            speciesName={view.outcome.answer.names[language]}
+            strings={strings}
+            onCheckAgain={() => void flow.checkAgain()}
+          />
+          <LookupCheckView
+            check={view.outcome.check}
+            strings={strings}
+            formatTime={formatTime}
+            onCheckAgain={() => void flow.checkAgain()}
+          />
+        </>
       )}
       {view.outcome?.kind === "answer" && (
         <AnswerView
           answer={view.outcome.answer}
-          // An unsaved lookup's answer is from its text alone, and its self-check is not made
-          // until PBI-2.10: it is shown as one whose check waits, or as one without a picture
-          // when there is none (SPEC 3.9).
-          selfCheck={view.outcome.picture?.state === "none" ? NO_PICTURE_CHECK : UNSAVED_CHECK}
+          // An unsaved lookup's answer is from its text alone: it is shown with what its
+          // self-check came to, as waiting until it has an outcome (SPEC 3.9).
+          selfCheck={lookupSelfCheck(view.outcome)}
           subject="described"
           language={language}
           strings={strings}
@@ -229,10 +239,53 @@ export default function TextLookupScreen() {
   );
 }
 
-/** The self-check an unsaved lookup's answer is shown with. */
-const UNSAVED_CHECK: SelfCheck = { state: "waiting" };
-/** The self-check of an unsaved lookup's answer that has no picture (SPEC 3.9). */
-const NO_PICTURE_CHECK: SelfCheck = { state: "no-picture" };
+type LookupCheckViewProps = {
+  readonly check: LookupCheck | null;
+  readonly strings: Strings;
+  readonly formatTime: FormatTime;
+  readonly onCheckAgain: () => void;
+};
+
+/**
+ * An unsaved lookup's self-check on its picture (SPEC 3.9; PBI-2.10): while it runs, and, when it
+ * waits or met an error in the app, why, with "Check again". Its outcome is said next to the
+ * edibility, as on a find's screen.
+ */
+function LookupCheckView({ check, strings, formatTime, onCheckAgain }: LookupCheckViewProps) {
+  const t = strings.lookup;
+  switch (check?.state) {
+    case undefined:
+    case "done":
+      return null;
+    case "checking":
+      return (
+        <View style={styles.row}>
+          <ActivityIndicator testID="check-running" />
+          <Text style={styles.text}>{t.checking}</Text>
+        </View>
+      );
+    case "waits":
+    case "error":
+      return (
+        <View testID="lookup-check" style={styles.section}>
+          <Text accessibilityLiveRegion="polite" style={styles.text}>
+            {check.state === "waits" ? t.checkWaits : t.checkError}
+          </Text>
+          {check.state === "waits" && (
+            <NoticeView
+              notice={check.notice}
+              subject="described"
+              strings={strings}
+              formatTime={formatTime}
+            />
+          )}
+          <Pressable accessibilityRole="button" onPress={onCheckAgain} style={styles.button}>
+            <Text style={styles.buttonText}>{t.checkAgain}</Text>
+          </Pressable>
+        </View>
+      );
+  }
+}
 
 type LookupPictureViewProps = {
   readonly picture: LookupPicture | null;

@@ -314,8 +314,18 @@ describe("the edibility of an answer from text alone, until its self-check agree
     },
   );
 
-  it("gives no reason once the check agreed, or for an answer from photos", () => {
-    expect(selfCheckReason({ state: "agreed" }, matched, "en", STRINGS.en)).toBeNull();
+  it.each(["sv", "en", "it"] as const)(
+    "says in %s that the check agreed, once it did (SPEC 3.9: the find says the check agreed)",
+    (language) => {
+      const text = selfCheckReason({ state: "agreed" }, matched, language, STRINGS[language]);
+      expect(text).toBe(STRINGS[language].find.selfCheck.agreed);
+      expect(text?.toLowerCase()).not.toContain(
+        STRINGS[language].find.edibilities.unknown.toLowerCase(),
+      );
+    },
+  );
+
+  it("says nothing for an answer from photos, which has no check", () => {
     expect(selfCheckReason(null, matched, "en", STRINGS.en)).toBeNull();
   });
 });

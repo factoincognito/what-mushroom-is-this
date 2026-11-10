@@ -190,9 +190,10 @@ export function matchBasis(selfCheck: SelfCheck | null): "described" | "photo" {
 }
 
 /**
- * Why the edibility of an answer from the text alone is "unknown" (docs/SPEC.md 3.9), in the
- * app's language: one sentence for each state of the check but "agreed"; a disagreement names
- * both species. Null once the check agreed, or for an answer without a check.
+ * What the find says of the self-check of an answer from the text alone (docs/SPEC.md 3.9), in
+ * the app's language: until the check agrees, why the edibility is "unknown", one sentence for
+ * each state, a disagreement naming both species; once it agreed, that it agreed (3.9: "the find
+ * says the check agreed"). Null for an answer without a check.
  */
 export function selfCheckReason(
   selfCheck: SelfCheck | null,
@@ -203,8 +204,9 @@ export function selfCheckReason(
   const t = strings.find.selfCheck;
   switch (selfCheck?.state) {
     case undefined:
-    case "agreed":
       return null;
+    case "agreed":
+      return t.agreed;
     case "waiting":
       return t.waiting;
     case "disagreed":

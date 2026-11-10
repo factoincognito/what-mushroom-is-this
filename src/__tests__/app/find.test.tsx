@@ -1114,12 +1114,21 @@ describe("the edibility of an answer from text alone, until its self-check agree
     },
   );
 
-  it("shows the answer's edibility, and no reason, once the check agreed", async () => {
+  it("shows the answer's edibility once the check agreed, and says the check agreed (SPEC 3.9; PBI-2.10)", async () => {
     mockLog.finds.set(1, aTextFind(done(CHANTERELLE), { selfCheck: { state: "agreed" } }));
     await startApp();
     const edibility = within(await screen.findByTestId("match-edibility"));
     expect(edibility.getByText(edibleText)).toBeOnTheScreen();
+    expect(edibility.getByText(en.find.selfCheck.agreed)).toBeOnTheScreen();
     expect(edibility.queryByText(en.find.selfCheck.waiting)).not.toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)("says in %s that the check agreed", async (lang) => {
+    phoneIn(lang);
+    mockLog.finds.set(1, aTextFind(done(CHANTERELLE), { selfCheck: { state: "agreed" } }));
+    await startApp();
+    const edibility = within(await screen.findByTestId("match-edibility"));
+    expect(edibility.getByText(STRINGS[lang].find.selfCheck.agreed)).toBeOnTheScreen();
   });
 
   it("leaves an answer from photos and text as it is: a find with text whose answer has no check", async () => {
