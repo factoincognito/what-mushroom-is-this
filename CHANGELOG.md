@@ -71,6 +71,10 @@ All notable changes to What mushroom is this? are documented here.
   or analysed unsaved by a "Save" switch whose starting value is in
   Settings; a text answer's edibility is "unknown" until its self-check
   agrees (#54).
+- Several photos per find: up to 5, added in batches from New find or a
+  find's screen, all sent in one labelled request with the find's text;
+  a photo can be removed, and photos added to an analysed find wait for
+  a new analysis while the find keeps its answer (#57).
 
 ## Project created
 

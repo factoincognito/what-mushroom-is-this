@@ -112,7 +112,7 @@ the role that did not write it.
   - "no mushroom" and "cannot tell" for text;
   - the disclaimer for a lookup without photos. Its new sentence replaces only 3.5's second sentence, the one about the photo, and keeps the first; Clead's reading of his own proposal, which Adam approved. The Italian is checked by Jakob.
   Spec 3.9.
-- **[NOW] PBI-2.5** (in the night shift; it also sends the find's text with its photos, which #54 does not yet: the Clead-role review of #54, note 3) (it sends all of a find's photos and passes all their URIs as `sent` to `setAnswer` and `replaceAnswer`; from the review of #49 round 2, also: read the self-check result by name, not `columns[3]`, and move `outcomeOf`'s doc comment back above it in `queue.ts`) — Several photos per find:
+- **[DONE] PBI-2.5** (done 2026-11-10 in #57, `340b5c6`, Clead-role review approved round 1; Clead's decisions on it: without a key, and at the internal-error stop, an analysed find's new photos stay waiting; the disclaimer of an answer naming a species follows what the answer was based on, the wording of "no mushroom" and "cannot tell" not yet, PBI-2.15; SPEC lines in #58; the review's notes are PBI-2.16) (in the night shift; it also sends the find's text with its photos, which #54 does not yet: the Clead-role review of #54, note 3) (it sends all of a find's photos and passes all their URIs as `sent` to `setAnswer` and `replaceAnswer`; from the review of #49 round 2, also: read the self-check result by name, not `columns[3]`, and move `outcomeOf`'s doc comment back above it in `queue.ts`) — Several photos per find:
   - batches, and when they complete;
   - completing a batch as a queue trigger;
   - all of a find's photos in one request, labelled;
@@ -120,7 +120,7 @@ the role that did not write it.
   - a new batch on an analysed find, with its three states;
   - removing a photo.
   Spec 3.9.
-- **[NEXT] PBI-2.13** (moved out of PBI-2.4 by Clead, 2026-11-10: it depends on PBI-2.5's batches, and with it #54 was too large to review) — The photo lookup's "Save" switch:
+- **[NOW] PBI-2.13** (in the night shift) (moved out of PBI-2.4 by Clead, 2026-11-10: it depends on PBI-2.5's batches, and with it #54 was too large to review) — The photo lookup's "Save" switch:
   - the switch on a new photo lookup, on by default;
   - its starting value in Settings, beside the text lookup's;
   - unsaved photo lookups: held on the screen, analysed on "Analyse", their copies removed when the screen is left, with the three error groups as for an unsaved text lookup;
@@ -165,6 +165,14 @@ the role that did not write it.
   - SPEC 3.9's "so an SVG or TIFF original gives no picture" means only an original served in place of a thumbnail, and one line of Known unknown 15 is past the file's wrap width (Crog's notes on #56, round 3).
   Spec 3.3, 3.9, 4.
 - **[LATER] PBI-2.15** (Clead's decision 3 on #57, 2026-11-10; SPEC 3.9 "Answers", #58) — The store records what an answer was based on (from the text alone, or from photos), so that "no mushroom" and "cannot tell" use the wording for a description or for a photo by the analysis that gave them, as the disclaimer of an answer naming a species already does. Today the store can tell the basis only for an answer naming a species (by its self-check); a schema change, with a migration from version 2. Spec 3.9, 3.6.
+- **[LATER] PBI-2.16** (the Clead-role reviewer's non-blocking notes on #57, Crog's loose ends on #57) — Follow-ups that need no phone:
+  - a stored find with more than 5 photos, reachable only through a damaged file, is read as readable; the queue picks it, the request builder throws, and every run stops with an internal error (note 1);
+  - a find with one photo whose photo fails gets a message that neither numbers the photo nor says a text find can remove it (note 2);
+  - a photo removed while its find is being analysed leaves an answer that covers a photo the find no longer holds; the spec does not say what then (note 3);
+  - the in-memory find log's comparison test has no case that adds a photo after one was removed (note 4);
+  - the Find screen shows the generic analysis error when it cannot complete a batch left open (note 5);
+  - `FindStore.add` has no caller in the app, but the queue's context still wraps it; the "Add photos" header title is not tested; SPEC 3.1's New find still describes one photo (Crog).
+  Spec 3.1, 3.9.
 - **[LATER] PBI-2.14** (the Clead-role reviewer's non-blocking notes on #54, rounds 1 and 2, and Crog's loose ends on #54) — Follow-ups that need no phone:
   - a stored text over 2,000 characters, reachable only through a damaged file, is read as readable; the queue picks it, the request builder throws, and every run stops with an internal error (note 1);
   - the text field's `maxLength` counts UTF-16 units, while the counter, the flow and the store count code points (note 2);
