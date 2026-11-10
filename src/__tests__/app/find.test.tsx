@@ -12,7 +12,7 @@ import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen, within } from "expo-router/testing-library";
 import { AppState, Linking, Platform } from "react-native";
 
-import type { Answer, Match } from "../../analysis/answer";
+import type { Answer, ApiMatch } from "../../analysis/answer";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { fillIn, formatFindTime, mapLink } from "../../find/display";
 import { STRINGS } from "../../i18n/strings";
@@ -95,7 +95,7 @@ const DESTROYING_ANGEL = {
   it: "Tignosa bianca",
 };
 
-const CHANTERELLE: Match = {
+const CHANTERELLE: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -111,7 +111,7 @@ const CHANTERELLE: Match = {
   ],
 };
 
-const PORCINI: Match = {
+const PORCINI: ApiMatch = {
   ...CHANTERELLE,
   names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
   generalInformation: { sv: "En sopp.", en: "A bolete.", it: "Un boleto." },

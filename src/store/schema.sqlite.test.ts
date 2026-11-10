@@ -5,18 +5,18 @@
  * version 1 in `migration.sqlite.test.ts`.
  */
 
-import { EDIBILITIES, type Match } from "../analysis/answer";
+import { type ApiMatch, EDIBILITIES } from "../analysis/answer";
 import {
   type DatabaseSync,
   memoryPhotos,
   memorySqlite,
   sqliteDatabase,
 } from "../testing/sqliteDatabase";
-import { type AnalysedAnswer, FAILURE_CAUSES, type NewFind } from "./find";
+import { FAILURE_CAUSES, type NewAnalysedAnswer, type NewFind } from "./find";
 import { createFindStore, type FindStore, type LookupStore } from "./findStore";
 import { MIGRATIONS } from "./schema";
 
-const match: Match = {
+const match: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -34,7 +34,11 @@ const match: Match = {
     },
   ],
 };
-const analysed: AnalysedAnswer = { answer: match, model: "claude-model-x", analysedAtMs: 5_000 };
+const analysed: NewAnalysedAnswer = {
+  answer: match,
+  model: "claude-model-x",
+  analysedAtMs: 5_000,
+};
 
 function newFind(takenAtMs: number, position: NewFind["position"] = null): NewFind {
   return {
@@ -838,6 +842,20 @@ describe("rows the store cannot read, on a real SQLite (PBI-1.16)", () => {
       "an analysis time past 2^53 (Clead's review of #26, decision 3)",
       (id) => {
         insertPastChecks("UPDATE finds SET analysed_at_ms = ? WHERE id = ?", PAST_SAFE, id);
+      },
+    ],
+    [
+      "a confidence column whose number differs from its answer's (PBI-2.12)",
+      (id) => {
+        sqlite.prepare("UPDATE finds SET confidence_score = 85 WHERE id = ?").run(id);
+      },
+    ],
+    [
+      "a confidence column that holds a level where its answer holds a number (PBI-2.12)",
+      (id) => {
+        sqlite
+          .prepare("UPDATE finds SET confidence = 'high', confidence_score = NULL WHERE id = ?")
+          .run(id);
       },
     ],
   ];

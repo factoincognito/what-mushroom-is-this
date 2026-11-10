@@ -74,7 +74,7 @@
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
-import type { Answer, SpeciesNames } from "../analysis/answer";
+import type { Answer, ApiAnswer, SpeciesNames } from "../analysis/answer";
 import type { AnalysisError } from "../analysis/errors";
 import { selfCheckOutcome } from "../analysis/selfCheck";
 import { config } from "../config/config";
@@ -208,7 +208,8 @@ export interface QueueSettings {
 
 /** What one attempt at a find came to. */
 type Attempt =
-  | { type: "answered"; answer: Answer; model: string }
+  /** An answer from the API, its confidence a number, as the store takes it (PBI-2.12). */
+  | { type: "answered"; answer: ApiAnswer; model: string }
   | { type: "find-failed"; failure: FindFailure; stop: QueueStop | null }
   | { type: "stays-waiting"; cause: PauseCause }
   /**

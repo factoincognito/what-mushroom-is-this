@@ -50,24 +50,39 @@ export interface LookAlike {
   edibility: Edibility;
 }
 
-/** The best match, as Claude gave it. */
-export interface Match {
+/**
+ * The best match, as Claude gave it. `C` is the form its confidence may take: either form for an
+ * answer the store holds, a number alone for one from the API (`ApiMatch`).
+ */
+export interface Match<C extends Confidence = Confidence> {
   result: "match";
   names: SpeciesNames;
   edibility: Edibility;
-  confidence: Confidence;
+  confidence: C;
   generalInformation: Texts;
   lookAlikes: LookAlike[];
 }
 
-export type Answer = Match | { result: "no_mushroom" } | { result: "cannot_tell" };
+export type Answer<C extends Confidence = Confidence> =
+  | Match<C>
+  | { result: "no_mushroom" }
+  | { result: "cannot_tell" };
+
+/**
+ * An answer as the API gives it, from Phase 2 on (docs/SPEC.md 3.9): its confidence a whole number
+ * from 1 to 100, never a Phase 1 level, so that the type check holds that a level is never written
+ * again (PBI-2.12). It is an `Answer` too, so whatever reads an answer reads it.
+ */
+export type ApiMatch = Match<number>;
+export type ApiAnswer = Answer<number>;
 
 /**
  * Why an answer was not accepted: not from the API at all, not of the shape, or refused by
  * Claude (`stop_reason` `refusal`), which is not a shape failure.
  */
 export type AnswerFailure = { ok: false; reason: "not-api" | "shape" | "refused"; detail: string };
-export type AnswerResult = { ok: true; answer: Answer } | AnswerFailure;
+/** An answer read, of the form `A`, or why it was not accepted. */
+export type AnswerResult<A extends Answer = Answer> = { ok: true; answer: A } | AnswerFailure;
 
 /**
  * The edibility to show (docs/SPEC.md 3.9): "unknown" below a confidence of `line`, the
@@ -107,7 +122,7 @@ export const REFUSAL_STOP_REASON = "refusal";
  * block are skipped. A cut-off answer and a refusal each fail with their own detail, whatever
  * the text holds; a refusal fails with its own reason, `refused`.
  */
-export function readMessageBody(body: string): AnswerResult {
+export function readMessageBody(body: string): AnswerResult<ApiAnswer> {
   const notApi: AnswerFailure = {
     ok: false,
     reason: "not-api",
@@ -158,8 +173,8 @@ export function readMessageBody(body: string): AnswerResult {
  * Reads the model's text: one JSON object, with whitespace around it and nothing else. Its
  * confidence is a whole number from 1 to 100 (docs/SPEC.md 3.9); a level fails the shape.
  */
-export function parseAnswerText(text: string): AnswerResult {
-  return parseText(text, false);
+export function parseAnswerText(text: string): AnswerResult<ApiAnswer> {
+  return parseText(text, readScore);
 }
 
 /**
@@ -168,7 +183,7 @@ export function parseAnswerText(text: string): AnswerResult {
  * again (docs/SPEC.md 3.9).
  */
 export function parseStoredAnswerText(text: string): AnswerResult {
-  return parseText(text, true);
+  return parseText(text, readStoredConfidence);
 }
 
 /** Whether a value is a confidence from Phase 2 on: a whole number from 1 to 100. */
@@ -181,7 +196,11 @@ export function isConfidenceScore(value: unknown): value is number {
   );
 }
 
-function parseText(text: string, levelAllowed: boolean): AnswerResult {
+/** Reads the text as an answer whose confidence `readConfidence` reads. */
+function parseText<C extends Confidence>(
+  text: string,
+  readConfidence: (value: unknown) => Read<C>,
+): AnswerResult<Answer<C>> {
   const parsed = parseJson(text);
   if (!parsed.ok) {
     return shapeFailure("the answer is not JSON");
@@ -189,7 +208,7 @@ function parseText(text: string, levelAllowed: boolean): AnswerResult {
   if (!isRecord(parsed.value)) {
     return shapeFailure("the answer is not an object");
   }
-  const answer = readAnswer(parsed.value, levelAllowed);
+  const answer = readAnswer(parsed.value, readConfidence);
   return answer.ok ? { ok: true, answer: answer.value } : shapeFailure(answer.detail);
 }
 
@@ -208,7 +227,10 @@ const MATCH_KEYS = [
   "look_alikes",
 ];
 
-function readAnswer(value: Record<string, unknown>, levelAllowed: boolean): Read<Answer> {
+function readAnswer<C extends Confidence>(
+  value: Record<string, unknown>,
+  readConfidence: (value: unknown) => Read<C>,
+): Read<Answer<C>> {
   const result = value.result;
   if (result === "no_mushroom" || result === "cannot_tell") {
     return hasOnlyKeys(value, ["result"])
@@ -229,7 +251,7 @@ function readAnswer(value: Record<string, unknown>, levelAllowed: boolean): Read
   if (!edibility.ok) {
     return edibility;
   }
-  const confidence = readConfidence(value.confidence, levelAllowed);
+  const confidence = readConfidence(value.confidence);
   if (!confidence.ok) {
     return confidence;
   }
@@ -281,20 +303,22 @@ function readLookAlikes(value: unknown): Read<LookAlike[]> {
 }
 
 /**
- * A whole number from 1 to 100; with `levelAllowed`, for an answer the store holds, also a Phase 1
- * level. JSON gives a number written as 85.0 or 1e2 as 85 and 100, so those are whole numbers too;
- * nothing is coerced from text.
+ * The confidence of an answer from the API: a whole number from 1 to 100. JSON gives a number
+ * written as 85.0 or 1e2 as 85 and 100, so those are whole numbers too; nothing is coerced from
+ * text.
  */
-function readConfidence(value: unknown, levelAllowed: boolean): Read<Confidence> {
-  if (isConfidenceScore(value)) {
+function readScore(value: unknown): Read<number> {
+  return isConfidenceScore(value)
+    ? { ok: true, value }
+    : fail("confidence is not a whole number from 1 to 100");
+}
+
+/** The confidence of an answer the store holds: as `readScore` reads it, or a Phase 1 level. */
+function readStoredConfidence(value: unknown): Read<Confidence> {
+  if (isConfidenceScore(value) || isConfidenceLevel(value)) {
     return { ok: true, value };
   }
-  if (!levelAllowed) {
-    return fail("confidence is not a whole number from 1 to 100");
-  }
-  return isConfidenceLevel(value)
-    ? { ok: true, value }
-    : fail("confidence is neither a whole number from 1 to 100 nor one of low, medium, high");
+  return fail("confidence is neither a whole number from 1 to 100 nor one of low, medium, high");
 }
 
 function readEdibility(value: unknown, path: string): Read<Edibility> {
@@ -383,6 +407,7 @@ function isEdibility(value: unknown): value is Edibility {
   return EDIBILITIES.some((edibility) => edibility === value);
 }
 
-export function isConfidenceLevel(value: unknown): value is ConfidenceLevel {
+/** Whether a value is a Phase 1 level; only a stored answer's confidence may be one. */
+function isConfidenceLevel(value: unknown): value is ConfidenceLevel {
   return CONFIDENCE_LEVELS.some((level) => level === value);
 }

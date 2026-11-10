@@ -5,17 +5,17 @@
  * the constraints of schema version 2 that keep them.
  */
 
-import type { Match } from "../analysis/answer";
+import type { ApiMatch } from "../analysis/answer";
 import {
   type DatabaseSync,
   memoryPhotos,
   memorySqlite,
   sqliteDatabase,
 } from "../testing/sqliteDatabase";
-import type { AnalysedAnswer, NewFind, NewPicture, NewTextFind } from "./find";
+import type { NewAnalysedAnswer, NewFind, NewPicture, NewTextFind } from "./find";
 import { createFindStore, type FindStore, type LookupStore } from "./findStore";
 
-const match: Match = {
+const match: ApiMatch = {
   result: "match",
   names: { sv: "Kantarell", en: "Chanterelle", la: "Cantharellus cibarius", it: "Gallinaccio" },
   edibility: "edible",
@@ -23,7 +23,11 @@ const match: Match = {
   generalInformation: { sv: "Gul.", en: "Yellow.", it: "Giallo." },
   lookAlikes: [],
 };
-const analysed: AnalysedAnswer = { answer: match, model: "claude-model-x", analysedAtMs: 5_000 };
+const analysed: NewAnalysedAnswer = {
+  answer: match,
+  model: "claude-model-x",
+  analysedAtMs: 5_000,
+};
 
 const time = { takenAtMs: 1_000, utcOffsetMinutes: 60, source: "saved" } as const;
 const position = { latitude: 59.64, longitude: 17.08, accuracyM: 12.5, source: "fix" } as const;
@@ -510,6 +514,21 @@ describe("the queue's pick of an analysed find with new photos (SPEC 3.9, Batche
     await store.completeBatch(id);
     await store.replaceAnswer(id, { ...analysed, analysedAtMs: 6_000 }, await sentAll(id));
     await expect(store.oldestWaiting()).resolves.toBeNull();
+  });
+
+  it("passes over one whose confidence column differs from its answer's, as a find it cannot read, and lists it so (PBI-2.12)", async () => {
+    const damaged = await analysed1();
+    const next = await analysed1();
+    for (const id of [damaged, next]) {
+      await store.addPhoto(id, "file:///cache/b.jpg");
+      await store.completeBatch(id);
+    }
+    sqlite.prepare("UPDATE finds SET confidence_score = 85 WHERE id = ?").run(damaged);
+    await expect(store.oldestWaiting()).resolves.toBe(next);
+    await expect(store.getStored(damaged)).rejects.toMatchObject({ code: "corrupt" });
+    await expect(store.list()).resolves.toEqual(
+      expect.arrayContaining([{ readable: false, id: damaged }]),
+    );
   });
 
   it("takes the finds oldest first by ID, waiting ones and analysed ones with new photos alike", async () => {

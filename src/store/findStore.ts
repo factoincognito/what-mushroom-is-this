@@ -28,7 +28,6 @@ import type { FindDatabase } from "./database";
 import {
   ADDED_PHOTOS_STATES,
   type AddedPhotosState,
-  type AnalysedAnswer,
   type Analysis,
   type AnalysisSent,
   checkFailure,
@@ -51,6 +50,7 @@ import {
   invalid,
   isOneOf,
   type ListedFind,
+  type NewAnalysedAnswer,
   type NewFind,
   type NewPicture,
   type NewTextFind,
@@ -118,10 +118,11 @@ export interface FindStore {
    * picture and self-check (the picture's file goes at the next opening), and starts a new
    * self-check, waiting, when the analysis sent no photo and the answer names a species of a find
    * with text, so the answer is from the text alone (docs/SPEC.md 3.9). A find whose photos
-   * cannot be read is refused as `corrupt`, and nothing is stored.
+   * cannot be read is refused as `corrupt`, and nothing is stored. The answer is one from the API,
+   * so its confidence is a number (PBI-2.12).
    */
-  setAnswer(id: number, analysed: AnalysedAnswer, sent: AnalysisSent): Promise<void>;
-  replaceAnswer(id: number, analysed: AnalysedAnswer, sent: AnalysisSent): Promise<void>;
+  setAnswer(id: number, analysed: NewAnalysedAnswer, sent: AnalysisSent): Promise<void>;
+  replaceAnswer(id: number, analysed: NewAnalysedAnswer, sent: AnalysisSent): Promise<void>;
   markFailed(id: number, failure: FindFailure): Promise<void>;
   markWaiting(id: number): Promise<void>;
   /**
@@ -280,19 +281,24 @@ const SAFE_BATCHES = `CASE WHEN batches BETWEEN 0 AND ${Number.MAX_SAFE_INTEGER}
 const SAFE_BATCH_OPEN = "CASE WHEN batch_open IN (0, 1) THEN batch_open END AS batch_open";
 /** The number of the find's photos, or NULL when the stored list is not JSON. */
 const PHOTO_COUNT = "(CASE WHEN json_valid(photos) THEN json_array_length(photos) END)";
-/** Every column of a find, as `get`, `getStored`, the queue's pick and the list all read it. */
+/**
+ * Every column of a find, as `get`, `getStored`, the queue's pick and the list all read it; the
+ * confidence columns too, which the list shows, so that each of them judges a find whose columns
+ * and answer differ the same way (PBI-2.12).
+ */
 const FIND_COLUMNS = `${SAFE_ID}, ${safeTime("taken_at_ms")}, ${SAFE_OFFSET}, time_source,
   latitude, longitude, accuracy_m, position_source, text, photos, ${SAFE_BATCHES},
   ${SAFE_BATCH_OPEN}, state, failure_cause, failure_detail, answer_json, model,
   ${safeTime("analysed_at_ms")}, added_photos, picture_file, picture_author, picture_licence,
-  picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it`;
+  picture_page, self_check, check_name_sv, check_name_en, check_name_la, check_name_it,
+  confidence, confidence_score`;
 const GET = `SELECT ${FIND_COLUMNS} FROM finds WHERE finds.id = ?`;
 /**
  * The finds, the latest taken first, by the stored time and ID (`finds.`, not the columns read),
  * each also with its ID as SQLite writes it, exactly, whatever the ID.
  */
 const LIST = `SELECT ${FIND_COLUMNS}, CAST(finds.id AS TEXT) AS stored_id, result, name_sv,
-  name_en, name_it, edibility, confidence, confidence_score FROM finds
+  name_en, name_it, edibility FROM finds
   ORDER BY finds.taken_at_ms DESC, finds.id DESC`;
 /**
  * The find saved first after a given ID that waits for the queue, its batch complete: a waiting
@@ -434,7 +440,7 @@ export async function createFindStore(
    */
   async function answer(
     id: number,
-    analysed: AnalysedAnswer,
+    analysed: NewAnalysedAnswer,
     sent: AnalysisSent,
     sql: string,
   ): Promise<void> {
@@ -795,12 +801,13 @@ function removeQuietly(photos: PhotoFiles, name: string): boolean {
 }
 
 /**
- * The values of `ANSWER_COLUMNS`, from an answer checked against the shape. A new answer is
- * checked as one from the API, so its confidence is a whole number from 1 to 100: a Phase 1 level
- * is only ever read, never written again (docs/SPEC.md 3.9, PBI-2.3). The answer's result is also
- * given by name, for the self-check (review of #49, round 2).
+ * The values of `ANSWER_COLUMNS`, from an answer checked against the shape. A new answer is one
+ * from the API, by its type and checked as one, so its confidence is a whole number from 1 to 100,
+ * written to its column with the level's left empty: a Phase 1 level is only ever read, never
+ * written again (docs/SPEC.md 3.9, PBI-2.3, PBI-2.12). The check still runs for a caller without
+ * types. The answer's result is also given by name, for the self-check (review of #49, round 2).
  */
-function answerColumns(analysed: AnalysedAnswer): {
+function answerColumns(analysed: NewAnalysedAnswer): {
   columns: Params;
   result: "match" | "no_mushroom" | "cannot_tell";
 } {
@@ -829,10 +836,19 @@ function answerColumns(analysed: AnalysedAnswer): {
     };
   }
   const { sv, en, it } = valid.names;
-  const { confidence } = valid;
-  const [level, score] = typeof confidence === "number" ? [null, confidence] : [confidence, null];
   return {
-    columns: [json, model, analysedAtMs, "match", sv, en, it, valid.edibility, level, score],
+    columns: [
+      json,
+      model,
+      analysedAtMs,
+      "match",
+      sv,
+      en,
+      it,
+      valid.edibility,
+      null,
+      valid.confidence,
+    ],
     result: "match",
   };
 }
@@ -870,6 +886,7 @@ function readStored(row: Row, photos: PhotoFiles): StoredFind {
   }
   const batchOpen = flagOf(row, "batch_open");
   const analysis = readAnalysis(row);
+  checkConfidenceColumns(row, analysis);
   const addedPhotos =
     analysis.state === "done"
       ? enumOf(row, "added_photos", ADDED_PHOTOS_STATES)
@@ -1109,6 +1126,26 @@ function readSummaryAnalysis(row: Row): SummaryAnalysis {
     edibility: enumOf(row, "edibility", EDIBILITIES),
     confidence: readConfidence(row),
   };
+}
+
+/**
+ * The confidence columns against the stored answer (PBI-2.12). The Library reads a find's
+ * confidence from its columns and the Find screen from its answer, so a find whose two differ,
+ * which only a damaged file can hold, is one the store cannot read, as other damage is (PBI-1.16,
+ * PBI-1.26). They hold the same confidence in the same form: the store writes a new answer's number
+ * to `confidence_score`, and a Phase 1 find keeps its level in `confidence` as in its answer
+ * (schema version 2). A find without an answer naming a species has neither column set.
+ */
+function checkConfidenceColumns(row: Row, analysis: Analysis): void {
+  const answered =
+    analysis.state === "done" && analysis.answer.result === "match"
+      ? analysis.answer.confidence
+      : null;
+  const stored =
+    row.confidence === null && row.confidence_score === null ? null : readConfidence(row);
+  if (stored !== answered) {
+    throw corrupt("the stored confidence columns differ from the stored answer's confidence");
+  }
 }
 
 /**

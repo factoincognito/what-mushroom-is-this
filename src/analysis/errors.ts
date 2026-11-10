@@ -1,5 +1,5 @@
 import { analysisConfig } from "../config/analysis";
-import { type Answer, isRecord, readMessageBody } from "./answer";
+import { type ApiAnswer, isRecord, readMessageBody } from "./answer";
 import { parseRetryAfter } from "./retryAfter";
 
 /**
@@ -58,7 +58,7 @@ export type AnalysisError =
   /** Any other status: the queue stops; the message gives the status. */
   | { kind: "other"; status: number };
 
-export type AnalysisResult = { ok: true; answer: Answer } | { ok: false; error: AnalysisError };
+export type AnalysisResult = { ok: true; answer: ApiAnswer } | { ok: false; error: AnalysisError };
 
 /** What came back from sending the request once. */
 export type Outcome =
