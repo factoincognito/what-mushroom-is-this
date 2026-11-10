@@ -424,6 +424,7 @@ describe("the strings of the About view", () => {
   it.each(LANGUAGES)("are all there in %s", (language) => {
     expect(keyPaths(STRINGS[language]).filter((path) => path.startsWith("about."))).toEqual([
       "about.appHeading",
+      "about.creditsHeading",
       "about.disclaimerHeading",
       "about.hideText",
       "about.librariesHeading",

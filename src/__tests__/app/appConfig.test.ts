@@ -189,6 +189,24 @@ describe("the iOS permission texts in the app's three languages (PBI-1.20)", () 
     });
   });
 
+  /** In each language: the map, its provider, and the old claim that the position goes nowhere. */
+  const LOCATION_WORDS: Record<string, { map: RegExp; provider: RegExp; nowhere: RegExp }> = {
+    en: { map: /\bmap\b/i, provider: /\bprovider\b/i, nowhere: /not sent anywhere/i },
+    sv: { map: /\bkart/i, provider: /leverantör/i, nowhere: /skickas inte någonstans/i },
+    it: { map: /\bmappa\b/i, provider: /fornitore/i, nowhere: /non viene inviata da nessuna parte/i },
+  };
+
+  it.each(["sv", "en", "it"])(
+    "say in %s that the position also opens the map, whose provider sees the area shown, and no longer that it is sent nowhere (PBI-2.8)",
+    (language) => {
+      const text = String(ios.localesMap[language]?.NSLocationWhenInUseUsageDescription);
+      const words = LOCATION_WORDS[language];
+      expect(text).toMatch(words?.map ?? /^$/);
+      expect(text).toMatch(words?.provider ?? /^$/);
+      expect(text).not.toMatch(words?.nowhere ?? /^$/);
+    },
+  );
+
   it.each(["sv", "it"])("are translated in %s, not left in English", (language) => {
     for (const key of PERMISSION_KEYS) {
       expect(ios.localesMap[language]?.[key]).not.toBe(ios.localesMap.en?.[key]);

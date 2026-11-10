@@ -1,6 +1,7 @@
 import type { PermissionAsker } from "../newFind/permissions";
 import type { LocationSource } from "../position/positionTracker";
 import type { ListedFind, Position } from "../store/find";
+import { DEFAULT_FILTERS, NOT_IDENTIFIED } from "./filters";
 import { type MapBounds, squareAround } from "./mapArea";
 import { type OpeningLimits, startOpening } from "./mapOpening";
 
@@ -51,16 +52,37 @@ function location(lastKnown: unknown = null) {
   };
 }
 
-function find(id: number, position: Position | null): ListedFind {
+const CHANTERELLE = {
+  sv: "Kantarell",
+  en: "Chanterelle",
+  la: "Cantharellus cibarius",
+  it: "Gallinaccio",
+};
+
+/** A find; with `species`, one whose answer names it (as the store lists it). */
+function find(
+  id: number,
+  position: Position | null,
+  species: typeof CHANTERELLE | null = null,
+): ListedFind {
   return {
     readable: true,
     id,
     photoUri: null,
     time: { takenAtMs: NOW, utcOffsetMinutes: 60, source: "saved" },
     position,
-    analysis: { state: "waiting" },
+    analysis:
+      species === null
+        ? { state: "waiting" }
+        : {
+            state: "done",
+            result: "match",
+            names: { sv: species.sv, en: species.en, it: species.it },
+            edibility: "edible",
+            confidence: 90,
+          },
     selfCheck: null,
-    species: null,
+    species,
   };
 }
 
@@ -78,7 +100,8 @@ describe("the phone's position for the map (SPEC 3.9)", () => {
   it("opens on a fix that comes within 5 seconds, its shorter side spanning 10 km, and stops watching", async () => {
     const phone = location();
     const opening = startOpening(
-      { permission: permission(GRANTED), location: phone.source, now: () => NOW, entries: [] },
+      { permission: permission(GRANTED), location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await jest.advanceTimersByTimeAsync(4_900);
@@ -94,7 +117,8 @@ describe("the phone's position for the map (SPEC 3.9)", () => {
   it("does not wait for a fix past 5 seconds: it takes the last known position no older than two minutes", async () => {
     const phone = location(reading(59.5, 17.0, NOW - 119_000));
     const opening = startOpening(
-      { permission: permission(GRANTED), location: phone.source, now: () => NOW, entries: [] },
+      { permission: permission(GRANTED), location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await jest.advanceTimersByTimeAsync(4_999);
@@ -115,6 +139,7 @@ describe("the phone's position for the map (SPEC 3.9)", () => {
         permission: permission(GRANTED),
         location: phone.source,
         now: () => NOW,
+        filters: DEFAULT_FILTERS,
         entries: [find(1, AT_FIND)],
       },
       LIMITS,
@@ -127,7 +152,8 @@ describe("the phone's position for the map (SPEC 3.9)", () => {
   it("ignores a reading that is not a valid fix, and goes on to the last known position", async () => {
     const phone = location(reading(59.5, 17.0, NOW - 1_000));
     const opening = startOpening(
-      { permission: permission(GRANTED), location: phone.source, now: () => NOW, entries: [] },
+      { permission: permission(GRANTED), location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await jest.advanceTimersByTimeAsync(100);
@@ -144,6 +170,7 @@ describe("the phone's position for the map (SPEC 3.9)", () => {
         permission: permission(GRANTED),
         location: phone.source,
         now: () => NOW,
+        filters: DEFAULT_FILTERS,
         entries: [find(1, AT_FIND)],
       },
       LIMITS,
@@ -158,6 +185,7 @@ describe("the phone's position for the map (SPEC 3.9)", () => {
       permission: permission(GRANTED),
       location: phone.source,
       now: () => NOW,
+        filters: DEFAULT_FILTERS,
       entries: [],
     });
     await jest.advanceTimersByTimeAsync(5_000);
@@ -174,7 +202,8 @@ describe("the location permission when the map opens (SPEC 3.9)", () => {
     const asker = permission(UNDETERMINED, GRANTED);
     const phone = location();
     const opening = startOpening(
-      { permission: asker, location: phone.source, now: () => NOW, entries: [] },
+      { permission: asker, location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await jest.advanceTimersByTimeAsync(10);
@@ -188,7 +217,8 @@ describe("the location permission when the map opens (SPEC 3.9)", () => {
     const asker = permission(GRANTED);
     const phone = location();
     const opening = startOpening(
-      { permission: asker, location: phone.source, now: () => NOW, entries: [] },
+      { permission: asker, location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await jest.advanceTimersByTimeAsync(5_000);
@@ -209,6 +239,7 @@ describe("the location permission when the map opens (SPEC 3.9)", () => {
           permission: asker,
           location: phone.source,
           now: () => NOW,
+        filters: DEFAULT_FILTERS,
           entries: [find(2, null), find(1, AT_FIND)],
         },
         LIMITS,
@@ -227,7 +258,8 @@ describe("the location permission when the map opens (SPEC 3.9)", () => {
     const asker = permission(UNDETERMINED, DENIED);
     const phone = location();
     const opening = startOpening(
-      { permission: asker, location: phone.source, now: () => NOW, entries: [] },
+      { permission: asker, location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await expect(opening.area).resolves.toEqual({ from: "default", bounds: DEFAULT_AREA });
@@ -238,7 +270,8 @@ describe("the location permission when the map opens (SPEC 3.9)", () => {
     const asker = { get: jest.fn(async () => ({ status: "maybe" })), request: jest.fn() };
     const phone = location();
     const opening = startOpening(
-      { permission: asker, location: phone.source, now: () => NOW, entries: [] },
+      { permission: asker, location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await expect(opening.area).resolves.toMatchObject({ from: "default" });
@@ -254,7 +287,8 @@ describe("the location permission when the map opens (SPEC 3.9)", () => {
     };
     const phone = location();
     const opening = startOpening(
-      { permission: asker, location: phone.source, now: () => NOW, entries: [] },
+      { permission: asker, location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await expect(opening.area).resolves.toMatchObject({ from: "default" });
@@ -269,6 +303,7 @@ describe("the fallbacks without the phone's position (SPEC 3.9)", () => {
         permission: permission(GRANTED),
         location: phone.source,
         now: () => NOW,
+        filters: DEFAULT_FILTERS,
         entries: [{ readable: false, id: 9 }, find(3, null), find(2, AT_FIND), find(1, null)],
       },
       LIMITS,
@@ -280,6 +315,38 @@ describe("the fallbacks without the phone's position (SPEC 3.9)", () => {
     });
   });
 
+  it("opens on the newest find with a position among those that pass the filters (Clead, PBI-2.8)", async () => {
+    const OTHER: Position = { latitude: 59.5, longitude: 16.9, accuracyM: 10, source: "fix" };
+    const opening = startOpening(
+      {
+        permission: permission(DENIED),
+        location: location().source,
+        now: () => NOW,
+        filters: { ...DEFAULT_FILTERS, species: new Set([NOT_IDENTIFIED]) },
+        entries: [find(3, AT_FIND, CHANTERELLE), find(2, null), find(1, OTHER)],
+      },
+      LIMITS,
+    );
+    await expect(opening.area).resolves.toEqual({
+      from: "find",
+      bounds: squareAround(OTHER, 10_000),
+    });
+  });
+
+  it("opens on the default area when no find with a position passes the filters, though one outside them has one (Clead, PBI-2.8)", async () => {
+    const opening = startOpening(
+      {
+        permission: permission(DENIED),
+        location: location().source,
+        now: () => NOW,
+        filters: { ...DEFAULT_FILTERS, species: new Set(["species:cantharellus cibarius"]) },
+        entries: [find(2, AT_FIND), find(1, null, CHANTERELLE)],
+      },
+      LIMITS,
+    );
+    await expect(opening.area).resolves.toEqual({ from: "default", bounds: DEFAULT_AREA });
+  });
+
   it("opens on the default area when no find has a position", async () => {
     const phone = location(null);
     const opening = startOpening(
@@ -287,6 +354,7 @@ describe("the fallbacks without the phone's position (SPEC 3.9)", () => {
         permission: permission(GRANTED),
         location: phone.source,
         now: () => NOW,
+        filters: DEFAULT_FILTERS,
         entries: [find(1, null)],
       },
       LIMITS,
@@ -301,6 +369,7 @@ describe("the fallbacks without the phone's position (SPEC 3.9)", () => {
         permission: permission(DENIED),
         location: location().source,
         now: () => NOW,
+        filters: DEFAULT_FILTERS,
         entries: [find(1, { ...AT_FIND, latitude: 95 })],
       },
       LIMITS,
@@ -312,7 +381,8 @@ describe("the fallbacks without the phone's position (SPEC 3.9)", () => {
     const phone = location(reading(59.5, 17.0, NOW - 1_000));
     phone.source.watch.mockRejectedValueOnce(new Error("location off"));
     const opening = startOpening(
-      { permission: permission(GRANTED), location: phone.source, now: () => NOW, entries: [] },
+      { permission: permission(GRANTED), location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await jest.advanceTimersByTimeAsync(10);
@@ -327,6 +397,7 @@ describe("the fallbacks without the phone's position (SPEC 3.9)", () => {
         permission: permission(GRANTED),
         location: phone.source,
         now: () => NOW,
+        filters: DEFAULT_FILTERS,
         entries: [find(1, AT_FIND)],
       },
       LIMITS,
@@ -340,7 +411,8 @@ describe("cancelling the opening, when the map is left before it opens", () => {
   it("stops watching the position at once", async () => {
     const phone = location();
     const opening = startOpening(
-      { permission: permission(GRANTED), location: phone.source, now: () => NOW, entries: [] },
+      { permission: permission(GRANTED), location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await jest.advanceTimersByTimeAsync(1_000);
@@ -359,7 +431,8 @@ describe("cancelling the opening, when the map is left before it opens", () => {
     };
     const phone = location();
     const opening = startOpening(
-      { permission: asker, location: phone.source, now: () => NOW, entries: [] },
+      { permission: asker, location: phone.source, now: () => NOW,
+        filters: DEFAULT_FILTERS, entries: [] },
       LIMITS,
     );
     await jest.advanceTimersByTimeAsync(10);

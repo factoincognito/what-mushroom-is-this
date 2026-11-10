@@ -156,6 +156,23 @@ describe("the About view", () => {
     }
   });
 
+  it("shows the credits the licences ask for, FreeType's among them (PBI-2.8)", async () => {
+    await startApp("/about");
+    expect(await screen.findByText(t.creditsHeading)).toBeOnTheScreen();
+    expect(NOTICES.credits.length).toBeGreaterThan(0);
+    for (const entry of NOTICES.credits) {
+      expect(within(screen.getByTestId(`credit-${entry.name}`)).getByText(entry.text)).toBeOnTheScreen();
+    }
+  });
+
+  it("offers MapLibre Native's licence text, with the licences it bundles, on request (PBI-2.8)", async () => {
+    await startApp("/about");
+    await screen.findByText(t.librariesHeading);
+    const native = entryOf("org.maplibre.gl:android-sdk-opengl");
+    await fireEvent.press(native.getByRole("button", { name: t.showText }));
+    expect(native.getByText(NOTICES.texts["maplibre-native"] ?? "?")).toBeOnTheScreen();
+  });
+
   it("links OpenStreetMap's credit to its copyright page", async () => {
     const openURL = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
     try {
@@ -191,6 +208,7 @@ describe("the About view", () => {
     expect(await screen.findByText(strings.about.librariesHeading)).toBeOnTheScreen();
     expect(screen.getByText(strings.about.appHeading)).toBeOnTheScreen();
     expect(screen.getByText(strings.about.mapDataHeading)).toBeOnTheScreen();
+    expect(screen.getByText(strings.about.creditsHeading)).toBeOnTheScreen();
     expect(screen.getByText(strings.disclaimer)).toBeOnTheScreen();
     expect(screen.getAllByRole("button", { name: strings.about.showText }).length).toBeGreaterThan(
       0,

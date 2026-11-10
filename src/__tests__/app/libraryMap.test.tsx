@@ -267,6 +267,32 @@ describe("where the map opens (SPEC 3.9)", () => {
     expect(Location.watchPositionAsync).not.toHaveBeenCalled();
   });
 
+  it("opens on the newest find with a position that passes the filters, without the location (Clead, PBI-2.8)", async () => {
+    locationRefused();
+    mockLog.finds.set(1, find(1, 0, FAR, done(FLY_AGARIC)));
+    mockLog.finds.set(2, find(2, 1, NEAR));
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.log.filters }));
+    await fireEvent.press(screen.getByRole("checkbox", { name: FLY_AGARIC.names.en }));
+    await openMap();
+    expect(screen.getByTestId("maplibre-camera").props.initialViewState).toEqual({
+      bounds: squareAround(FAR, 10_000),
+    });
+  });
+
+  it("opens on the default area when no find with a position passes the filters (Clead, PBI-2.8)", async () => {
+    locationRefused();
+    mockLog.finds.set(1, find(1, 0, null, done(FLY_AGARIC)));
+    mockLog.finds.set(2, find(2, 1, NEAR));
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.log.filters }));
+    await fireEvent.press(screen.getByRole("checkbox", { name: FLY_AGARIC.names.en }));
+    await openMap();
+    expect(screen.getByTestId("maplibre-camera").props.initialViewState).toEqual({
+      bounds: config.mapDefaultArea,
+    });
+  });
+
   it("opens on the default area without the location and without a find with a position", async () => {
     locationRefused();
     mockLog.finds.set(1, find(1, 0, null));

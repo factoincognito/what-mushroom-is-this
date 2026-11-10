@@ -1,5 +1,5 @@
 import { fs, PROJECT_ROOT, path } from "../testing/projectFiles";
-import { NOTICES, NoticesError, parseNotices } from "./notices";
+import { LONG_TEXTS, NOTICES, NoticesError, parseNotices } from "./notices";
 
 const { existsSync, readdirSync, readFileSync } = fs;
 const { join } = path;
@@ -23,6 +23,7 @@ function valid(): Record<string, unknown> {
       { name: "b", version: null, licence: "MIT", source: "https://example.org/b", textId: null },
     ],
     texts: { app: "the terms", a: "MIT text" },
+    credits: [{ name: "FreeType", text: "Portions of this software are copyright." }],
     mapData: [
       {
         name: "OpenStreetMap",
@@ -66,9 +67,18 @@ describe("parseNotices", () => {
     expect(parseNotices(valid())).toEqual(valid());
   });
 
-  it("reads the app's data file", () => {
-    expect(() => parseNotices(raw)).not.toThrow();
-    expect(NOTICES).toEqual(raw);
+  it("reads the app's data file, with the licence texts kept apart for their length (PBI-2.8)", () => {
+    const data = raw as { texts: Record<string, string> };
+    const withLong = { ...data, texts: { ...data.texts, ...LONG_TEXTS } };
+    expect(() => parseNotices(withLong)).not.toThrow();
+    expect(NOTICES).toEqual(withLong);
+  });
+
+  it("keeps no licence text in both the data file and the long texts", () => {
+    const inFile = Object.keys((raw as { texts: Record<string, string> }).texts);
+    for (const id of Object.keys(LONG_TEXTS)) {
+      expect(inFile).not.toContain(id);
+    }
   });
 
   it.each<[string, unknown]>([
@@ -119,6 +129,24 @@ describe("parseNotices", () => {
     [
       "a text that nothing uses",
       broken((n) => ((n.texts as Record<string, unknown>).z = "unused")),
+    ],
+    ["no credits (PBI-2.8)", broken((n) => delete n.credits)],
+    ["credits that are not a list", broken((n) => (n.credits = "FreeType"))],
+    ["a credit that is not an object", broken((n) => (n.credits = ["FreeType"]))],
+    ["a credit with an empty text", broken((n) => (n.credits = [{ name: "FreeType", text: "" }]))],
+    [
+      "a credit with an unknown key",
+      broken((n) => (n.credits = [{ name: "FreeType", text: "x", year: 2024 }])),
+    ],
+    [
+      "two credits of one name",
+      broken(
+        (n) =>
+          (n.credits = [
+            { name: "FreeType", text: "x" },
+            { name: "FreeType", text: "y" },
+          ]),
+      ),
     ],
     ["no map data (PBI-2.8)", broken((n) => delete n.mapData)],
     ["map data that is not a list", broken((n) => (n.mapData = {}))],
@@ -317,14 +345,41 @@ describe("the licence texts", () => {
       "com.google.android.gms:play-services-base",
       "com.google.android.gms:play-services-basement",
       "com.google.android.gms:play-services-tasks",
-      "org.maplibre.gl:android-sdk-opengl",
       "org.maplibre.gl:android-plugin-annotation-v9",
       "org.maplibre.gl:android-plugin-scalebar-v9",
-      "org.maplibre.gl:android-sdk-turf",
-      "com.squareup.okhttp3:okhttp",
-      "com.squareup.okhttp3:okhttp-urlconnection",
-      "maplibre-gl-native-distribution",
     ]);
+  });
+
+  it("leave no library's licence unread (Clead's reads for PBI-2.8)", () => {
+    expect(NOTICES.libraries.filter((entry) => /not read/i.test(entry.licence))).toEqual([]);
+    const record = readFileSync(join(ROOT, "THIRD-PARTY-NOTICES.md"), "utf8");
+    const rows = tableRows("## In the app").filter(([, , licence = ""]) =>
+      /not read/i.test(licence),
+    );
+    expect(rows).toEqual([]);
+    expect(record).not.toMatch(/\| not read \|/);
+  });
+
+  it.each<[string, string, string]>([
+    ["org.maplibre.gl:android-plugin-annotation-v9", "3.0.2", "BSD-2-Clause"],
+    ["org.maplibre.gl:android-plugin-scalebar-v9", "3.0.2", "BSD-2-Clause"],
+    ["org.maplibre.gl:android-sdk-turf", "6.0.1", "Apache-2.0"],
+    ["com.squareup.okhttp3:okhttp", "4.12.0", "Apache-2.0"],
+    ["com.squareup.okhttp3:okhttp-urlconnection", "4.12.0", "Apache-2.0"],
+  ])("give %s %s the licence read for it, %s (PBI-2.8)", (name, version, licence) => {
+    expect(library(name)).toMatchObject({ version, licence });
+  });
+
+  it("give MapLibre Native, on Android and iOS, its BSD-2-Clause licence with the licences of what it bundles, as the files at its tags (PBI-2.8)", () => {
+    const dir = join(ROOT, "licenses", "maplibre-native");
+    const licence = readFileSync(join(dir, "LICENSE.md"), "utf8");
+    const bundled = readFileSync(join(dir, "LICENSES.core.md"), "utf8");
+    expect(licence.startsWith("BSD 2-Clause License\n")).toBe(true);
+    expect(bundled).toContain("The FreeType Project LICENSE");
+    expect(NOTICES.texts["maplibre-native"]).toBe(`${licence}\n${bundled}`);
+    for (const name of ["org.maplibre.gl:android-sdk-opengl", "maplibre-gl-native-distribution"]) {
+      expect(library(name)).toMatchObject({ licence: "BSD-2-Clause", textId: "maplibre-native" });
+    }
   });
 
   /**
@@ -559,6 +614,27 @@ describe("the map data credits (SPEC 3.9, PBI-2.8)", () => {
     for (const entry of NOTICES.mapData) {
       expect(names).not.toContain(entry.name);
     }
+  });
+});
+
+describe("the credits the licences ask for (PBI-2.8)", () => {
+  it("give FreeType's credit, without a year, which the licence file does not give", () => {
+    expect(NOTICES.credits).toContainEqual({
+      name: "FreeType",
+      text: "Portions of this software are copyright © The FreeType Project (https://freetype.org). All rights reserved.",
+    });
+    // The text the FreeType licence suggests, as MapLibre Native's file carries it, with "<year>".
+    const bundled = readFileSync(join(ROOT, "licenses", "maplibre-native", "LICENSES.core.md"), "utf8");
+    expect(bundled).toContain("Portions of this software are copyright © <year> The FreeType");
+  });
+
+  it("are exactly those THIRD-PARTY-NOTICES.md records under Credits, in the same order", () => {
+    const recorded = tableRows("## Credits").map(([name = "", text = ""]) => ({
+      name: /^`([^`]+)`$/.exec(name)?.[1] ?? name,
+      text,
+    }));
+    expect(recorded.length).toBeGreaterThan(0);
+    expect(NOTICES.credits).toEqual(recorded);
   });
 });
 
