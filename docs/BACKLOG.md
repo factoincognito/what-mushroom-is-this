@@ -126,8 +126,8 @@ the role that did not write it.
   - unsaved photo lookups: held on the screen, analysed on "Analyse", their copies removed when the screen is left, with the three error groups as for an unsaved text lookup;
   - a lookup saved after its first photo was taken keeps that photo's time and position.
   Spec 3.9.
-- **[NEXT] PBI-2.6** (the picker as Known unknown 13 has it, after PBI-2.1) — Photos from the phone's files, images only, without position or time of their own. Spec 3.9, Known unknown 13.
-- **[NOW] PBI-2.7** (in the night shift, #63; Clead's decisions: no list/map switch until PBI-2.8; a find with photos shows its first photo in the list, the text mark only a find without photos) — The Library's list, replacing the Log:
+- **[NOW] PBI-2.6** (in the night shift) (the picker as Known unknown 13 has it, after PBI-2.1) — Photos from the phone's files, images only, without position or time of their own. Spec 3.9, Known unknown 13.
+- **[DONE] PBI-2.7** (done 2026-11-10 in #63, `ad32534`, Clead-role review approved round 1; the strings keep the `log` key group with the texts changed; the review's notes are in PBI-2.16) (in the night shift, #63; Clead's decisions: no list/map switch until PBI-2.8; a find with photos shows its first photo in the list, the text mark only a find without photos) — The Library's list, replacing the Log:
   - the species, years and months filters;
   - unreadable finds always listed;
   - the text mark;
@@ -176,7 +176,10 @@ the role that did not write it.
   - the picker's copies of photos saved to a find are never removed from the cache, since PBI-1.6, and copies of camera photos kept and then discarded with "Save" on stay too (Crog on #61; reviewer's note 3 on #61, round 2);
   - the cache-path guard does not decode percent-encoded `..`, unreachable since the addresses come only from the picker; whether the picker's addresses on Android start with the cache path is not checked, and if not, copies are silently left (note 2 on #61);
   - with "Save" off and a gallery photo first, the position tracker runs until the screen closes (note 4 on #61);
-  - no screen test shows an unsaved photo lookup's answer below 70 as "unknown"; one `devicePicker` test may build a `//` address; no test pins the old tracker's stop before its restart (notes 6 and 7 on #61, note 1 of round 2).
+  - no screen test shows an unsaved photo lookup's answer below 70 as "unknown"; one `devicePicker` test may build a `//` address; no test pins the old tracker's stop before its restart (notes 6 and 7 on #61, note 1 of round 2);
+  - the Library's filters: no screen test shows that they are held above the screen (the screen keeps them through a test that would pass with local state too); a damaged file's filter labels come from the answer while the row's names come from the columns; a genus-only answer splits by wording ("Russula" and "Russula sp."); a redundant `|| entry.species === null` in `filters.ts`; two changed expectations in `lookups.sqlite.test.ts` were never shown red (the Clead-role reviewer's notes 1, 2, 3, 4 and 6 on #63);
+  - for the speakers' check: the Italian "Non identificato" under the feminine "Specie", the Swedish singular "Art" beside the plural "År" and "Månader", and lower-case month names (note 5 on #63);
+  - the Library is not read again after returning to it under the test router; on a phone it relies on `useFocusEffect`, not checked (Crog on #63).
   Spec 3.1, 3.9.
 - **[LATER] PBI-2.14** (the Clead-role reviewer's non-blocking notes on #54, rounds 1 and 2, and Crog's loose ends on #54) — Follow-ups that need no phone:
   - a stored text over 2,000 characters, reachable only through a damaged file, is read as readable; the queue picks it, the request builder throws, and every run stops with an internal error (note 1);
