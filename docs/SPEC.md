@@ -508,7 +508,13 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   check, with the check's outcome for the edibility shown, until an answer
   from its photos and text replaces that answer (Batches). From then on it
   has no picture and no check, and the list shows its first photo
-  (**[Clead]**).
+  (**[Clead]**). A waiting check on a find that has photos is never run,
+  at the queue's next run or later, as an exception to the self-check's
+  "tried again at the queue's next run" below; if the batch's analysis
+  fails, the check stays waiting, the edibility stays "unknown" and the
+  find gives the waiting check as the reason, until an answer replaces
+  the text answer or the photos are removed (**[Clead]**, 2026-11-10,
+  #75).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
@@ -556,8 +562,15 @@ answers to Clead's questions, 19:05).
   The picture is resized and checked as a photo is in 3.3; the picture,
   not the user's text, is sent to Anthropic (**[Clead]**). The two match
   when the first two words of their Latin names, genus and species, are
-  the same, ignoring case (**[Clead]**). The check's own confidence is
-  not used (**[Clead]**).
+  the same, ignoring case (**[Clead]**), except that a Latin name of one
+  word, or whose second word is a rank or uncertainty mark (`sp.`,
+  `spp.`, `cf.`, `aff.`, `ssp.`, `subsp.`, `var.`, `agg.`, with or
+  without the dot), matches nothing, not even the same name; a check
+  answer with such a name counts as the check naming another species
+  (**[Clead]**, 2026-11-10, #75).
+  The check's own confidence is not used (**[Clead]**). The check's
+  answer is kept only as the check's outcome, never as the find's
+  answer (**[Clead]**, 2026-11-10, #75).
 - On a saved find the queue run that brings the text answer fetches the
   picture and runs the check at once, before it takes the next find
   (**[Clead]**). An unsaved lookup runs them at once after its answer. A
@@ -575,7 +588,7 @@ answers to Clead's questions, 19:05).
   waiting; one that stops the queue stops it as for a find, and the check
   waits; any other marks the check failed, and the find says it could
   not be checked. A check that waits is tried again at the queue's next
-  run, or by "Check again" on an unsaved lookup's screen (**[Clead]**).
+  run (except on a find that has photos, above), or by "Check again" on an unsaved lookup's screen (**[Clead]**).
   A run takes waiting checks together with waiting finds, oldest find
   first; a check that waits for want of a network or a fault on
   Anthropic's or Wikimedia's side ends the run, as a waiting find does
