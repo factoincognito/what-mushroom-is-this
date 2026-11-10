@@ -8,7 +8,7 @@
  * app.json, as backupRules.test.ts does.
  */
 import { APPLICATION_ID } from "../../testing/appIdentity";
-import { fs, PROJECT_ROOT, path } from "../../testing/projectFiles";
+import { appSourceFiles, fs, PROJECT_ROOT, path } from "../../testing/projectFiles";
 
 const { readFileSync } = fs;
 const { join } = path;
@@ -34,20 +34,6 @@ const ALERT_WINDOW = "android.permission.SYSTEM_ALERT_WINDOW";
 const READ_STORAGE = "android.permission.READ_EXTERNAL_STORAGE";
 /** Writing shared storage: the image picker asks for it with the camera below Android 10. */
 const WRITE_STORAGE = "android.permission.WRITE_EXTERNAL_STORAGE";
-
-/** The app's own source files under `src/`, tests and test helpers left out, by their paths. */
-function appSourceFiles(): string[] {
-  return fs
-    .readdirSync(join(PROJECT_ROOT, "src"), { recursive: true })
-    .filter(
-      (file) =>
-        /\.tsx?$/.test(file) &&
-        !/\.(test|spec)\.tsx?$/.test(file) &&
-        !file.split("/").includes("__tests__") &&
-        !file.startsWith("testing/"),
-    )
-    .map((file) => join(PROJECT_ROOT, "src", file));
-}
 
 type Permission = { $: Record<string, string> };
 type Manifest = {

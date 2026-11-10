@@ -12,7 +12,9 @@ import notices from "../../about/notices.json";
 import { LANGUAGES } from "../../i18n/languages";
 import { STRINGS } from "../../i18n/strings";
 import { APPLICATION_ID } from "../../testing/appIdentity";
-import { PROJECT_ROOT } from "../../testing/projectFiles";
+import { appSourceFiles, fs, PROJECT_ROOT } from "../../testing/projectFiles";
+
+const { readFileSync } = fs;
 
 /** The app's public name, in every language. */
 const APP_NAME = "Washroom";
@@ -161,6 +163,38 @@ describe("the name the phone shows under the app's icon", () => {
   });
 });
 
+describe("literalTexts, the scan of the app's source files the tests below use (PBI-1.29)", () => {
+  it("finds a text written straight into a component, as JSX text, with its line breaks as spaces", () => {
+    const source = `export function About() {
+      return <Text>About What mushroom
+        is this?</Text>;
+    }`;
+    expect(literalTexts(source).flatMap(namesOfTheApp)).toEqual(["What mushroom is this"]);
+  });
+
+  it("finds a text in a JSX attribute, a string literal and the fixed parts of a template literal", () => {
+    const source = `const title = "washroom";
+      export const Header = () => <Stack.Screen options={{ title: 'WASHROOM' }} />;
+      export const credit = (year: number) => \`What mushroom is this \${year}, Washroom\`;
+      export const plain = \`Washroom\`;`;
+    expect(literalTexts(source).flatMap(namesOfTheApp)).toEqual([
+      "washroom",
+      "WASHROOM",
+      "What mushroom is this",
+      "Washroom",
+      "Washroom",
+    ]);
+  });
+
+  it("finds nothing in names, comments and code that are not texts", () => {
+    const source = `// What mushroom is this, washroom
+      /** WASHROOM */
+      const washroom = 1;
+      export function WhatMushroomIsThis() { return washroom; }`;
+    expect(literalTexts(source).flatMap(namesOfTheApp)).toEqual([]);
+  });
+});
+
 describe("the texts the app shows to the user", () => {
   let texts: string[];
 
@@ -171,6 +205,7 @@ describe("the texts the app shows to the user", () => {
       ...LANGUAGES.flatMap((language) => leaves(ios[language])),
       ...pluginTexts(),
       ...leaves(notices.app),
+      ...appSourceFiles().flatMap((file) => literalTexts(readFileSync(file, "utf8"))),
     ];
   });
 
@@ -178,6 +213,12 @@ describe("the texts the app shows to the user", () => {
     expect(texts.length).toBeGreaterThan(100);
     expect(texts).toContain(STRINGS.it.disclaimer);
     expect(texts).toContain(notices.app.requiredNotice);
+  });
+
+  it("are read: the texts written straight into the app's source files, its components among them (PBI-1.29, note 1 on #41)", () => {
+    // A screen's route name in src/app/_layout.tsx, and the gallery's error in devicePicker.ts.
+    expect(texts).toContain("text-lookup");
+    expect(texts).toContain("the picker gave no photo");
   });
 
   it("name the app, wherever they do, only as Washroom, in every language: never by its old name and never in another case", () => {

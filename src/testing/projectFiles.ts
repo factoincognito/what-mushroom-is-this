@@ -32,3 +32,21 @@ export const PROJECT_ROOT: string = process.cwd();
 if (!fs.existsSync(path.join(PROJECT_ROOT, "app.json"))) {
   throw new Error(`run the tests from the project's root folder, not ${PROJECT_ROOT}`);
 }
+
+/**
+ * The app's own source files under `src/`, by their paths: every `.ts` and `.tsx` file, leaving out
+ * the tests (`*.test.*`, `*.spec.*`, `__tests__/`) and the test helpers of `src/testing/`.
+ */
+export function appSourceFiles(): string[] {
+  const src = path.join(PROJECT_ROOT, "src");
+  return fs
+    .readdirSync(src, { recursive: true })
+    .filter(
+      (file) =>
+        /\.tsx?$/.test(file) &&
+        !/\.(test|spec)\.tsx?$/.test(file) &&
+        !file.split("/").includes("__tests__") &&
+        !file.startsWith("testing/"),
+    )
+    .map((file) => path.join(src, file));
+}
