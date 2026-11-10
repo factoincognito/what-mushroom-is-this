@@ -480,9 +480,7 @@ describe("the migration to schema version 3, on a version 2 database (PBI-2.15)"
     expect(sqlite.prepare("PRAGMA integrity_check").all()).toEqual([{ integrity_check: "ok" }]);
     // The check sees a row that breaks a CHECK version 3 added, so the "ok" above is not empty.
     damage("UPDATE finds SET answer_basis = NULL WHERE id = ?", finds.photoMatch);
-    expect(sqlite.prepare("PRAGMA integrity_check").all()).not.toEqual([
-      { integrity_check: "ok" },
-    ]);
+    expect(sqlite.prepare("PRAGMA integrity_check").all()).not.toEqual([{ integrity_check: "ok" }]);
   });
 
   it("keeps AUTOINCREMENT's high-water mark, so the ID of a find deleted in version 2 is not given again", async () => {

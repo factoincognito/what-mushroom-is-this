@@ -164,7 +164,12 @@ const V2_COLUMNS = `id, taken_at_ms, utc_offset_min, time_source, latitude, long
  * ('photos'); none without an answer. Every answer the store writes from version 3 on has one.
  *
  * Version 2 did not record it, so the copy fills it only where the stored data proves it, by
- * these rules, in this order, and leaves it empty otherwise (Clead's decision 2 on PBI-2.15):
+ * these rules, in this order, and leaves it empty otherwise (Clead's decision 2 on PBI-2.15). It
+ * judges a find by the columns the store reads it by, so that no row the version 2 store reads,
+ * a damaged one included, reads as unreadable in version 3 (review of #84, fix 1): whether it has
+ * an answer by its `state`, and whether the answer names a species by the answer's own JSON, not
+ * by the `result` column beside it. On every row the stores wrote these agree, since the CHECKs
+ * tie `state` to `answer_json` and the stores write `result` from the same answer.
  * - no answer: none;
  * - no text: 'photos'. A find's text is set only when it is saved, so the find never had one, and
  *   an analysis sends the text, the photos or both: every analysis of it sent photos. Every
@@ -257,10 +262,10 @@ CREATE TABLE finds_v3 (
 INSERT INTO finds_v3 (${V2_COLUMNS}, answer_basis)
   SELECT ${V2_COLUMNS},
     CASE
-      WHEN answer_json IS NULL THEN NULL
+      WHEN state IS NOT 'done' THEN NULL
       WHEN text IS NULL THEN 'photos'
       WHEN self_check IS NOT NULL THEN 'text'
-      WHEN result = 'match' THEN 'photos'
+      WHEN (CASE WHEN json_valid(answer_json) THEN json_extract(answer_json, '$.result') END) = 'match' THEN 'photos'
       WHEN batches = 0 THEN 'text'
     END
   FROM finds;
