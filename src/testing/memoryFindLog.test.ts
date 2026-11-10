@@ -47,6 +47,16 @@ function view(find: StoredFind | null): unknown {
   return { ...rest, batches: photos.map((photo) => photo.batch), picture: picture !== null };
 }
 
+/**
+ * What the list gives, each find's first photo as whether it has one: the store's copies have
+ * names of its own.
+ */
+async function listView(log: Log): Promise<unknown[]> {
+  return (await log.list()).map((entry) =>
+    entry.readable ? { ...entry, photoUri: entry.photoUri !== null } : entry,
+  );
+}
+
 /** The outcome of a change: "ok", or the store's error code. */
 async function outcome(change: () => Promise<unknown>): Promise<string> {
   try {
@@ -154,6 +164,35 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
     },
   ],
   [
+    "the list gives each find's species by its current answer, the text answer's too, and none without an answer naming one (PBI-2.7)",
+    async (log) => {
+      const porcini: Match = {
+        ...match,
+        names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
+      };
+      const waiting = await log.add({ ...photoFind, time: { ...time, takenAtMs: 1_000 } });
+      const named = await log.add({ ...photoFind, time: { ...time, takenAtMs: 2_000 } });
+      await log.setAnswer(named, analysed, await sentAll(log, named));
+      const failed = await log.add({ ...photoFind, time: { ...time, takenAtMs: 3_000 } });
+      await log.markFailed(failed, { cause: "request", detail: "request-wrong (status 400)" });
+      const none = await log.add({ ...photoFind, time: { ...time, takenAtMs: 4_000 } });
+      await log.setAnswer(
+        none,
+        { ...analysed, answer: { result: "no_mushroom" } },
+        await sentAll(log, none),
+      );
+      const text = await log.addText({ ...textFind, time: { ...time, takenAtMs: 5_000 } });
+      await log.setAnswer(text, { ...analysed, answer: porcini }, { photoUris: [] });
+      const seen: unknown[] = [waiting, await listView(log)];
+      // A new answer replaces the species; a photo added keeps the text answer's.
+      await log.replaceAnswer(named, { ...analysed, answer: porcini }, await sentAll(log, named));
+      await log.addPhoto(text, "file:///cache/b.jpg");
+      await log.completeBatch(text);
+      seen.push(await listView(log));
+      return seen;
+    },
+  ],
+  [
     "the most photos a find holds, and the refusals",
     async (log) => {
       const id = await log.addWithOpenBatch(photoFind);
@@ -192,6 +231,33 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
       expect.objectContaining({ batchOpen: false, batches: [1, 1] }),
       1,
       "wrong-state",
+    ]);
+  });
+
+  it("the list scenario sees the species the store gives, not nothing (PBI-2.7)", async () => {
+    const scenario = scenarios.find(([name]) => name.startsWith("the list gives"));
+    if (scenario === undefined) {
+      throw new Error("no list scenario");
+    }
+    const [, before, after] = await scenario[1](await realStore());
+    const species = (seen: unknown) =>
+      (seen as { id: number; species: { la: string } | null }[]).map((entry) => [
+        entry.id,
+        entry.species?.la ?? null,
+      ]);
+    expect(species(before)).toEqual([
+      [5, "Boletus edulis"],
+      [4, null],
+      [3, null],
+      [2, "Cantharellus cibarius"],
+      [1, null],
+    ]);
+    expect(species(after)).toEqual([
+      [5, "Boletus edulis"],
+      [4, null],
+      [3, null],
+      [2, "Boletus edulis"],
+      [1, null],
     ]);
   });
 });

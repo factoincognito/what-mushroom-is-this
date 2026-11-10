@@ -5,6 +5,7 @@ import { DisclaimerGate } from "../disclaimer/DisclaimerGate";
 import { LanguageProvider, useLanguage } from "../i18n/LanguageContext";
 import { KeyProvider } from "../key/KeyContext";
 import { deviceSecretStore } from "../key/secureStore";
+import { LibraryFiltersProvider } from "../library/LibraryFiltersContext";
 import { QueueProvider } from "../queue/QueueContext";
 import { deviceStore } from "../storage/keyValueStore";
 import { openFindLog } from "../store/deviceFindStore";
@@ -13,7 +14,8 @@ import { FindLogProvider } from "../store/FindLogContext";
 /**
  * The root layout: the language, the key (whose first-start clearing runs at once), the find
  * log (opened when a screen first needs it), then the first-start disclaimer, then the analysis
- * queue, which runs only once the disclaimer is accepted, then the screens.
+ * queue, which runs only once the disclaimer is accepted, then the Library's filters, held while
+ * the app runs (docs/SPEC.md 3.9), then the screens.
  */
 export default function RootLayout() {
   return (
@@ -22,7 +24,9 @@ export default function RootLayout() {
         <FindLogProvider open={openFindLog}>
           <DisclaimerGate store={deviceStore}>
             <QueueProvider>
-              <Screens />
+              <LibraryFiltersProvider>
+                <Screens />
+              </LibraryFiltersProvider>
             </QueueProvider>
           </DisclaimerGate>
         </FindLogProvider>

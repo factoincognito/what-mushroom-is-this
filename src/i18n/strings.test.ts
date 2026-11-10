@@ -267,15 +267,27 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
   it.each(LANGUAGES)("are all there in %s", (language) => {
     const paths = keyPaths(STRINGS[language]);
     expect(paths.filter((path) => path.startsWith("log."))).toEqual([
+      "log.allMonths",
+      "log.allSpecies",
+      "log.allYears",
       "log.empty",
       "log.failed",
+      "log.filters",
+      "log.filtersOn",
+      "log.months",
       "log.newFind",
+      "log.noMatch",
+      "log.notIdentified",
       "log.retry",
       "log.settings",
+      "log.species",
       "log.textLookup",
+      "log.textMark",
+      "log.textMarkLabel",
       "log.title",
       "log.unreadable",
       "log.waiting",
+      "log.years",
     ]);
     expect(paths.filter((path) => path.startsWith("find."))).toEqual([
       "find.accuracy",
@@ -361,6 +373,45 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       expect(STRINGS[lang].find.accuracy).toContain("{metres}");
     },
   );
+});
+
+describe("the Library in place of the Log (SPEC 3.9, PBI-2.7)", () => {
+  it("names it the Library in English, wherever the Log or Finds was named", () => {
+    const t = STRINGS.en;
+    expect(t.log.title).toBe("Library");
+    expect(t.log.unreadable).toBe("The Library could not be read.");
+    expect(t.notFound.back).toBe("Back to the Library");
+    expect(t.find.back).toBe("Back to the Library");
+    expect(t.lookup.saveHint).toMatch(/a find in the Library/);
+    expect(t.newFind.saveHint).toMatch(/a find in the Library/);
+  });
+
+  it.each([
+    ["sv", "Bibliotek", /Biblioteket/, /logg|Fynd\b/],
+    ["en", "Library", /Library/, /\blog\b|Finds/],
+    ["it", "Biblioteca", /Biblioteca/, /registro|Ritrovamenti/],
+  ] as const)(
+    "names it in %s as %s, and nowhere the Log any longer",
+    (language, title, named, log) => {
+      const t = STRINGS[language];
+      expect(t.log.title).toBe(title);
+      for (const text of [
+        t.log.unreadable,
+        t.notFound.back,
+        t.find.back,
+        t.lookup.saveHint,
+        t.newFind.saveHint,
+      ]) {
+        expect(text).toMatch(named);
+        expect(text).not.toMatch(log);
+      }
+    },
+  );
+
+  it("are new strings, not checked by a speaker in Swedish and Italian", () => {
+    expect(NOT_CHECKED_BY_A_SPEAKER.sv).toContain("log");
+    expect(NOT_CHECKED_BY_A_SPEAKER.it).toContain("log");
+  });
 });
 
 describe("the strings of the About view", () => {

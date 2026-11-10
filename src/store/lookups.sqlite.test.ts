@@ -223,6 +223,7 @@ describe("a text find (PBI-2.2)", () => {
         time,
         analysis: { state: "waiting" },
         selfCheck: null,
+        species: null,
       },
     ]);
     await expect(store.oldestWaiting()).resolves.toBe(id);
@@ -244,6 +245,8 @@ describe("a text find (PBI-2.2)", () => {
           confidence: 90,
         },
         selfCheck: { state: "waiting" },
+        // The text answer's species, for the Library's filters while the check waits (PBI-2.7).
+        species: match.names,
       },
     ]);
     await expect(store.oldestWaiting()).resolves.toBeNull();
