@@ -613,10 +613,11 @@ answers to Clead's questions, 19:05).
   (**[Clead]**). The filters hold until changed while the app runs, and
   start at their defaults when it starts (**[Clead]**).
 - The list shows every find that passes the filters, as the Log did
-  (3.1), with the queue's messages and "analyse now"; a text find shows a
-  text mark in place of a photo (**[Clead]**), and a text find with photos
-  shows its first photo, also while its answer is from the text alone
-  (**[Clead]**, 2026-11-10, #63). A find that could not be
+  (3.1), with the queue's messages and "analyse now"; a text find without
+  photos shows a text mark in place of a photo (**[Clead]**). A text find
+  with photos whose answer is from the text alone shows its picture while
+  it has one (the representative picture, below), and otherwise its first
+  photo (**[Clead]**, 2026-11-10, #63). A find that could not be
   read (3.4) is always in the list, whatever the filters, so it can be
   deleted, and never on the map (**[Clead]**).
 - The map opens on the phone's position, its shorter side spanning 10 km
@@ -630,10 +631,11 @@ answers to Clead's questions, 19:05).
   known position when no older than two minutes (**[Clead]**: the limits,
   configuration). Without either, the map opens on the newest find with a
   position among those that pass the filters, at the same scale; with
-  none, on a default area (**[Clead]**: configuration; the area is
-  Sweden's, about 10.9° to 24.2° E and 55.3° to 69.1° N, and "among those
-  that pass the filters" is **[Clead]**'s, 2026-11-10, #68). Finds without
-  a position appear in the list only.
+  none, on a default area (**[Clead]**: configuration). The area is
+  Sweden's, about 10.9° to 24.2° E and 55.3° to 69.1° N (**[Clead]**,
+  2026-11-10, #68); so is taking the newest find among those that pass
+  the filters (**[Clead]**, 2026-11-10, #68). Finds without a position
+  appear in the list only.
 - Tapping a pin shows the find's species name, or "not identified", and
   its date; tapping that opens the find (**[Clead]**).
 - The tiles come from a map provider (Adam's decision). Each tile request
