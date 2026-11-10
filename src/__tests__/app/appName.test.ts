@@ -11,6 +11,7 @@
 import notices from "../../about/notices.json";
 import { LANGUAGES } from "../../i18n/languages";
 import { STRINGS } from "../../i18n/strings";
+import { APPLICATION_ID } from "../../testing/appIdentity";
 import { PROJECT_ROOT } from "../../testing/projectFiles";
 
 /** The app's public name, in every language. */
@@ -109,7 +110,7 @@ describe("app.json: the app's public name", () => {
   it("leaves the slug and the scheme, tied to the EAS project and to links, and the Android application ID as they were", () => {
     expect(appJson.expo.slug).toBe("what-mushroom-is-this");
     expect(appJson.expo.scheme).toBe("what-mushroom-is-this");
-    expect(appJson.expo.android?.package).toBe("com.factoincognito.mushroomlog");
+    expect(appJson.expo.android?.package).toBe(APPLICATION_ID);
   });
 });
 

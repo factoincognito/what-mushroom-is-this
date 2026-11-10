@@ -9,6 +9,8 @@ type Fs = {
   writeFileSync(path: string, data: string): void;
   existsSync(path: string): boolean;
   readdirSync(path: string): string[];
+  /** Every file and folder below the path, each by its path relative to it. */
+  readdirSync(path: string, options: { recursive: true }): string[];
   mkdtempSync(prefix: string): string;
   rmSync(path: string, options: { recursive: boolean; force: boolean }): void;
 };
