@@ -1,6 +1,9 @@
+import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 
+import { deviceJpegEncoder } from "../image/deviceJpegEncoder";
+import type { JpegEncoder } from "../image/prepareForAnalysis";
 import type { PermissionAsker } from "./permissions";
 
 /**
@@ -12,7 +15,11 @@ import type { PermissionAsker } from "./permissions";
  * library"; the camera needs its permission.
  */
 
-export type PickResult = { kind: "photo"; uri: string; exif: unknown } | { kind: "canceled" };
+export type PickResult =
+  | { kind: "photo"; uri: string; exif: unknown }
+  | { kind: "canceled" }
+  /** A file from the phone's files that the app cannot load as an image (SPEC 3.9, Lookups). */
+  | { kind: "notImage" };
 
 export async function takePhoto(): Promise<PickResult> {
   return readResult(
@@ -34,12 +41,66 @@ export async function pickFromGallery(): Promise<PickResult> {
 }
 
 /**
- * Removes the app's own copy of a photo the camera or the gallery gave, for an unsaved lookup
- * whose screen is left (docs/SPEC.md 3.9, Lookups; PBI-2.13). The picker leaves its copies in the
- * app's cache directory; only a file there is removed, named without a parent step, so that
- * nothing else is, the original in the gallery or the find log's own photos never. A copy that is
- * gone, an address that is not a file's, or a failed removal is left to the system, which clears
- * the cache, and is not an error.
+ * A photo from the phone's files (docs/SPEC.md 3.9, Lookups; Known unknown 13; PBI-2.6), through
+ * expo-document-picker (its SDK 57 types, `node_modules/expo-document-picker/build/types.d.ts`):
+ * images only (`type: "image/*"`), one file, copied to the app's cache (`copyToCacheDirectory`, in
+ * its `DocumentPicker` folder on both platforms), so that the image loader reads a local file and
+ * the store then copies it into its photos. The file has no time or position of its own, as a
+ * gallery photo without metadata: no metadata is given, and the picker's `lastModified` is never
+ * used.
+ *
+ * The file is loaded with the loader the analysis uses (`encoder`); a file that does not load, or
+ * loads to a size that is not whole pixels of one or more, is not an image the app can use. It is
+ * refused, and the app's copy of it removed.
+ */
+export async function pickFromFiles(encoder: JpegEncoder = deviceJpegEncoder): Promise<PickResult> {
+  const result = readResult(
+    await DocumentPicker.getDocumentAsync({
+      type: "image/*",
+      copyToCacheDirectory: true,
+      multiple: false,
+    }),
+    false,
+  );
+  if (result.kind !== "photo") {
+    return result;
+  }
+  if (!(await loadsAsImage(result.uri, encoder))) {
+    removePickedCopy(result.uri);
+    return { kind: "notImage" };
+  }
+  return { kind: "photo", uri: result.uri, exif: null };
+}
+
+/** Whether the loader loads the file as an image of whole pixels; the image is released. */
+async function loadsAsImage(uri: string, encoder: JpegEncoder): Promise<boolean> {
+  let image: Awaited<ReturnType<JpegEncoder["load"]>>;
+  try {
+    image = await encoder.load(uri);
+  } catch {
+    return false;
+  }
+  const sized = isWholePixels(image.width) && isWholePixels(image.height);
+  try {
+    image.release();
+  } catch {
+    // The check is done; a release that fails leaves the image to the loader.
+  }
+  return sized;
+}
+
+function isWholePixels(value: number): boolean {
+  return Number.isInteger(value) && value >= 1;
+}
+
+/**
+ * Removes the app's own copy of a photo the camera, the gallery or the phone's files gave, for an
+ * unsaved lookup whose screen is left (docs/SPEC.md 3.9, Lookups; PBI-2.13), or for a file refused
+ * as not an image (PBI-2.6). The pickers leave their copies in the app's cache directory; only a
+ * file there is removed, named without a parent step, so that nothing else is, the original in the
+ * gallery or the files, or the find log's own photos, never. A copy that is gone, an address that
+ * is not a file's, or a failed removal is left to the system, which clears the cache, and is not
+ * an error.
  */
 export function removePickedCopy(uri: string): void {
   try {
@@ -61,8 +122,14 @@ export const cameraPermission: PermissionAsker = {
   request: () => ImagePicker.requestCameraPermissionsAsync(),
 };
 
-/** The picker's answer, checked: canceled, or one photo with an address. */
-function readResult(raw: unknown, withExif: boolean): PickResult {
+/**
+ * The picker's answer, checked: canceled, or one photo with an address. The image picker's and the
+ * document picker's answers have this same shape.
+ */
+function readResult(
+  raw: unknown,
+  withExif: boolean,
+): { kind: "photo"; uri: string; exif: unknown } | { kind: "canceled" } {
   if (typeof raw === "object" && raw !== null && "canceled" in raw) {
     if (raw.canceled === true) {
       return { kind: "canceled" };

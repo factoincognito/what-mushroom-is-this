@@ -347,6 +347,29 @@ describe("the licence texts", () => {
     },
   );
 
+  it("list expo-document-picker, and the Android libraries its build file asks for with the Apache License 2.0 (PBI-2.6)", () => {
+    expect(NOTICES.libraries.map((entry) => entry.name)).toContain("expo-document-picker");
+    const gradle = readFileSync(
+      join(MODULES, "expo-document-picker", "android", "build.gradle"),
+      "utf8",
+    );
+    const wanted = [...gradle.matchAll(/^\s*api\s+["']([^"':]+):([^"':]+):([^"']+)["']/gm)].map(
+      ([, group = "", artifact = "", version = ""]) => ({ name: `${group}:${artifact}`, version }),
+    );
+    expect(wanted).toEqual([
+      { name: "androidx.annotation:annotation", version: "1.0.0" },
+      { name: "commons-io:commons-io", version: "2.6" },
+    ]);
+    for (const { name, version } of wanted) {
+      expect(NOTICES.libraries.find((entry) => entry.name === name)).toMatchObject({
+        name,
+        version,
+        licence: "Apache-2.0",
+        textId: "Apache-2.0",
+      });
+    }
+  });
+
   it("name for expo-location the Play services version its Android build files ask for (PBI-1.19)", () => {
     const wanted = "com.google.android.gms:play-services-location:21.0.1";
     const gradle = readFileSync(join(MODULES, "expo-location", "android", "build.gradle"), "utf8");

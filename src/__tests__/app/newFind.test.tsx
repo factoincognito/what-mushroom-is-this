@@ -3,6 +3,7 @@
  * the gallery, the phone's location and the find log replaced by stand-ins.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { getLocales } from "expo-localization";
 import * as Location from "expo-location";
@@ -12,6 +13,7 @@ import { Alert, Linking } from "react-native";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { STRINGS } from "../../i18n/strings";
+import { deviceJpegEncoder } from "../../image/deviceJpegEncoder";
 import type { NewFind, Position, StoredFind } from "../../store/find";
 import { warmUpRouter } from "../../testing/warmUpRouter";
 
@@ -37,6 +39,9 @@ jest.mock("expo-location", () => ({
   getForegroundPermissionsAsync: jest.fn(),
   requestForegroundPermissionsAsync: jest.fn(),
 }));
+// The phone's files, and the phone's image loader that checks a file is an image (PBI-2.6).
+jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
+jest.mock("../../image/deviceJpegEncoder", () => ({ deviceJpegEncoder: { load: jest.fn() } }));
 
 /**
  * The find log, in memory. (Named `mock…` so that the hoisted factory may use it.) A photo
@@ -171,6 +176,15 @@ async function resetStandIns(): Promise<void> {
   jest
     .mocked(ImagePicker.launchImageLibraryAsync)
     .mockResolvedValue(wrong({ canceled: true, assets: null }));
+  jest
+    .mocked(DocumentPicker.getDocumentAsync)
+    .mockResolvedValue(wrong({ canceled: true, assets: null }));
+  jest.mocked(deviceJpegEncoder.load).mockResolvedValue({
+    width: 4032,
+    height: 3024,
+    encodeJpeg: jest.fn(),
+    release: jest.fn(),
+  });
 }
 
 beforeEach(resetStandIns);
@@ -768,6 +782,7 @@ describe("several photos in one batch (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(
       screen.queryByRole("button", { name: en.newFind.pickFromGallery }),
     ).not.toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.newFind.pickFromFiles })).not.toBeOnTheScreen();
     expect(screen.getByRole("button", { name: en.newFind.analyse })).toBeOnTheScreen();
   });
 
@@ -967,6 +982,105 @@ describe("adding photos to a find from its screen (SPEC 3.9, Batches; PBI-2.5)",
     expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: en.newFind.takePhoto })).not.toBeOnTheScreen();
     expect(screen.queryByText(/stored row/)).not.toBeOnTheScreen();
+  });
+
+  it("adds a photo from the phone's files to the find (PBI-2.6)", async () => {
+    mockLog.stored.set(7, storedFind(7, 1));
+    jest
+      .mocked(DocumentPicker.getDocumentAsync)
+      .mockResolvedValueOnce(wrong({ canceled: false, assets: [filesPhoto] }));
+    await openAddTo(7);
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.pickFromFiles }));
+    await settle();
+    expect(mockLog.photosAdded).toEqual([[7, filesPhoto.uri]]);
+    expect(mockLog.added).toEqual([]);
+    expect(screen.getByText(photoCount(2))).toBeOnTheScreen();
+  });
+});
+
+/** A file the phone's files give, copied to the app's cache, with a date it was last changed. */
+const filesPhoto = {
+  uri: "file:///cache/DocumentPicker/IMG_0042.jpg",
+  name: "IMG_0042.jpg",
+  size: 2_000_000,
+  mimeType: "image/jpeg",
+  lastModified: Date.UTC(2020, 0, 1),
+};
+
+describe("a photo from the phone's files (SPEC 3.9, Lookups; Known unknown 13; PBI-2.6)", () => {
+  it("is offered beside the camera and the gallery, and opens the phone's files for one image, copied for the app", async () => {
+    await openNewFind();
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.pickFromFiles }));
+    await settle();
+    expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledWith({
+      type: "image/*",
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    expect(mockLog.added).toEqual([]);
+  });
+
+  it("is saved at the time of saving and without a position, not the file's date or the phone's fix", async () => {
+    jest
+      .mocked(DocumentPicker.getDocumentAsync)
+      .mockResolvedValue(wrong({ canceled: false, assets: [filesPhoto] }));
+    await openNewFind();
+    await act(async () => sendFix?.(fix(59.66, 17.1, 9)));
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.pickFromFiles }));
+    await settle();
+    expect(deviceJpegEncoder.load).toHaveBeenCalledWith(filesPhoto.uri);
+    expect(mockLog.added).toEqual([
+      {
+        photoUri: filesPhoto.uri,
+        time: expect.objectContaining({ source: "saved" }),
+        position: null,
+      },
+    ]);
+    expect(mockLog.added[0]?.time.takenAtMs).not.toBe(filesPhoto.lastModified);
+    expect(watchRemoved).toBe(1);
+    expect(screen.getByText(en.newFind.saved)).toBeOnTheScreen();
+  });
+
+  it("is refused with a message when the app cannot load it as an image, and nothing is saved", async () => {
+    jest
+      .mocked(DocumentPicker.getDocumentAsync)
+      .mockResolvedValue(wrong({ canceled: false, assets: [filesPhoto] }));
+    jest.mocked(deviceJpegEncoder.load).mockRejectedValueOnce(new Error("Could not decode"));
+    await openNewFind();
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.pickFromFiles }));
+    await settle();
+    expect(screen.getByText(en.newFind.fileNotImage)).toBeOnTheScreen();
+    expect(screen.queryByText(/decode/)).not.toBeOnTheScreen();
+    expect(mockLog.added).toEqual([]);
+    expect(screen.getByRole("button", { name: en.newFind.pickFromFiles })).toBeOnTheScreen();
+  });
+
+  it("says so when the files fail to open", async () => {
+    jest.mocked(DocumentPicker.getDocumentAsync).mockRejectedValue(new Error("no activity"));
+    await openNewFind();
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.pickFromFiles }));
+    await settle();
+    expect(screen.getByText(en.newFind.pickFailed)).toBeOnTheScreen();
+    expect(mockLog.added).toEqual([]);
+  });
+
+  it("is offered when the camera may not be used", async () => {
+    jest
+      .mocked(ImagePicker.getCameraPermissionsAsync)
+      .mockResolvedValue(wrong(permission("denied", false)));
+    await openNewFind();
+    expect(screen.getByRole("button", { name: en.newFind.pickFromFiles })).toBeOnTheScreen();
+  });
+
+  it("is shown in the app's language", async () => {
+    phoneIn("sv");
+    const app = renderRouter(APP_DIR, { initialUrl: "/" });
+    await app;
+    await fireEvent.press(await screen.findByRole("link", { name: STRINGS.sv.log.newFind }));
+    await settle();
+    expect(
+      screen.getByRole("button", { name: STRINGS.sv.newFind.pickFromFiles }),
+    ).toBeOnTheScreen();
   });
 });
 

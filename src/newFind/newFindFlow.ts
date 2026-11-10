@@ -24,6 +24,12 @@
  * after a question, which removes the app's copy only (Clead's decision on #61). Leaving the
  * screen with an unsaved lookup asks first; the app's copies of the photos it held and did not
  * save to a find are removed when the screen is left.
+ *
+ * The phone's files are a third source beside the camera and the gallery, wherever those are
+ * offered (docs/SPEC.md 3.9, Lookups; PBI-2.6). A photo from the files has no time or position of
+ * its own, as a gallery photo without metadata (3.1): as a find's first photo it gives the find the
+ * time of saving, or of picking on an unsaved lookup, and no position. A file the app cannot load
+ * as an image is refused with a message (`fileNotImage`), and nothing is saved or held.
  */
 
 import type { Answer } from "../analysis/answer";
@@ -53,6 +59,8 @@ export type NewFindMessage =
   | "cameraDenied"
   | "cameraBlocked"
   | "pickFailed"
+  /** A file from the phone's files that the app cannot load as an image (PBI-2.6). */
+  | "fileNotImage"
   | "saveFailed"
   | "findUnavailable"
   | "analyseFailed";
@@ -147,6 +155,8 @@ export interface NewFindDeps {
   >;
   camera: { permission: PermissionAsker; take: () => Promise<PickResult> };
   gallery: { pick: () => Promise<PickResult> };
+  /** The phone's files (`pickFromFiles`): one image file, or a file refused as not an image. */
+  files: { pick: () => Promise<PickResult> };
   location: { permission: PermissionAsker; source: LocationSource };
   /** The Save switch's starting value from Settings (`readPhotoLookupSave`); it never rejects. */
   readSaveSetting: () => Promise<boolean>;
@@ -162,12 +172,13 @@ export interface NewFindDeps {
 }
 
 /**
- * A photo to save: from the camera or the gallery, or held by an unsaved lookup when Save was
- * turned on, the first with its time and position (`taken`), the others without.
+ * A photo to save: from the camera, the gallery or the phone's files, or held by an unsaved lookup
+ * when Save was turned on, the first with its time and position (`taken`), the others without.
  */
 type Pending =
   | { from: "camera"; uri: string }
   | { from: "gallery"; photo: GalleryPhoto }
+  | { from: "files"; uri: string }
   | { from: "held"; uri: string; taken: Taken | null };
 
 /** A photo an unsaved lookup holds: the first with its time and position, the others without. */
@@ -305,6 +316,20 @@ export class NewFindFlow {
     const result = await this.pick(this.deps.gallery.pick);
     if (result !== null) {
       await this.receive({ from: "gallery", photo: { uri: result.uri, exif: result.exif } });
+    }
+  }
+
+  /**
+   * Opens the phone's files (PBI-2.6); as `takePhoto`, not while photos whose save failed are kept.
+   * Whatever the picker gives with the file, the photo takes no time or position from it.
+   */
+  async pickFromFiles(): Promise<void> {
+    if (!this.canTake()) {
+      return;
+    }
+    const result = await this.pick(this.deps.files.pick);
+    if (result !== null) {
+      await this.receive({ from: "files", uri: result.uri });
     }
   }
 
@@ -493,7 +518,9 @@ export class NewFindFlow {
       taken =
         photo.from === "gallery"
           ? takenFromGallery(photo.photo, this.deps.now)
-          : await takenByCamera(this.tracker, this.deps.now);
+          : photo.from === "files"
+            ? takenFromGallery({ uri: photo.uri, exif: null }, this.deps.now)
+            : await takenByCamera(this.tracker, this.deps.now);
       this.trackerSpent = true;
     }
     if (this.closed) {
@@ -616,6 +643,10 @@ export class NewFindFlow {
         this.show({ phase: "ready" });
         return null;
       }
+      if (result.kind === "notImage") {
+        this.show({ phase: "ready", message: "fileNotImage" });
+        return null;
+      }
       return result;
     } catch {
       this.show({ phase: "ready", message: "pickFailed" });
@@ -707,6 +738,12 @@ export class NewFindFlow {
         this.tracker?.stop();
         return id;
       }
+      case "files": {
+        // No metadata of its own: the time of saving and no position, as a gallery photo without.
+        const id = await saveGalleryFind({ uri: pending.uri, exif: null }, deps);
+        this.tracker?.stop();
+        return id;
+      }
       case "held": {
         if (pending.taken === null) {
           // Only a lookup's first photo carries its time and position, and it is saved first.
@@ -747,7 +784,7 @@ export class NewFindFlow {
   }
 }
 
-/** The address of a photo to save. */
+/** The address of a photo to save, whichever its source. */
 function uriOf(photo: Pending): string {
   return photo.from === "gallery" ? photo.photo.uri : photo.uri;
 }
