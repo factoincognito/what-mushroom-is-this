@@ -513,10 +513,11 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
   Commons are shown with it, as its licence requires (**[Clead]**), and
-  the file's own attribution text when it gives one, beside the author
-  (**[Clead]**, 2026-11-10, #71's review). A file whose author Wikimedia does not give in machine-readable form is
-  not used: there is no picture, and the find says it could not be
-  checked (Adam, 2026-11-10 00:10, approving Clead's proposal).
+  the file's own `Attribution` text, when its metadata gives one, beside
+  the author (**[Clead]**, 2026-11-10, #71's review). A file whose author
+  Wikimedia does not give in machine-readable form is not used: there is
+  no picture, and the find says it could not be checked (Adam,
+  2026-11-10 00:10, approving Clead's proposal).
 - On a saved find it is stored with the find, apart from its photos: it
   is never one of the find's photos and does not count toward the 5
   (**[Clead]**). A new answer naming another species replaces it. On an
@@ -525,13 +526,15 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
 - Only the Latin name is sent to Wikimedia, which also sees the phone's
   IP address (**[Clead]**).
 - Fetching it (**[Clead]**):
-  - no network, a time limit, 429 or 5xx from Wikimedia, or an API
-    error whose code is `ratelimited`, `maxlag` or `readonly`, or an API
-    answer with status 200 that is not JSON, such as a network's sign-in
-    page, as 3.3 treats one (**[Clead]**, 2026-11-10, #71): the picture,
-    and so the
-    check, wait; on a saved find the queue tries again at its next run,
-    and an unsaved lookup's screen offers "Check again";
+  - no network, a time limit, 429 or 5xx from Wikimedia, an API error
+    whose code is `ratelimited`, `maxlag` or `readonly`, or an API answer
+    with status 200 that is not JSON, such as a network's sign-in page,
+    which is treated as no network (**[Clead]**, 2026-11-10, #71; this
+    differs on purpose from 3.3, where an answer not from Anthropic's API
+    marks a find failed and stops the queue): the picture, and so the
+    check, wait; on a saved find the queue
+    tries again at its next run, and an unsaved lookup's screen offers
+    "Check again";
   - no Wikidata item, no image, a licence the IP policy does not allow
     for this use, any other answer, or a picture that cannot be loaded or
     fails the metadata check after its resize: there is no picture, for
@@ -594,8 +597,9 @@ answers to Clead's questions, 19:05).
     answer: analysed, waiting for the queue, or not yet analysed after a
     failure;
   - its confidence as a level (Phase 1) or a number from 1 to 100;
-  - its representative picture with its author, licence and page, or
-    none;
+  - its representative picture with its author, its `Attribution` text
+    or none, licence and page, or none (the `Attribution` text from
+    PBI-2.16; **[Clead]**, 2026-11-10);
   - its self-check: waiting, agreed, disagreed with the species the check
     named, could not name a species, failed, or no picture.
 - The database moves to schema version 2 by a migration that keeps every
