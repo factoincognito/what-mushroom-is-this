@@ -1,4 +1,4 @@
-import { act, render, renderHook, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react-native";
 import { type ReactNode, useState } from "react";
 import { Pressable, Text } from "react-native";
 
@@ -47,11 +47,12 @@ describe("LibraryFiltersProvider (SPEC 3.9: held while the app runs, the default
         <Toggled />
       </LibraryFiltersProvider>,
     );
-    await act(async () => screen.getByRole("button").props.onPress());
+    expect(screen.getByText("all")).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button"));
     expect(screen.getByText("2026")).toBeOnTheScreen();
-    await act(async () => screen.getByRole("switch").props.onPress());
+    await fireEvent.press(screen.getByRole("switch"));
     expect(screen.queryByText("2026")).not.toBeOnTheScreen();
-    await act(async () => screen.getByRole("switch").props.onPress());
+    await fireEvent.press(screen.getByRole("switch"));
     expect(screen.getByText("2026")).toBeOnTheScreen();
   });
 

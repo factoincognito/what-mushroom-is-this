@@ -63,6 +63,7 @@ import {
   type StoredFind,
   StoreError,
   type SummaryAnalysis,
+  speciesOf,
   TIME_SOURCES,
 } from "./find";
 import type { PhotoFiles } from "./photoFiles";
@@ -1019,6 +1020,7 @@ function readSummary(row: Row, find: StoredFind): FindSummary {
     time: find.time,
     analysis: readSummaryAnalysis(row),
     selfCheck: find.selfCheck,
+    species: speciesOf(find.analysis),
   };
 }
 

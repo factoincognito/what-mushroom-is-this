@@ -204,6 +204,18 @@ describe("speciesOptions: the species among the finds", () => {
     ]);
   });
 
+  it("keeps two species of one name in the app's language apart, sorted by Latin name", () => {
+    const other: SpeciesNames = { ...CHANTERELLE, la: "Cantharellus amethysteus" };
+    const options = speciesOptions(
+      [entry(1, "2026-09-01T10:00:00Z", CHANTERELLE), entry(2, "2026-09-02T10:00:00Z", other)],
+      "en",
+    );
+    expect(options.map((option) => option.choice)).toEqual([
+      "species:cantharellus amethysteus",
+      "species:cantharellus cibarius",
+    ]);
+  });
+
   it("has no 'not identified' when every find names a species, and nothing for no finds", () => {
     expect(speciesOptions([entry(1, "2026-09-01T10:00:00Z", CHANTERELLE)], "en")).toEqual([
       { choice: "species:cantharellus cibarius", names: CHANTERELLE },

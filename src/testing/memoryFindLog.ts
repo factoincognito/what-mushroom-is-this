@@ -30,6 +30,7 @@ import {
   type StoredFind,
   StoreError,
   type SummaryAnalysis,
+  speciesOf,
 } from "../store/find";
 import type { FindLog } from "../store/findStore";
 
@@ -91,6 +92,7 @@ function summaryOf(stored: StoredFind): FindSummary {
     time: stored.time,
     analysis: summary,
     selfCheck: stored.selfCheck,
+    species: speciesOf(analysis),
   };
 }
 

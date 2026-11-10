@@ -123,6 +123,21 @@ export interface FindSummary {
    * shown is "unknown" until it agrees (docs/SPEC.md 3.9).
    */
   selfCheck: SelfCheck | null;
+  /**
+   * The species the find's current answer names, by its four names, for the Library's species
+   * filter (docs/SPEC.md 3.9, PBI-2.7); null when the find has no answer naming one (waiting,
+   * failed, no mushroom, cannot tell). It is read from the stored answer, since the Latin name has
+   * no column of its own; an answer from a text alone counts while its self-check waits (3.9:
+   * "The filters use the text answer's species").
+   */
+  species: SpeciesNames | null;
+}
+
+/** The species a find's current answer names (`FindSummary.species`); null without one. */
+export function speciesOf(analysis: Analysis): SpeciesNames | null {
+  return analysis.state === "done" && analysis.answer.result === "match"
+    ? analysis.answer.names
+    : null;
 }
 
 /**
