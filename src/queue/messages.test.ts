@@ -28,7 +28,8 @@ const STOPS: readonly QueueStop[] = [
   { reason: "key-not-scoped" },
   { reason: "no-credit" },
   { reason: "model-unknown" },
-  { reason: "answer" },
+  { reason: "answer", findMarkedFailed: true },
+  { reason: "answer", findMarkedFailed: false },
   { reason: "internal-error" },
   { reason: "other", status: 418 },
 ];
@@ -495,6 +496,40 @@ describe("the message for a refused answer (PBI-1.21)", () => {
       failureMessage(failure, STRINGS.en),
     );
   });
+});
+
+describe("the stop for an answer not of the shape (PBI-2.14; PBI-2.16, #75)", () => {
+  const marked = {
+    sv: /markerat som misslyckat/,
+    en: /marked failed/,
+    it: /segnato come non riuscito/,
+  } as const;
+  const stopped = (findMarkedFailed: boolean, language: (typeof LANGUAGES)[number]) =>
+    noticeMessage(
+      { kind: "stopped", stop: { reason: "answer", findMarkedFailed } },
+      STRINGS[language],
+      formatTime,
+    );
+
+  it.each(LANGUAGES)("says in %s that a find is marked failed when one was", (language) => {
+    const message = stopped(true, language);
+    expect(message).toBe(STRINGS[language].queue.stopped.answer);
+    expect(message).toMatch(marked[language]);
+    expect(message).toContain(STRINGS[language].queue.analyseNow);
+  });
+
+  it.each(LANGUAGES)(
+    "says in %s only that an answer did not fit, when no find was marked failed",
+    (language) => {
+      const message = stopped(false, language);
+      expect(message).toBe(STRINGS[language].queue.stopped.answerNoFindFailed);
+      expect(message).not.toMatch(marked[language]);
+      expect(message).toContain(STRINGS[language].queue.analyseNow);
+      // The rest is the same as when a find was marked failed: what the answer was, and what to do.
+      const withFind = stopped(true, language);
+      expect(withFind.startsWith(message.slice(0, message.indexOf(")") + 2))).toBe(true);
+    },
+  );
 });
 
 describe("the message for a key not scoped to a workspace (Clead's decision on #18, note 4)", () => {

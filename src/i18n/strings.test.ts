@@ -184,6 +184,36 @@ describe("the strings of the self-check (SPEC 3.9; PBI-2.10)", () => {
       );
     }
   });
+
+  it("say in English that a check on a find with photos waits until they are analysed or removed, not that it is about to run (Clead's decision on #78)", () => {
+    expect(STRINGS.en.find.selfCheck.waitingOnPhotos).toBe(
+      "The edibility is shown as unknown until a check on a picture of the species agrees with this match. The check waits until the find's photos are analysed or removed.",
+    );
+  });
+
+  it.each([
+    ["sv", /väntar tills fyndets foton har analyserats eller tagits bort/],
+    ["it", /in attesa finché le foto del ritrovamento non sono state analizzate o rimosse/],
+  ] as const)("say it in %s too, beside the reason of a check not yet made", (language, waits) => {
+    const t = STRINGS[language].find.selfCheck;
+    expect(t.waitingOnPhotos).toMatch(waits);
+    expect(t.waitingOnPhotos).not.toBe(t.waiting);
+  });
+});
+
+describe("the camera refusal (PBI-2.16, #66)", () => {
+  it.each([
+    ["sv", /i galleriet eller bland filerna/],
+    ["en", /from the gallery or the files/],
+    ["it", /dalla galleria o dai file/],
+  ] as const)(
+    "names in %s both the gallery and the phone's files as the other sources",
+    (language, sources) => {
+      const t = STRINGS[language].newFind;
+      expect(t.cameraDenied).toMatch(sources);
+      expect(t.cameraBlocked).toMatch(sources);
+    },
+  );
 });
 
 describe("the strings of the key and model settings", () => {
@@ -340,6 +370,7 @@ describe("the strings of the queue (PBI-1.7)", () => {
       "queue.paused.timeOut",
       "queue.running",
       "queue.stopped.answer",
+      "queue.stopped.answerNoFindFailed",
       "queue.stopped.internalError",
       "queue.stopped.keyNotScoped",
       "queue.stopped.keyRefused",
@@ -454,6 +485,7 @@ describe("the strings of the Log and Find screens (PBI-1.8)", () => {
       "find.selfCheck.noPicture",
       "find.selfCheck.noSpecies",
       "find.selfCheck.waiting",
+      "find.selfCheck.waitingOnPhotos",
       "find.time",
       "find.timeSources.photo",
       "find.timeSources.photoPhoneOffset",
@@ -592,7 +624,14 @@ describe("the strings of the text lookup (PBI-2.4)", () => {
       expect(t.disagreed).toContain("{matched}");
       expect(t.disagreed).toContain("{named}");
       const unknown = STRINGS[language].find.edibilities.unknown.toLowerCase();
-      for (const reason of [t.waiting, t.disagreed, t.noSpecies, t.failed, t.noPicture]) {
+      for (const reason of [
+        t.waiting,
+        t.waitingOnPhotos,
+        t.disagreed,
+        t.noSpecies,
+        t.failed,
+        t.noPicture,
+      ]) {
         expect(reason.toLowerCase()).toContain(unknown);
       }
     },
