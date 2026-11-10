@@ -1048,7 +1048,21 @@ describe("the edibility of an answer from text alone, until its self-check agree
       { answer: PORCINI, model: "m", analysedAtMs: 1 },
       { photoUris: [] },
     );
-    await mockLog.setSelfCheck(id, { state: "agreed" });
+    // Its self-check agreed, on its picture (PBI-2.9, PBI-2.10 make these; here they are set).
+    const answered = await mockLog.getStored(id);
+    if (answered === null) {
+      throw new Error("the text find was not saved");
+    }
+    mockLog.finds.set(id, {
+      ...answered,
+      selfCheck: { state: "agreed" },
+      picture: {
+        uri: "file:///photos/picture.jpg",
+        author: "A. Photographer",
+        licence: "CC BY-SA 4.0",
+        page: "https://commons.wikimedia.org/wiki/File:Porcini.jpg",
+      },
+    });
     await mockLog.addPhoto(id, "file:///photos/a.jpg");
     await mockLog.completeBatch(id);
     await startApp(`/find/${id}`);
@@ -1094,6 +1108,8 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
   }
   const label = (number: number, count: number) =>
     fillIn(en.find.photoNumbered, { number: String(number), count: String(count) });
+  /** The photos the find log holds of find 1. */
+  const photosOf1 = async () => (await mockLog.getStored(1))?.photos;
 
   it("shows every photo in the order added, each labelled with its number", async () => {
     mockLog.finds.set(1, withPhotos(3));
@@ -1136,10 +1152,8 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
     await startApp();
     const remove = fillIn(en.find.removePhoto, { number: "2" });
     await fireEvent.press(await screen.findByRole("button", { name: remove }));
-    expect(
-      screen.getByText(fillIn(en.find.removePhotoConfirm, { number: "2" })),
-    ).toBeOnTheScreen();
-    expect(mockLog.finds.get(1)?.photos).toHaveLength(3);
+    expect(screen.getByText(fillIn(en.find.removePhotoConfirm, { number: "2" }))).toBeOnTheScreen();
+    expect(await photosOf1()).toHaveLength(3);
     await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
     expect(await screen.findByLabelText(label(2, 2))).toHaveProp("source", {
       uri: "file:///photos/3.jpg",
@@ -1147,7 +1161,7 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(screen.getByLabelText(label(1, 2))).toHaveProp("source", {
       uri: "file:///photos/1.jpg",
     });
-    expect(mockLog.finds.get(1)?.photos.map((photo) => photo.uri)).toEqual([
+    expect((await photosOf1())?.map((photo) => photo.uri)).toEqual([
       "file:///photos/1.jpg",
       "file:///photos/3.jpg",
     ]);
@@ -1166,7 +1180,7 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(
       screen.queryByText(fillIn(en.find.removePhotoConfirm, { number: "1" })),
     ).not.toBeOnTheScreen();
-    expect(mockLog.finds.get(1)?.photos).toHaveLength(2);
+    expect(await photosOf1()).toHaveLength(2);
   });
 
   it("does not offer removing the last photo of a find without text", async () => {
@@ -1191,7 +1205,7 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(await screen.findByText(DESCRIPTION)).toBeOnTheScreen();
     await act(async () => undefined);
     expect(screen.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
-    expect(mockLog.finds.get(1)?.photos).toEqual([]);
+    expect(await photosOf1()).toEqual([]);
   });
 
   it("says so when a photo cannot be removed, without the error's text, and keeps it", async () => {
@@ -1268,5 +1282,36 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mockLog.finds.get(1)).toMatchObject({ batchOpen: false });
     expect(await screen.findByText(en.find.waiting)).toBeOnTheScreen();
+  });
+
+  it("says so, without the error, when the batch cannot be completed, and keeps it open", async () => {
+    mockLog.finds.set(
+      1,
+      withPhotos(2, { analysis: { state: "waiting" }, addedPhotos: null, batchOpen: true }),
+    );
+    jest.spyOn(mockLog, "completeBatch").mockRejectedValueOnce(new Error("database is locked"));
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
+    expect(await screen.findByText(en.find.analysisError)).toBeOnTheScreen();
+    expect(screen.queryByText(/locked/)).not.toBeOnTheScreen();
+    expect(mockLog.finds.get(1)).toMatchObject({ batchOpen: true });
+  });
+
+  it("is read again when the screen comes back into view, so photos added meanwhile are shown", async () => {
+    mockLog.finds.set(1, withPhotos(1));
+    await startApp();
+    expect(await screen.findByLabelText(en.find.photo)).toBeOnTheScreen();
+    await act(async () => {
+      router.push("/about");
+    });
+    await mockLog.addPhoto(1, "file:///photos/2.jpg");
+    await mockLog.completeBatch(1);
+    await act(async () => {
+      router.back();
+    });
+    expect(await screen.findByLabelText(label(2, 2))).toHaveProp("source", {
+      uri: "file:///photos/2.jpg",
+    });
+    expect(screen.getByText(en.find.addedPhotos.waiting)).toBeOnTheScreen();
   });
 });

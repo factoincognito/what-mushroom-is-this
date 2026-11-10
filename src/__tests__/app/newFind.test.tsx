@@ -780,6 +780,25 @@ describe("several photos in one batch (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(app.pathname()).toBe("/find/1");
   });
 
+  it("says so when Analyse cannot complete the batch, stays, and Analyse can be tapped again", async () => {
+    const app = await withFirstPhoto();
+    const complete = jest
+      .spyOn(mockLog, "completeBatch")
+      .mockRejectedValueOnce(new Error("database is locked"));
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.analyse }));
+    await settle();
+    expect(screen.getByText(en.newFind.analyseFailed)).toBeOnTheScreen();
+    expect(screen.queryByText(/locked/)).not.toBeOnTheScreen();
+    expect(app.pathname()).toBe("/new-find");
+    await fireEvent.press(screen.getByRole("button", { name: en.newFind.analyse }));
+    await settle();
+    await runTimers();
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(mockLog.completed).toEqual([1]);
+    expect(app.pathname()).toBe("/find/1");
+    complete.mockRestore();
+  });
+
   it("leaving the screen with photos saved completes the batch, asking nothing", async () => {
     const app = await withFirstPhoto();
     await leaveScreen();

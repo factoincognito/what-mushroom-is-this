@@ -261,7 +261,12 @@ const badSize = (detail: string): PreparedPhoto => ({
   failure: { cause: "photo", detail },
 });
 
-const LOADED: PreparedPhoto = { ok: true, imageBase64: "BBBB", width: 1, height: 1 };
+const LOADED: Extract<PreparedPhoto, { ok: true }> = {
+  ok: true,
+  imageBase64: "BBBB",
+  width: 1,
+  height: 1,
+};
 
 /** Prepares each find's photo as `outcomes` gives it by the find's ID; a find not named loads. */
 function photosById(outcomes: Record<number, PreparedPhoto>) {
@@ -1573,7 +1578,8 @@ describe("all of a find's photos in one request (SPEC 3.9, Batches; PBI-2.5)", (
     t.log.addFind(2);
     t.setPreparation(photosByName({ "1-2": refused }));
     await t.queue.trigger();
-    expect(t.calls.map((call) => call.imagesBase64)).toEqual([["BBBB"]]);
+    // Only find 2's photo is sent, whose prepared bytes the stand-in names "2".
+    expect(t.calls.map((call) => call.imagesBase64)).toEqual([["2"]]);
     expect(t.log.changes).toEqual([
       "markFailed 1 segment-check: photo 2: forbidden-segment 0xFFE1",
       "setAnswer 2",
@@ -1598,7 +1604,9 @@ describe("all of a find's photos in one request (SPEC 3.9, Batches; PBI-2.5)", (
     t.log.addPhotos(1, [1, 1, 1]);
     t.setPreparation(photosByName({ "1-1": refused, "1-3": badSize("invalid-size: x") }));
     await t.queue.trigger();
-    expect(t.log.changes).toEqual(["markFailed 1 segment-check: photo 1: forbidden-segment 0xFFE1"]);
+    expect(t.log.changes).toEqual([
+      "markFailed 1 segment-check: photo 1: forbidden-segment 0xFFE1",
+    ]);
   });
 
   it("analysed from its screen, stops preparing at the first photo that fails", async () => {
@@ -1607,7 +1615,9 @@ describe("all of a find's photos in one request (SPEC 3.9, Batches; PBI-2.5)", (
     t.setPreparation(photosByName({ "1-1": refused }));
     await expect(t.queue.analyseFind(1)).resolves.toMatchObject({ ok: false });
     expect(t.prepared.map((call) => call.uri)).toEqual(["file:///photos/1-1.jpg"]);
-    expect(t.log.changes).toEqual(["markFailed 1 segment-check: photo 1: forbidden-segment 0xFFE1"]);
+    expect(t.log.changes).toEqual([
+      "markFailed 1 segment-check: photo 1: forbidden-segment 0xFFE1",
+    ]);
   });
 
   it("sends the photos left, and no photo of the find's removed one, after a photo was removed", async () => {
@@ -1715,16 +1725,16 @@ describe("a new batch on an analysed find (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(t.calls).toEqual([]);
   });
 
-  it.each([
-    "analysed",
-    "not-analysed",
-  ] as const)("the queue does not take an analysed find whose added photos are %s", async (state) => {
-    const t = setup();
-    analysedWithNewPhotos(t);
-    t.log.set(1, { addedPhotos: state });
-    await t.queue.trigger();
-    expect(t.calls).toEqual([]);
-  });
+  it.each(["analysed", "not-analysed"] as const)(
+    "the queue does not take an analysed find whose added photos are %s",
+    async (state) => {
+      const t = setup();
+      analysedWithNewPhotos(t);
+      t.log.set(1, { addedPhotos: state });
+      await t.queue.trigger();
+      expect(t.calls).toEqual([]);
+    },
+  );
 
   it.each([
     ["no network", "network"],
@@ -1772,7 +1782,11 @@ describe("a new batch on an analysed find (SPEC 3.9, Batches; PBI-2.5)", () => {
       fail({ kind: "find-failed", reason: "shape", detail: "bad", status: 200, queue: "stops" }),
       { reason: "answer" },
     ],
-    ["401", fail({ kind: "key-refused", status: 401, cause: "refused" }), { reason: "key-refused" }],
+    [
+      "401",
+      fail({ kind: "key-refused", status: 401, cause: "refused" }),
+      { reason: "key-refused" },
+    ],
     [
       "429",
       fail({ kind: "rate-limited", retryAt: null }),

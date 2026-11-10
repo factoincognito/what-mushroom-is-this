@@ -3,8 +3,8 @@ import { config } from "../config/config";
 import {
   ANALYSIS_PROMPT,
   analysisPrompt,
-  PHOTOS_AND_TEXT_ANALYSIS_PROMPT,
   PHOTOS_ANALYSIS_PROMPT,
+  PHOTOS_AND_TEXT_ANALYSIS_PROMPT,
   TEXT_ANALYSIS_PROMPT,
 } from "./prompt";
 import { type AnalysisRequest, buildAnalysisRequest, type RequestInput } from "./request";
@@ -411,12 +411,12 @@ describe("analysisPrompt (SPEC 3.9, Batches; PBI-2.5)", () => {
     );
   });
 
-  it.each([
-    PHOTOS_ANALYSIS_PROMPT,
-    PHOTOS_AND_TEXT_ANALYSIS_PROMPT,
-  ])("holds nothing from the log", (prompt) => {
-    expect(prompt).not.toMatch(/latitude|longitude|position|coordinates|\d{4}-\d{2}-\d{2}/i);
-  });
+  it.each([PHOTOS_ANALYSIS_PROMPT, PHOTOS_AND_TEXT_ANALYSIS_PROMPT])(
+    "holds nothing from the log",
+    (prompt) => {
+      expect(prompt).not.toMatch(/latitude|longitude|position|coordinates|\d{4}-\d{2}-\d{2}/i);
+    },
+  );
 });
 
 describe("TEXT_ANALYSIS_PROMPT (SPEC 3.9)", () => {

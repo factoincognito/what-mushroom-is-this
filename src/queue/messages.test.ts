@@ -387,7 +387,11 @@ describe("failureMessage: a failure that names one of the find's photos (SPEC 3.
         "3",
         t.queue.failed.segmentCheck.app1,
       ],
-      [named("segment-check", "photo 1: trailing-data"), "1", t.queue.failed.segmentCheck.trailingData],
+      [
+        named("segment-check", "photo 1: trailing-data"),
+        "1",
+        t.queue.failed.segmentCheck.trailingData,
+      ],
     ] as const;
     for (const [message, number, reason] of cases) {
       expect(message).toBe(
@@ -413,7 +417,10 @@ describe("failureMessage: a failure that names one of the find's photos (SPEC 3.
   });
 
   it("names no photo for a cause that is not about a photo", () => {
-    const failure: FindFailure = { cause: "request", detail: "photo 2: request-wrong (status 400)" };
+    const failure: FindFailure = {
+      cause: "request",
+      detail: "photo 2: request-wrong (status 400)",
+    };
     expect(failureMessage(failure, STRINGS.en)).toBe(STRINGS.en.queue.failed.request.unknown);
   });
 });

@@ -1,4 +1,4 @@
-import { Link, router } from "expo-router";
+import { Link, router, useFocusEffect } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import type { Answer, Match, SpeciesNames } from "../analysis/answer";
+import { config } from "../config/config";
 import { useLanguage } from "../i18n/LanguageContext";
 import { LANGUAGES, type Language } from "../i18n/languages";
 import { STRINGS, type Strings } from "../i18n/strings";
@@ -56,7 +57,8 @@ type Message =
   | { kind: "notice"; notice: QueueNotice; answerKept: boolean }
   | { kind: "analysis-error" }
   | { kind: "map-failed" }
-  | { kind: "delete-failed" };
+  | { kind: "delete-failed" }
+  | { kind: "remove-photo-failed" };
 
 /**
  * The Find screen (docs/SPEC.md 3.1, 3.3, 3.5): the photo; the species' names in the app's
@@ -71,9 +73,17 @@ type Message =
  *
  * The find is read as `getStored` reads it (PBI-2.4). A text find shows its description, which
  * cannot be edited (SPEC 3.9); without photos, it shows no photo, the disclaimer for a lookup
- * without photos, and "no mushroom" and "cannot tell" in the words of a description. A find with
- * photos shows its first photo, as in Phase 1, until PBI-2.5. An answer from the text alone shows
- * the edibility "unknown" until its self-check agrees, and says why (SPEC 3.9).
+ * without photos, and "no mushroom" and "cannot tell" in the words of a description. An answer
+ * from the text alone shows the edibility "unknown" until its self-check agrees, and says why
+ * (SPEC 3.9); an answer from photos has no check.
+ *
+ * A find's photos (SPEC 3.9, Batches; PBI-2.5): every photo is shown, in the order added, each
+ * numbered when there are several; "Add photos" opens New find for this find, while it holds
+ * fewer than the most; a photo can be removed, after a question on the screen, but not the last
+ * of a find without text, and nothing is analysed for it. On an analysed find, the photos added
+ * since its answer are said to wait, or not to have been analysed, while the answer is kept. A
+ * find whose batch is still open has "Analyse" complete it, which leaves the find to the queue.
+ * The find is read again whenever the screen comes into view, so photos added are shown.
  */
 export function FindScreen({ id }: { readonly id: number | null }) {
   const { language, strings } = useLanguage();
@@ -84,6 +94,8 @@ export function FindScreen({ id }: { readonly id: number | null }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
   const [confirming, setConfirming] = useState(false);
+  /** The number of the photo whose removal is being asked about, or null. */
+  const [removing, setRemoving] = useState<number | null>(null);
   /** The latest read; an earlier one that ends later is dropped. */
   const latestRead = useRef(0);
 
@@ -105,9 +117,12 @@ export function FindScreen({ id }: { readonly id: number | null }) {
     }
   }, [findLog, id]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // Read whenever the screen comes into view: also back from adding photos to the find.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
   // A run of the queue can analyse this find; it is read again when the run ends.
   const { running } = queueState;
   const wasRunning = useRef(running);
@@ -130,6 +145,34 @@ export function FindScreen({ id }: { readonly id: number | null }) {
     } catch {
       setMessage({ kind: "analysis-error" });
     } finally {
+      await load();
+      setBusy(false);
+    }
+  }
+
+  /** A find whose batch is still open: "Analyse" completes it, and the queue analyses the find. */
+  async function completeBatch(findId: number): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await (await findLog()).completeBatch(findId);
+    } catch {
+      setMessage({ kind: "analysis-error" });
+    } finally {
+      await load();
+      setBusy(false);
+    }
+  }
+
+  async function removePhoto(findId: number, photoNumber: number): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await (await findLog()).removePhoto(findId, photoNumber);
+    } catch {
+      setMessage({ kind: "remove-photo-failed" });
+    } finally {
+      setRemoving(null);
       await load();
       setBusy(false);
     }
@@ -204,16 +247,47 @@ export function FindScreen({ id }: { readonly id: number | null }) {
       break;
     case "ready": {
       const { find } = loaded;
-      const photo = find.photos[0];
+      const count = find.photos.length;
+      // The last photo of a find without text stays (SPEC 3.9, Batches).
+      const canRemove = find.text !== null || count > 1;
       body = (
         <>
-          {photo !== undefined && (
-            <Image
-              source={{ uri: photo.uri }}
-              accessibilityLabel={t.photo}
-              resizeMode="contain"
-              style={styles.photo}
-            />
+          {find.photos.map((photo, index) => {
+            const number = index + 1;
+            const label =
+              count === 1
+                ? t.photo
+                : fillIn(t.photoNumbered, { number: String(number), count: String(count) });
+            return (
+              <View key={photo.uri} style={styles.section}>
+                <Image
+                  source={{ uri: photo.uri }}
+                  accessibilityLabel={label}
+                  resizeMode="contain"
+                  style={styles.photo}
+                />
+                {canRemove && (
+                  <RemovePhotoControls
+                    strings={strings}
+                    number={number}
+                    busy={busy}
+                    confirming={removing === number}
+                    onAsk={() => setRemoving(number)}
+                    onCancel={() => setRemoving(null)}
+                    onConfirm={() => void removePhoto(find.id, number)}
+                  />
+                )}
+              </View>
+            );
+          })}
+          {count < config.maxPhotosPerFind ? (
+            <Link href={`/new-find?find=${find.id}`} accessibilityRole="link" style={styles.link}>
+              {t.addPhotos}
+            </Link>
+          ) : (
+            <Text style={styles.note}>
+              {fillIn(t.maxPhotos, { max: String(config.maxPhotosPerFind) })}
+            </Text>
           )}
           {find.text !== null && (
             <View style={styles.section}>
@@ -236,11 +310,11 @@ export function FindScreen({ id }: { readonly id: number | null }) {
             <Pressable
               accessibilityRole="button"
               disabled={busy}
-              onPress={() => void analyse(find.id)}
+              onPress={() => void (find.batchOpen ? completeBatch(find.id) : analyse(find.id))}
               style={[styles.button, busy && styles.disabled]}
             >
               <Text style={styles.buttonText}>
-                {find.analysis.state === "waiting" ? t.analyse : t.analyseAgain}
+                {find.analysis.state === "waiting" || find.batchOpen ? t.analyse : t.analyseAgain}
               </Text>
             </Pressable>
           </View>
@@ -272,13 +346,19 @@ export function FindScreen({ id }: { readonly id: number | null }) {
   );
 }
 
-/** For a waiting find with no message of its own: why the queue left it waiting, if it did. */
+/**
+ * For a waiting find, or an analysed one whose added photos wait, with no message of its own: why
+ * the queue left it waiting, if it did.
+ */
 function queueNoticeFor(
   find: StoredFind,
   message: Message | null,
   state: QueueState,
 ): QueueNotice | null {
-  if (find.analysis.state !== "waiting" || message !== null) {
+  const waits =
+    find.analysis.state === "waiting" ||
+    (find.analysis.state === "done" && find.addedPhotos === "waiting");
+  if (!waits || message !== null) {
     return null;
   }
   if (state.stop !== null) {
@@ -330,13 +410,30 @@ function AnalysisView({
       );
     case "done":
       return (
-        <AnswerView
-          answer={analysis.answer}
-          selfCheck={find.selfCheck}
-          subject={subject}
-          language={language}
-          strings={strings}
-        />
+        <>
+          {(find.addedPhotos === "waiting" || find.addedPhotos === "not-analysed") && (
+            <View testID="added-photos" style={styles.section}>
+              <Text style={styles.text}>
+                {find.addedPhotos === "waiting" ? t.addedPhotos.waiting : t.addedPhotos.notAnalysed}
+              </Text>
+              {queueNotice !== null && (
+                <NoticeView
+                  notice={queueNotice}
+                  subject={subject}
+                  strings={strings}
+                  formatTime={formatTime}
+                />
+              )}
+            </View>
+          )}
+          <AnswerView
+            answer={analysis.answer}
+            selfCheck={find.selfCheck}
+            subject={subject}
+            language={language}
+            strings={strings}
+          />
+        </>
       );
   }
 }
@@ -563,6 +660,71 @@ function DeleteControls({
   );
 }
 
+type RemovePhotoControlsProps = {
+  readonly strings: Strings;
+  /** The photo's number, 1 for the first. */
+  readonly number: number;
+  readonly busy: boolean;
+  readonly confirming: boolean;
+  readonly onAsk: () => void;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+};
+
+/**
+ * "Remove photo n", and the question it asks first, on the screen (SPEC 3.9, Batches): only the
+ * app's copy is removed.
+ */
+function RemovePhotoControls({
+  strings,
+  number,
+  busy,
+  confirming,
+  onAsk,
+  onCancel,
+  onConfirm,
+}: RemovePhotoControlsProps) {
+  const t = strings.find;
+  const values = { number: String(number) };
+  if (!confirming) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        disabled={busy}
+        onPress={onAsk}
+        style={[styles.button, busy && styles.disabled]}
+      >
+        <Text style={styles.buttonText}>{fillIn(t.removePhoto, values)}</Text>
+      </Pressable>
+    );
+  }
+  return (
+    <View style={styles.section}>
+      <Text accessibilityLiveRegion="polite" style={styles.text}>
+        {fillIn(t.removePhotoConfirm, values)}
+      </Text>
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onConfirm}
+          style={[styles.button, busy && styles.disabled]}
+        >
+          <Text style={styles.buttonText}>{t.removePhotoYes}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onCancel}
+          style={[styles.button, busy && styles.disabled]}
+        >
+          <Text style={styles.buttonText}>{t.removePhotoCancel}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 type NoticeViewProps = {
   readonly notice: QueueNotice;
   readonly subject: LookupSubject;
@@ -631,6 +793,12 @@ function MessageView({ message, subject, strings, formatTime }: MessageViewProps
       return (
         <Text accessibilityLiveRegion="polite" style={styles.text}>
           {t.deleteFailed}
+        </Text>
+      );
+    case "remove-photo-failed":
+      return (
+        <Text accessibilityLiveRegion="polite" style={styles.text}>
+          {t.removePhotoFailed}
         </Text>
       );
   }

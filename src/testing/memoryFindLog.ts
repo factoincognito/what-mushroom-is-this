@@ -7,14 +7,25 @@
  * marks it in its place, `get` and `getStored` refuse it as corrupt, the queue's pick passes over
  * it, and `delete` still removes it. As in the store, `get` refuses a find without a photo, and an
  * answer to a text find from its text alone starts its self-check, waiting (PBI-2.4).
+ *
+ * A find's photos in batches (PBI-2.5) follow the store's rules: a photo lookup's find saved with
+ * its batch open, a photo added to the open batch or as the first of a new one numbered one past
+ * the last begun (kept per find, as the store's `batches` column, also when photos are removed),
+ * up to `config.maxPhotosPerFind`; completing a batch; the queue's pick of a waiting find or an
+ * analysed one whose added photos wait, its batch complete; removing a photo; and the state of
+ * the photos added since an answer. `memoryFindLog.test.ts` runs the same changes on both.
  */
 
+import { config } from "../config/config";
 import {
   type AnalysedAnswer,
   type Analysis,
   type AnalysisSent,
+  checkId,
+  checkUri,
   type Find,
   type FindSummary,
+  invalid,
   type ListedFind,
   type StoredFind,
   StoreError,
@@ -87,6 +98,31 @@ export function memoryFindLog(): MemoryFindLog {
   const finds = new Map<number, Find | StoredFind>();
   const unreadable = new Set<number>();
   const withoutId: string[] = [];
+  /**
+   * The batches begun on each find, as the store's `batches` column, kept with the find they were
+   * counted for: a find a test set in `finds` itself counts its photos' last batch.
+   */
+  const batchesBegun = new Map<number, { of: Find | StoredFind; batches: number }>();
+
+  function batchesOf(id: number): number {
+    const find = existing(id);
+    const entry = batchesBegun.get(id);
+    if (entry !== undefined && entry.of === find) {
+      return entry.batches;
+    }
+    return Math.max(0, ...storedOf(find).photos.map((photo) => photo.batch));
+  }
+
+  /** Writes a find, with the batches begun on it. */
+  function put(id: number, find: Find | StoredFind, batches: number): void {
+    finds.set(id, find);
+    batchesBegun.set(id, { of: find, batches });
+  }
+
+  /** The find, everything the store holds of it; `not-found` when there is none. */
+  function stored(id: number): StoredFind {
+    return storedOf(existing(id));
+  }
 
   function listed(find: Find | StoredFind): ListedFind {
     return unreadable.has(find.id)
@@ -107,7 +143,7 @@ export function memoryFindLog(): MemoryFindLog {
     if (!from.includes(find.analysis.state)) {
       throw new StoreError("wrong-state", `find ${id} is ${find.analysis.state}`);
     }
-    finds.set(id, { ...find, analysis });
+    put(id, { ...find, analysis }, batchesOf(id));
   }
 
   /**
@@ -124,19 +160,20 @@ export function memoryFindLog(): MemoryFindLog {
     sent: AnalysisSent,
   ): void {
     change(id, from, { state: "done", ...analysed });
-    const find = existing(id);
-    if (!isStored(find)) {
-      return;
-    }
+    const find = stored(id);
     const fromTextAlone =
       sent.photoUris.length === 0 && analysed.answer.result === "match" && find.text !== null;
     const notSent = find.photos.some((photo) => !sent.photoUris.includes(photo.uri));
-    finds.set(id, {
-      ...find,
-      addedPhotos: notSent ? "waiting" : "analysed",
-      picture: null,
-      selfCheck: fromTextAlone ? { state: "waiting" } : null,
-    });
+    put(
+      id,
+      {
+        ...find,
+        addedPhotos: notSent ? "waiting" : "analysed",
+        picture: null,
+        selfCheck: fromTextAlone ? { state: "waiting" } : null,
+      },
+      batchesOf(id),
+    );
   }
 
   function readable(id: number): Find | StoredFind | null {
@@ -156,12 +193,74 @@ export function memoryFindLog(): MemoryFindLog {
     withoutId,
     async add(find) {
       const id = nextId();
-      finds.set(id, { id, ...find, analysis: { state: "waiting" } });
+      put(id, { id, ...find, analysis: { state: "waiting" } }, 1);
       return id;
+    },
+    async addWithOpenBatch(find) {
+      const id = nextId();
+      put(id, { ...storedOf({ id, ...find, analysis: { state: "waiting" } }), batchOpen: true }, 1);
+      return id;
+    },
+    async addPhoto(id, photoUri) {
+      checkId(id);
+      checkUri(photoUri, "the photo URI");
+      const find = stored(id);
+      if (find.photos.length >= config.maxPhotosPerFind) {
+        throw new StoreError("wrong-state", `find ${id} holds the most photos it may`);
+      }
+      const batch = find.batchOpen ? batchesOf(id) : batchesOf(id) + 1;
+      put(
+        id,
+        { ...find, photos: [...find.photos, { uri: photoUri, batch }], batchOpen: true },
+        batch,
+      );
+    },
+    async completeBatch(id) {
+      checkId(id);
+      const find = stored(id);
+      if (!find.batchOpen) {
+        throw new StoreError("wrong-state", `find ${id} has no open batch`);
+      }
+      const { analysis } = find;
+      const next: StoredFind = {
+        ...find,
+        batchOpen: false,
+        analysis: analysis.state === "failed" ? { state: "waiting" } : analysis,
+        addedPhotos: analysis.state === "done" ? "waiting" : find.addedPhotos,
+      };
+      put(id, next, batchesOf(id));
+    },
+    async removePhoto(id, photoNumber) {
+      checkId(id);
+      if (!Number.isSafeInteger(photoNumber) || photoNumber < 1) {
+        throw invalid("the photo number is not a positive whole number");
+      }
+      const find = stored(id);
+      if (photoNumber > find.photos.length) {
+        throw invalid(`find ${id} has no photo ${photoNumber}`);
+      }
+      if (find.text === null && find.photos.length === 1) {
+        throw new StoreError("wrong-state", `find ${id} has no text, so keeps its last photo`);
+      }
+      const photos = find.photos.filter((_, index) => index !== photoNumber - 1);
+      put(id, { ...find, photos }, batchesOf(id));
+      return { photoRemoved: true };
+    },
+    async setAddedPhotos(id, state) {
+      checkId(id);
+      if (state !== "waiting" && state !== "not-analysed") {
+        throw invalid("the photos added since the answer are set only to waiting or not-analysed");
+      }
+      const find = stored(id);
+      const from = state === "waiting" ? "not-analysed" : "waiting";
+      if (find.addedPhotos !== from) {
+        throw new StoreError("wrong-state", `find ${id}'s added photos are not ${from}`);
+      }
+      put(id, { ...find, addedPhotos: state }, batchesOf(id));
     },
     async addText(find) {
       const id = nextId();
-      finds.set(id, {
+      const text: StoredFind = {
         id,
         text: find.text,
         photos: [],
@@ -172,7 +271,8 @@ export function memoryFindLog(): MemoryFindLog {
         addedPhotos: null,
         picture: null,
         selfCheck: null,
-      });
+      };
+      put(id, text, 0);
       return id;
     },
     async get(id) {
@@ -201,9 +301,15 @@ export function memoryFindLog(): MemoryFindLog {
       ];
     },
     async oldestWaiting() {
-      const waiting = [...finds.values()].filter(
-        (find) => find.analysis.state === "waiting" && !unreadable.has(find.id),
-      );
+      const waiting = [...finds.values()]
+        .map(storedOf)
+        .filter(
+          (find) =>
+            !find.batchOpen &&
+            (find.analysis.state === "waiting" ||
+              (find.analysis.state === "done" && find.addedPhotos === "waiting")) &&
+            !unreadable.has(find.id),
+        );
       return waiting.length === 0 ? null : Math.min(...waiting.map((find) => find.id));
     },
     async setAnswer(id, analysed, sent) {
@@ -223,12 +329,13 @@ export function memoryFindLog(): MemoryFindLog {
       if (find.position !== null) {
         throw new StoreError("wrong-state", `find ${id} already has a position`);
       }
-      finds.set(id, { ...find, position });
+      put(id, { ...find, position }, batchesOf(id));
     },
     async delete(id) {
       existing(id);
       finds.delete(id);
       unreadable.delete(id);
+      batchesBegun.delete(id);
       return { photoRemoved: true };
     },
     async deleteUnreadable(storedId) {

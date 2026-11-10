@@ -17,7 +17,7 @@ import { buildAnalysisRequest, type RequestInput } from "./request";
  */
 export type AnalysisCallResult = AnalysisResult & { readonly accessResumesAtMs?: number };
 
-/** A photo or a text lookup's description to analyse (`RequestInput`), and the time limit. */
+/** A find's photos and text, or a text lookup's description (`RequestInput`), and the time limit. */
 export type AnalysisInput = RequestInput & {
   /** The request's time limit from the config module, in milliseconds. */
   timeLimitMs: number;
@@ -50,7 +50,8 @@ const platformDeps: AnalysisDeps = {
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /**
- * Sends the photo, or a text lookup's description, for analysis. A time limit that is not an integer from 1 to
+ * Sends a find's photos and text, or a text lookup's description, for analysis, in one request. A
+ * time limit that is not an integer from 1 to
  * 2^31 − 1 ms, or an API address that is not valid, is a programming error (it
  * is configuration) and rejects with a RangeError. A key or a model ID that
  * cannot be sent is refused without sending anything (`buildAnalysisRequest`).

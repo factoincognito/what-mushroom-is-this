@@ -19,9 +19,24 @@
  * photo that loads ends it, whatever then comes of its find, and each run starts at nought, the run
  * "analyse now" starts too. A find analysed from its screen is not in a run and is not counted.
  *
- * A text find without photos is sent by its description, and ends that count (docs/SPEC.md 3.9,
- * PBI-2.4). An unsaved text lookup is sent from its screen (`analyseLookup`): nothing of it is
- * stored, and each error class has the outcome it has for a find analysed from its screen.
+ * An analysis sends all of the find's photos, in the order added, prepared one at a time, in one
+ * request, with the find's text when it has one; a text find without photos is sent by its text
+ * (docs/SPEC.md 3.9, Batches; PBI-2.4, PBI-2.5). When a photo cannot be loaded, decoded or sized,
+ * or fails the segment check, nothing is sent and the find fails, its failure naming the photo
+ * when the find holds more than one (`photo <n>: <detail>`, which `messages.ts` reads). For the
+ * count above, a find counts as one whose photos do not load when any of them does not, and a
+ * find whose photos all load, or a text find without photos, ends it: in a run, the photos after
+ * one that loaded but failed are still prepared, until one does not load, so that the count knows.
+ *
+ * A run also takes an analysed find whose photos added since its answer wait (its batch complete:
+ * the store's pick). It keeps its answer whatever comes of the new analysis. An error class that
+ * leaves a find waiting leaves the photos waiting; so does a missing key (a find waits without
+ * one, SPEC 3.2) and the stop of two failed loads in a row (3.3's row: "stays waiting"). Any other
+ * class marks them not yet analysed, and they are analysed only when the user asks; from the
+ * find's screen, then, a pause or a stop that leaves them waiting puts them back to waiting.
+ *
+ * An unsaved text lookup is sent from its screen (`analyseLookup`): nothing of it is stored, and
+ * each error class has the outcome it has for a find analysed from its screen.
  */
 
 import type { AnalysisCallResult, AnalysisInput } from "../analysis/analyse";
@@ -104,7 +119,7 @@ export type QueueLog = Pick<
   FindStore,
   "oldestWaiting" | "setAnswer" | "replaceAnswer" | "markFailed" | "markWaiting"
 > &
-  Pick<LookupStore, "getStored">;
+  Pick<LookupStore, "getStored" | "setAddedPhotos">;
 
 export interface QueueDeps {
   findLog: () => Promise<QueueLog>;
@@ -112,9 +127,9 @@ export interface QueueDeps {
   readKey: () => Promise<ReadKeyResult>;
   /** The model ID in use. */
   readModelId: () => Promise<string>;
-  /** The photo for analysis, prepared for the model in use (`preparePhotoForAnalysis`). */
+  /** A photo for analysis, prepared for the model in use (`preparePhotoForAnalysis`). */
   preparePhoto: (photoUri: string, modelId: string) => Promise<PreparedPhoto>;
-  /** Sends the photo once (`analysePhoto`). */
+  /** Sends the photos or the text once (`analysePhoto`). */
   analyse: (input: AnalysisInput) => Promise<AnalysisCallResult>;
   /** The current time in ms since the epoch. */
   now: () => number;
@@ -134,7 +149,17 @@ type Attempt =
   | { type: "answered"; answer: Answer; model: string }
   | { type: "find-failed"; failure: FindFailure; stop: QueueStop | null }
   | { type: "stays-waiting"; cause: PauseCause }
-  | { type: "stop"; stop: QueueStop };
+  /**
+   * `photosWait`: the photos added since an answer stay waiting, as for a missing key or the stop
+   * of two failed loads in a row; otherwise they are marked not yet analysed.
+   */
+  | { type: "stop"; stop: QueueStop; photosWait: boolean };
+
+/** What preparing a find's photos came to (docs/SPEC.md 3.9, Batches). */
+type PreparedPhotos = {
+  /** Whether every photo prepared loaded; false once one did not. */
+  allLoaded: boolean;
+} & ({ ok: true; imagesBase64: string[] } | { ok: false; failure: FindFailure });
 
 /** What one step of a run came to: the next find, none left, or the end of the run. */
 type Step = "next" | "none" | "end";
@@ -227,18 +252,13 @@ export class AnalysisQueue {
       const analysed = find.analysis.state === "done";
       const attempt = await this.attempt(find, null);
       switch (attempt.type) {
-        case "answered": {
-          const answer = {
-            answer: attempt.answer,
-            model: attempt.model,
-            analysedAtMs: this.deps.now(),
-          };
-          const sent = sentOf(find);
-          await (analysed ? log.replaceAnswer(id, answer, sent) : log.setAnswer(id, answer, sent));
+        case "answered":
+          await this.storeAnswer(log, find, attempt);
           return { ok: true };
-        }
         case "find-failed":
-          if (!analysed) {
+          if (analysed) {
+            await this.addedNotAnalysed(log, find);
+          } else {
             await log.markFailed(id, attempt.failure);
           }
           if (attempt.stop !== null) {
@@ -257,7 +277,11 @@ export class AnalysisQueue {
             answerKept: analysed,
           };
         case "stop":
-          await this.backToWaiting(log, find);
+          if (attempt.photosWait || !analysed) {
+            await this.backToWaiting(log, find);
+          } else {
+            await this.addedNotAnalysed(log, find);
+          }
           this.setStop(attempt.stop);
           return {
             ok: false,
@@ -345,21 +369,22 @@ export class AnalysisQueue {
       return "none";
     }
     const find = await log.getStored(id);
-    if (find === null || find.analysis.state !== "waiting") {
-      // Deleted or analysed from its screen since; take the next.
+    if (find === null || !waitsForTheQueue(find)) {
+      // Deleted, or analysed from its screen since; take the next.
       return "next";
     }
+    const analysed = find.analysis.state === "done";
     const attempt = await this.attempt(find, count);
     switch (attempt.type) {
       case "answered":
-        await log.setAnswer(
-          id,
-          { answer: attempt.answer, model: attempt.model, analysedAtMs: this.deps.now() },
-          sentOf(find),
-        );
+        await this.storeAnswer(log, find, attempt);
         return "next";
       case "find-failed":
-        await log.markFailed(id, attempt.failure);
+        if (analysed) {
+          await this.addedNotAnalysed(log, find);
+        } else {
+          await log.markFailed(id, attempt.failure);
+        }
         if (attempt.stop === null) {
           return "next";
         }
@@ -369,24 +394,25 @@ export class AnalysisQueue {
         this.setState({ pause: attempt.cause });
         return "end";
       case "stop":
+        if (analysed && !attempt.photosWait) {
+          await this.addedNotAnalysed(log, find);
+        }
         this.setStop(attempt.stop);
         return "end";
     }
   }
 
   /**
-   * Prepares the find's photo and sends it once; a text find without photos is sent by its
-   * description. Stores nothing. `count` is the run's, or null for a find analysed from its
-   * screen. A find with photos is sent by its first photo, as in Phase 1, until PBI-2.5 sends them
-   * all.
+   * Prepares the find's photos and sends them once, with its text when it has one; a text find
+   * without photos is sent by its text. Stores nothing. `count` is the run's, or null for a find
+   * analysed from its screen.
    */
   private async attempt(find: StoredFind, count: RunCount | null): Promise<Attempt> {
     const access = await this.access();
     if (!access.ok) {
       return access.attempt;
     }
-    const first = find.photos[0];
-    if (first === undefined) {
+    if (find.photos.length === 0) {
       // A text find without photos ends the count of failed loads (docs/SPEC.md 3.9, Batches).
       if (count !== null) {
         count.failedLoads = 0;
@@ -396,20 +422,70 @@ export class AnalysisQueue {
       }
       return this.send({ text: find.text }, access);
     }
-    // A photo that cannot be loaded, decoded or sized comes back as a failure; any other error
-    // while preparing it is not the photo's and passes through (Clead's decision for PBI-1.21).
-    const photo = await this.deps.preparePhoto(first.uri, access.model);
+    const prepared = await this.preparePhotos(find, access.model, count !== null);
     if (count !== null) {
-      count.failedLoads = !photo.ok && !photo.loaded ? count.failedLoads + 1 : 0;
+      count.failedLoads = prepared.allLoaded ? 0 : count.failedLoads + 1;
       if (count.failedLoads >= FAILED_LOADS_THAT_STOP) {
         // Not this photo's fault, most likely: the find stays waiting (PBI-1.25).
-        return { type: "stop", stop: { reason: "internal-error" } };
+        return { type: "stop", stop: { reason: "internal-error" }, photosWait: true };
       }
     }
-    if (!photo.ok) {
-      return { type: "find-failed", failure: photo.failure, stop: null };
+    if (!prepared.ok) {
+      return { type: "find-failed", failure: prepared.failure, stop: null };
     }
-    return this.send({ imageBase64: photo.imageBase64 }, access);
+    const { imagesBase64 } = prepared;
+    return this.send(
+      find.text === null ? { imagesBase64 } : { imagesBase64, text: find.text },
+      access,
+    );
+  }
+
+  /**
+   * Prepares the find's photos one at a time, in the order added (docs/SPEC.md 3.9, Batches). A
+   * photo that cannot be loaded, decoded or sized, or fails the segment check, comes back as a
+   * failure naming it; any other error while preparing one is not the photo's and passes through
+   * (Clead's decision for PBI-1.21). After a failure nothing is sent, so no more bytes are kept;
+   * with `settleLoads` (in a run) the photos after one that loaded are still prepared, until one
+   * does not load, so that the count of failed loads knows whether all of them load.
+   */
+  private async preparePhotos(
+    find: StoredFind,
+    model: string,
+    settleLoads: boolean,
+  ): Promise<PreparedPhotos> {
+    const imagesBase64: string[] = [];
+    let failure: FindFailure | null = null;
+    let allLoaded = true;
+    for (const [index, photo] of find.photos.entries()) {
+      const prepared = await this.deps.preparePhoto(photo.uri, model);
+      if (prepared.ok) {
+        if (failure === null) {
+          imagesBase64.push(prepared.imageBase64);
+        }
+        continue;
+      }
+      allLoaded = allLoaded && prepared.loaded;
+      failure ??= naming(prepared.failure, index + 1, find.photos.length);
+      if (!settleLoads || !allLoaded) {
+        break;
+      }
+    }
+    return failure === null
+      ? { ok: true, imagesBase64, allLoaded }
+      : { ok: false, failure, allLoaded };
+  }
+
+  /** Stores an answer, with every photo the analysis sent; a find that had one has it replaced. */
+  private async storeAnswer(
+    log: QueueLog,
+    find: StoredFind,
+    attempt: Extract<Attempt, { type: "answered" }>,
+  ): Promise<void> {
+    const answer = { answer: attempt.answer, model: attempt.model, analysedAtMs: this.deps.now() };
+    const sent = sentOf(find);
+    await (find.analysis.state === "done"
+      ? log.replaceAnswer(find.id, answer, sent)
+      : log.setAnswer(find.id, answer, sent));
   }
 
   /** The key and the model in use, or the stop a missing key brings. */
@@ -418,14 +494,18 @@ export class AnalysisQueue {
   > {
     const key = await this.deps.readKey();
     if (!key.ok || key.key === null) {
-      return { ok: false, attempt: { type: "stop", stop: { reason: "no-key" } } };
+      // Nothing was sent: a find, and the photos added since an answer, wait (SPEC 3.2).
+      return {
+        ok: false,
+        attempt: { type: "stop", stop: { reason: "no-key" }, photosWait: true },
+      };
     }
     return { ok: true, apiKey: key.key, model: await this.deps.readModelId() };
   }
 
-  /** Sends a photo or a description once, and gives what came of it by SPEC 3.3's table. */
+  /** Sends photos, with or without a text, or a text alone, once; gives what came of it by SPEC 3.3's table. */
   private async send(
-    content: { imageBase64: string } | { text: string },
+    content: { imagesBase64: string[]; text?: string } | { text: string },
     { apiKey, model }: { apiKey: string; model: string },
   ): Promise<Attempt> {
     const result = await this.deps.analyse({
@@ -441,10 +521,25 @@ export class AnalysisQueue {
     return outcomeOf(result.error, result.accessResumesAtMs ?? null);
   }
 
-  /** A failed find the user asked to analyse waits again when it meets a pause or a stop. */
+  /**
+   * A failed find the user asked to analyse waits again when it meets a pause or a stop; so do
+   * the photos added since an answer that were not yet analysed (docs/SPEC.md 3.9, Batches).
+   */
   private async backToWaiting(log: QueueLog, find: StoredFind): Promise<void> {
     if (find.analysis.state === "failed") {
       await log.markWaiting(find.id);
+    } else if (find.analysis.state === "done" && find.addedPhotos === "not-analysed") {
+      await log.setAddedPhotos(find.id, "waiting");
+    }
+  }
+
+  /**
+   * The photos added since an answer that waited are marked not yet analysed after a failure
+   * whose class does not leave a find waiting; they are then analysed only when the user asks.
+   */
+  private async addedNotAnalysed(log: QueueLog, find: StoredFind): Promise<void> {
+    if (find.addedPhotos === "waiting") {
+      await log.setAddedPhotos(find.id, "not-analysed");
     }
   }
 
@@ -499,34 +594,50 @@ export class AnalysisQueue {
   }
 }
 
-/** The outcome of SPEC 3.3's table for an error class. */
 /**
- * What an analysis of the find sends, so the store knows what the answer saw: its first photo, or
- * none for a text find without photos (`attempt`).
+ * Whether the queue's pick of the find still holds when it is read (docs/SPEC.md 3.4, 3.9): a
+ * waiting find, or an analysed one whose photos added since its answer wait, its batch complete.
  */
-function sentOf(find: StoredFind): AnalysisSent {
-  const first = find.photos[0];
-  return { photoUris: first === undefined ? [] : [first.uri] };
+function waitsForTheQueue(find: StoredFind): boolean {
+  if (find.batchOpen) {
+    return false;
+  }
+  return (
+    find.analysis.state === "waiting" ||
+    (find.analysis.state === "done" && find.addedPhotos === "waiting")
+  );
 }
 
+/**
+ * What an analysis of the find sends, so the store knows what the answer saw: all its photos, in
+ * the order added, or none for a text find without photos (`attempt`).
+ */
+function sentOf(find: StoredFind): AnalysisSent {
+  return { photoUris: find.photos.map((photo) => photo.uri) };
+}
+
+/**
+ * A photo's failure, naming the photo by its number when the find holds more than one
+ * (docs/SPEC.md 3.9, Batches): `photo <n>: <detail>`, the form `messages.ts` reads.
+ */
+function naming(failure: FindFailure, number: number, count: number): FindFailure {
+  return count > 1 ? { ...failure, detail: `photo ${number}: ${failure.detail}` } : failure;
+}
+
+/** The outcome of SPEC 3.3's table for an error class. */
 function outcomeOf(error: AnalysisError, accessResumesAtMs: number | null): Attempt {
+  const stop = (reason: QueueStop): Attempt => ({ type: "stop", stop: reason, photosWait: false });
   switch (error.kind) {
     case "stays-waiting":
       return { type: "stays-waiting", cause: error.cause };
     case "rate-limited":
-      return {
-        type: "stop",
-        stop: { reason: "rate-limited", retryAtMs: error.retryAt, accessResumesAtMs },
-      };
+      return stop({ reason: "rate-limited", retryAtMs: error.retryAt, accessResumesAtMs });
     case "key-refused":
-      return {
-        type: "stop",
-        stop: { reason: error.cause === "not-scoped" ? "key-not-scoped" : "key-refused" },
-      };
+      return stop({ reason: error.cause === "not-scoped" ? "key-not-scoped" : "key-refused" });
     case "no-credit":
-      return { type: "stop", stop: { reason: "no-credit" } };
+      return stop({ reason: "no-credit" });
     case "model-unknown":
-      return { type: "stop", stop: { reason: "model-unknown" } };
+      return stop({ reason: "model-unknown" });
     case "find-failed": {
       // An answer's failure has a detail, a refused request a status; a refusal has its own cause
       // (PBI-1.21).
@@ -541,6 +652,6 @@ function outcomeOf(error: AnalysisError, accessResumesAtMs: number | null): Atte
       };
     }
     case "other":
-      return { type: "stop", stop: { reason: "other", status: error.status } };
+      return stop({ reason: "other", status: error.status });
   }
 }

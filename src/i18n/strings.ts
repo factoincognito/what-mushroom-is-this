@@ -89,9 +89,20 @@ export type Strings = {
     readonly takePhoto: string;
     readonly pickFromGallery: string;
     readonly saving: string;
+    /** A photo of the batch is saved to the find (docs/SPEC.md 3.9, Batches). */
     readonly saved: string;
-    /** The way back to the Log screen once the find is saved. */
-    readonly back: string;
+    /** The title when photos are added to a find from its screen. */
+    readonly addTitle: string;
+    /** The photos the find holds against the most it may; `{count}` and `{max}` are filled in. */
+    readonly photoCount: string;
+    /** The find holds the most photos it may, so no more are offered. */
+    readonly maxReached: string;
+    /** Completes the batch, which the queue then analyses. */
+    readonly analyse: string;
+    /** The batch could not be completed; the error is not shown. */
+    readonly analyseFailed: string;
+    /** The find to add photos to does not exist or cannot be read; the error is not shown. */
+    readonly findUnavailable: string;
     readonly saveFailed: string;
     readonly retrySave: string;
     /** Drops the photo whose save failed, so that a new one can be taken; asks first. */
@@ -232,6 +243,11 @@ export type Strings = {
       readonly refused: string;
       /** Claude declined to analyse a description, for a lookup without photos. */
       readonly refusedDescribed: string;
+      /**
+       * A failure of one of a find's several photos (docs/SPEC.md 3.9, Batches): `{number}` is the
+       * photo's number, `{reason}` the sentence of its failure.
+       */
+      readonly numbered: string;
     };
     /** A failed new analysis of a find that has an answer. */
     readonly answerKept: string;
@@ -249,6 +265,23 @@ export type Strings = {
     readonly back: string;
     /** The photo's accessibility label. */
     readonly photo: string;
+    /** A photo's label on a find with several (docs/SPEC.md 3.9); `{number}` of `{count}`. */
+    readonly photoNumbered: string;
+    /** Opens New find to add a batch of photos to the find. */
+    readonly addPhotos: string;
+    /** The find holds the most photos it may; `{max}` is filled in. */
+    readonly maxPhotos: string;
+    /** Removes a photo of the find, `{number}`, after a question; and the question's parts. */
+    readonly removePhoto: string;
+    readonly removePhotoConfirm: string;
+    readonly removePhotoYes: string;
+    readonly removePhotoCancel: string;
+    readonly removePhotoFailed: string;
+    /** The photos added since the find's answer, while they are not covered by one. */
+    readonly addedPhotos: {
+      readonly waiting: string;
+      readonly notAnalysed: string;
+    };
     /** The label of the Latin name. */
     readonly latin: string;
     /** The edibility, labelled as that of the matched species (SPEC 3.5). */
@@ -475,10 +508,15 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "Appen ber om att få använda kameran, för att ta fotot, och telefonens plats, för att notera var fyndet gjordes.",
       takePhoto: "Ta ett foto",
       pickFromGallery: "Välj ett foto i galleriet",
-      saving: "Sparar fyndet …",
-      saved: "Fyndet är sparat. Det väntar på analys.",
-      back: "Tillbaka till Fynd",
-      saveFailed: "Fyndet gick inte att spara. Försök igen.",
+      saving: "Sparar fotot …",
+      saved: "Fotot är sparat i fyndet.",
+      addTitle: "Lägg till foton",
+      photoCount: "Fyndet har {count} av högst {max} foton.",
+      maxReached: "Fyndet har så många foton som det kan ha.",
+      analyse: "Analysera",
+      analyseFailed: "Fotona gick inte att skicka vidare för analys. Försök igen.",
+      findUnavailable: "Fyndet gick inte att öppna, så inget foto kan läggas till i det.",
+      saveFailed: "Fotot gick inte att spara. Försök igen.",
       retrySave: "Spara igen",
       discardPhoto: "Släng fotot",
       discardConfirm: "Slänga fotot? Det är inte sparat och går inte att få tillbaka.",
@@ -594,6 +632,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         },
         refused: "Claude avböjde att analysera det här fotot.",
         refusedDescribed: "Claude avböjde att analysera den här beskrivningen.",
+        numbered: "Foto {number}: {reason} Du kan ta bort det fotot och analysera fyndet igen.",
       },
       answerKept: "Den nya analysen misslyckades. Det tidigare svaret finns kvar.",
     },
@@ -603,6 +642,21 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       unreadable: "Fyndet gick inte att läsa.",
       back: "Tillbaka till Fynd",
       photo: "Fotot av fyndet",
+      photoNumbered: "Foto {number} av {count} av fyndet",
+      addPhotos: "Lägg till foton",
+      maxPhotos: "Fyndet har {max} foton, så många som det kan ha.",
+      removePhoto: "Ta bort foto {number}",
+      removePhotoConfirm:
+        "Ta bort foto {number} ur fyndet? Bara appens kopia tas bort; ett foto i telefonens galleri eller filer finns kvar där.",
+      removePhotoYes: "Ta bort",
+      removePhotoCancel: "Behåll fotot",
+      removePhotoFailed: "Fotot gick inte att ta bort. Försök igen.",
+      addedPhotos: {
+        waiting:
+          "Fotona som lagts till sedan det här svaret väntar på analys. Svaret finns kvar tills ett nytt ersätter det.",
+        notAnalysed:
+          "Fotona som lagts till sedan det här svaret gick inte att analysera. Analysera igen för att analysera fyndet med alla dess foton.",
+      },
       latin: "Latin",
       edibility: "Ätlighet för den matchade arten: {edibility}",
       lookAlikeEdibility: "Ätlighet för den här arten: {edibility}",
@@ -752,10 +806,15 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "The app asks to use the camera, to take the photo, and the phone's location, to note where the find was made.",
       takePhoto: "Take a photo",
       pickFromGallery: "Pick a photo from the gallery",
-      saving: "Saving the find…",
-      saved: "The find is saved. It waits for analysis.",
-      back: "Back to Finds",
-      saveFailed: "The find could not be saved. Try again.",
+      saving: "Saving the photo…",
+      saved: "The photo is saved to the find.",
+      addTitle: "Add photos",
+      photoCount: "The find holds {count} of at most {max} photos.",
+      maxReached: "The find holds as many photos as it can.",
+      analyse: "Analyse",
+      analyseFailed: "The photos could not be sent on for analysis. Try again.",
+      findUnavailable: "The find could not be opened, so no photo can be added to it.",
+      saveFailed: "The photo could not be saved. Try again.",
       retrySave: "Save again",
       discardPhoto: "Discard the photo",
       discardConfirm: "Discard the photo? It is not saved, and it cannot be got back.",
@@ -866,6 +925,7 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         },
         refused: "Claude declined to analyse this photo.",
         refusedDescribed: "Claude declined to analyse this description.",
+        numbered: "Photo {number}: {reason} You can remove that photo and analyse the find again.",
       },
       answerKept: "The new analysis failed. The earlier answer is kept.",
     },
@@ -875,6 +935,21 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       unreadable: "This find could not be read.",
       back: "Back to Finds",
       photo: "Photo of the find",
+      photoNumbered: "Photo {number} of {count} of the find",
+      addPhotos: "Add photos",
+      maxPhotos: "The find holds {max} photos, as many as it can.",
+      removePhoto: "Remove photo {number}",
+      removePhotoConfirm:
+        "Remove photo {number} from the find? Only the app's copy is removed; a photo in the phone's gallery or files stays there.",
+      removePhotoYes: "Remove",
+      removePhotoCancel: "Keep the photo",
+      removePhotoFailed: "The photo could not be removed. Try again.",
+      addedPhotos: {
+        waiting:
+          "The photos added since this answer wait for analysis. The answer is kept until a new one replaces it.",
+        notAnalysed:
+          "The photos added since this answer could not be analysed. Analyse again to analyse the find with all its photos.",
+      },
       latin: "Latin",
       edibility: "Edibility of the matched species: {edibility}",
       lookAlikeEdibility: "Edibility of this species: {edibility}",
@@ -1026,10 +1101,16 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         "L'app chiede di usare la fotocamera, per scattare la foto, e la posizione del telefono, per annotare dove è stato fatto il ritrovamento.",
       takePhoto: "Scatta una foto",
       pickFromGallery: "Scegli una foto dalla galleria",
-      saving: "Salvataggio del ritrovamento…",
-      saved: "Il ritrovamento è salvato. È in attesa di analisi.",
-      back: "Torna a Ritrovamenti",
-      saveFailed: "Non è stato possibile salvare il ritrovamento. Riprova.",
+      saving: "Salvataggio della foto…",
+      saved: "La foto è salvata nel ritrovamento.",
+      addTitle: "Aggiungi foto",
+      photoCount: "Il ritrovamento ha {count} foto su un massimo di {max}.",
+      maxReached: "Il ritrovamento ha il numero massimo di foto.",
+      analyse: "Analizza",
+      analyseFailed: "Non è stato possibile inviare le foto all'analisi. Riprova.",
+      findUnavailable:
+        "Non è stato possibile aprire il ritrovamento, quindi non si possono aggiungere foto.",
+      saveFailed: "Non è stato possibile salvare la foto. Riprova.",
       retrySave: "Salva di nuovo",
       discardPhoto: "Scarta la foto",
       discardConfirm: "Scartare la foto? Non è stata salvata e non si potrà recuperare.",
@@ -1147,6 +1228,8 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
         },
         refused: "Claude ha rifiutato di analizzare questa foto.",
         refusedDescribed: "Claude ha rifiutato di analizzare questa descrizione.",
+        numbered:
+          "Foto {number}: {reason} Puoi rimuovere quella foto e analizzare di nuovo il ritrovamento.",
       },
       answerKept: "La nuova analisi non è riuscita. La risposta precedente è mantenuta.",
     },
@@ -1156,6 +1239,21 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       unreadable: "Non è stato possibile leggere questo ritrovamento.",
       back: "Torna a Ritrovamenti",
       photo: "Foto del ritrovamento",
+      photoNumbered: "Foto {number} di {count} del ritrovamento",
+      addPhotos: "Aggiungi foto",
+      maxPhotos: "Il ritrovamento ha {max} foto, il massimo possibile.",
+      removePhoto: "Rimuovi la foto {number}",
+      removePhotoConfirm:
+        "Rimuovere la foto {number} dal ritrovamento? Viene rimossa solo la copia dell'app; una foto nella galleria o nei file del telefono resta lì.",
+      removePhotoYes: "Rimuovi",
+      removePhotoCancel: "Tieni la foto",
+      removePhotoFailed: "Non è stato possibile rimuovere la foto. Riprova.",
+      addedPhotos: {
+        waiting:
+          "Le foto aggiunte dopo questa risposta sono in attesa di analisi. La risposta resta finché una nuova non la sostituisce.",
+        notAnalysed:
+          "Non è stato possibile analizzare le foto aggiunte dopo questa risposta. Analizza di nuovo per analizzare il ritrovamento con tutte le sue foto.",
+      },
       latin: "Latino",
       edibility: "Commestibilità della specie individuata: {edibility}",
       lookAlikeEdibility: "Commestibilità di questa specie: {edibility}",

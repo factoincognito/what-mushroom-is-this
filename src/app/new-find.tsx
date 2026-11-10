@@ -1,18 +1,28 @@
-import { router, useNavigation } from "expo-router";
+import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
 import { type NavigationAction, usePreventRemove } from "expo-router/react-navigation";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { config } from "../config/config";
+import { fillIn, parseFindId } from "../find/display";
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Strings } from "../i18n/strings";
 import { cameraPermission, pickFromGallery, takePhoto } from "../newFind/devicePicker";
-import { INITIAL_VIEW, NewFindFlow, type NewFindView } from "../newFind/newFindFlow";
+import {
+  INITIAL_VIEW,
+  NewFindFlow,
+  type NewFindTarget,
+  type NewFindView,
+} from "../newFind/newFindFlow";
 import { deviceLocationSource, locationPermission } from "../position/deviceLocation";
 import { useFindLog } from "../store/FindLogContext";
 
 /**
- * The New find screen (docs/SPEC.md 3.1): opens the camera at once; a photo can also be picked
- * from the gallery. The find is saved before any analysis; no analysis is started here.
+ * The New find screen (docs/SPEC.md 3.1, 3.9): opens the camera at once; a photo can also be
+ * picked from the gallery. The find is saved with its first photo before any analysis, its batch
+ * open, and each photo after it is saved to it, up to the most a find holds (3.9, Batches).
+ * "Analyse" completes the batch, which the queue then analyses, and opens the find's screen;
+ * leaving the screen completes it too. With `?find=<id>` (from a find's screen) the photos are
+ * added to that find, as a new batch, and "Analyse" goes back to where the screen was opened from.
  *
  * A photo whose save failed is kept, and is dropped only after a question on the screen: when
  * "Discard the photo" is tapped, and when the screen is left in any way (the header's back
@@ -24,6 +34,10 @@ export default function NewFindScreen() {
   const { strings } = useLanguage();
   const t = strings.newFind;
   const findLog = useFindLog();
+  const { find } = useLocalSearchParams();
+  const [target] = useState<NewFindTarget>(() =>
+    find === undefined ? { kind: "new" } : { kind: "add", findId: parseFindId(find) },
+  );
   const [view, setView] = useState<NewFindView>(INITIAL_VIEW);
   const [flow] = useState(
     () =>
@@ -37,6 +51,7 @@ export default function NewFindScreen() {
           now: () => new Date(),
         },
         setView,
+        target,
       ),
   );
 
@@ -70,11 +85,24 @@ export default function NewFindScreen() {
       navigation.dispatch(leaving);
     }
   }, [leaving, holdsPhoto, navigation]);
+  // "Analyse" completed the batch: on to the find (a new one), or back to where photos were added.
+  const { analysed } = view;
+  useEffect(() => {
+    if (analysed === null) {
+      return;
+    }
+    if (target.kind === "add" && router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace(`/find/${analysed}`);
+    }
+  }, [analysed, target]);
 
-  const canChoose = view.phase === "ready";
+  const canChoose = view.phase === "ready" || view.phase === "saved";
 
   return (
     <View style={styles.container}>
+      {target.kind === "add" && <Stack.Screen options={{ title: t.addTitle }} />}
       {view.phase === "starting" && <Text style={styles.text}>{t.asking}</Text>}
       {locationRefused && <Text style={styles.text}>{t.locationDenied}</Text>}
       {(view.phase === "saving" || view.phase === "busy" || view.phase === "starting") && (
@@ -86,16 +114,20 @@ export default function NewFindScreen() {
           {t[view.message]}
         </Text>
       )}
-      {view.phase === "saved" ? (
-        <>
-          <Text accessibilityLiveRegion="polite" style={styles.text}>
-            {t.saved}
-          </Text>
-          <Pressable accessibilityRole="button" onPress={goBack} style={styles.button}>
-            <Text style={styles.buttonText}>{t.back}</Text>
-          </Pressable>
-        </>
-      ) : view.confirming !== null ? (
+      {view.phase === "saved" && (
+        <Text accessibilityLiveRegion="polite" style={styles.text}>
+          {t.saved}
+        </Text>
+      )}
+      {view.photoCount > 0 && (
+        <Text style={styles.text}>
+          {fillIn(t.photoCount, {
+            count: String(view.photoCount),
+            max: String(config.maxPhotosPerFind),
+          })}
+        </Text>
+      )}
+      {view.confirming !== null ? (
         <Question
           question={view.confirming}
           strings={strings}
@@ -132,22 +164,40 @@ export default function NewFindScreen() {
         </>
       ) : (
         <>
-          <Pressable
-            accessibilityRole="button"
-            disabled={!canChoose}
-            onPress={() => flow.takePhoto()}
-            style={[styles.button, !canChoose && styles.disabled]}
-          >
-            <Text style={styles.buttonText}>{t.takePhoto}</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={!canChoose}
-            onPress={() => flow.pickFromGallery()}
-            style={[styles.button, !canChoose && styles.disabled]}
-          >
-            <Text style={styles.buttonText}>{t.pickFromGallery}</Text>
-          </Pressable>
+          {view.canAddMore ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                disabled={!canChoose}
+                onPress={() => flow.takePhoto()}
+                style={[styles.button, !canChoose && styles.disabled]}
+              >
+                <Text style={styles.buttonText}>{t.takePhoto}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={!canChoose}
+                onPress={() => flow.pickFromGallery()}
+                style={[styles.button, !canChoose && styles.disabled]}
+              >
+                <Text style={styles.buttonText}>{t.pickFromGallery}</Text>
+              </Pressable>
+            </>
+          ) : (
+            view.phase !== "starting" &&
+            view.message !== "findUnavailable" && <Text style={styles.text}>{t.maxReached}</Text>
+          )}
+          {view.batchOpen && (
+            <Pressable
+              accessibilityRole="button"
+              disabled={!canChoose}
+              // As for Save again, the promise is not given back: the screen follows the view.
+              onPress={() => void flow.analyse()}
+              style={[styles.button, !canChoose && styles.disabled]}
+            >
+              <Text style={styles.buttonText}>{t.analyse}</Text>
+            </Pressable>
+          )}
         </>
       )}
       {(locationRefused || view.message === "cameraBlocked") && (
@@ -186,14 +236,6 @@ function Question({ question, strings, onYes, onNo }: QuestionProps) {
       </Pressable>
     </>
   );
-}
-
-function goBack(): void {
-  if (router.canGoBack()) {
-    router.back();
-  } else {
-    router.replace("/");
-  }
 }
 
 function openSettings(): void {

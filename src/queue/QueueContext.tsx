@@ -54,7 +54,8 @@ type QueueProviderProps = {
 /**
  * Runs the analysis queue (docs/SPEC.md 3.4) on its triggers: when the app comes to the front (and
  * at the start, when it starts in front), when a find is saved through the find log it gives the
- * screens, a text find too (3.9), and when the phone reports that the network is back. The key is the one KeyProvider
+ * screens, a text find too (3.9), when a batch of photos is completed through it (3.9, Batches),
+ * and when the phone reports that the network is back. The key is the one KeyProvider
  * reads only after the first-start clearing. A run that rejects, with an error the queue does not
  * handle, is caught here and stops the queue with an internal error, which the Log screen shows
  * without the error itself (Clead's decision on #17); "analyse now" tries again.
@@ -114,6 +115,12 @@ export function QueueProvider({
         const id = await store.addText(find);
         caught(queue, queue.trigger());
         return id;
+      },
+      // Completing a batch is a trigger; saving a photo find with its first photo, or a photo,
+      // is not (docs/SPEC.md 3.9, Batches; PBI-2.5).
+      async completeBatch(id) {
+        await store.completeBatch(id);
+        caught(queue, queue.trigger());
       },
     };
   }, [findLog, queue]);
