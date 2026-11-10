@@ -6,6 +6,7 @@
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getLocales } from "expo-localization";
+import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen, within } from "expo-router/testing-library";
 import { AppState } from "react-native";
 
@@ -14,6 +15,7 @@ import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { formatFindTime } from "../../find/display";
 import { STRINGS } from "../../i18n/strings";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
+import { monthName } from "../../library/filters";
 import { answerToJson } from "../../store/answerJson";
 import { type Find, type ListedFind, type StoredFind, StoreError } from "../../store/find";
 import { memoryFindLog } from "../../testing/memoryFindLog";
@@ -673,6 +675,371 @@ describe("the list follows the log", () => {
     expect(app.pathname()).toBe("/");
     expect(await screen.findByTestId("find-row-2")).toBeOnTheScreen();
     expect(screen.queryByTestId("find-row-1")).not.toBeOnTheScreen();
+  });
+});
+
+const PORCINI: Match = {
+  ...CHANTERELLE,
+  names: { sv: "Karljohanssvamp", en: "Porcini", la: "Boletus edulis", it: "Porcino" },
+};
+
+/** A find taken at `iso` (UTC), at the offset given. */
+function takenAt(base: Find, iso: string, utcOffsetMinutes = 120): Find {
+  return { ...base, time: { takenAtMs: Date.parse(iso), utcOffsetMinutes, source: "saved" } };
+}
+
+/** The IDs of the rows of finds the store could read, in the list's order. */
+async function rowIds(): Promise<string[]> {
+  return (await screen.findAllByTestId(/^find-row-/)).map((row) =>
+    String(row.props.testID).replace("find-row-", ""),
+  );
+}
+
+/** The accessible names of the filter choices given, in their order on the screen. */
+function labels(boxes: { props: { accessibilityLabel?: string } }[]): (string | undefined)[] {
+  return boxes.map((box) => box.props.accessibilityLabel);
+}
+
+async function openFilters(): Promise<void> {
+  await fireEvent.press(await screen.findByRole("button", { name: en.log.filters }));
+}
+
+async function choose(name: string): Promise<void> {
+  await fireEvent.press(screen.getByRole("checkbox", { name }));
+}
+
+describe("the Library, the start screen in place of the Log (SPEC 3.9, PBI-2.7)", () => {
+  it("is titled the Library, and opens on its list with the filters at their defaults, closed", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    const app = await startApp();
+    expect(app.pathname()).toBe("/");
+    expect(await screen.findByTestId("find-row-1")).toBeOnTheScreen();
+    expect(screen.getByText(en.log.title)).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: en.log.filters })).toHaveProp(
+      "accessibilityState",
+      expect.objectContaining({ expanded: false }),
+    );
+    expect(screen.queryByRole("checkbox")).not.toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)("is titled the Library in %s", async (lang) => {
+    phoneIn(lang);
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    await startApp();
+    expect(await screen.findByText(STRINGS[lang].log.title)).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: STRINGS[lang].log.filters })).toBeOnTheScreen();
+  });
+
+  it("shows the text mark in place of a photo for a find without photos, and none for a find with one", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, textFind(2, 1, { state: "waiting" }));
+    await startApp();
+    const text = within(await screen.findByTestId("find-row-2"));
+    expect(text.getByLabelText(en.log.textMarkLabel)).toBeOnTheScreen();
+    expect(text.getByText(en.log.textMark)).toBeOnTheScreen();
+    expect(text.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+    const photo = within(screen.getByTestId("find-row-1"));
+    expect(photo.queryByLabelText(en.log.textMarkLabel)).not.toBeOnTheScreen();
+    expect(photo.getByLabelText(en.find.photo)).toBeOnTheScreen();
+  });
+
+  it("shows a text find's first photo once it has photos, and no text mark (Clead's decision on #63)", async () => {
+    mockLog.finds.set(1, {
+      ...textFind(1, 0, done(CHANTERELLE)),
+      photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+      addedPhotos: "waiting",
+    });
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(row.getByLabelText(en.find.photo)).toHaveProp("source", { uri: "file:///photos/1.jpg" });
+    expect(row.queryByLabelText(en.log.textMarkLabel)).not.toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)("shows the text mark in %s", async (lang) => {
+    phoneIn(lang);
+    mockLog.finds.set(1, textFind(1, 0, { state: "waiting" }));
+    await startApp();
+    const row = within(await screen.findByTestId("find-row-1"));
+    expect(row.getByLabelText(STRINGS[lang].log.textMarkLabel)).toBeOnTheScreen();
+    expect(row.getByText(STRINGS[lang].log.textMark)).toBeOnTheScreen();
+  });
+
+  it("opens the filters with every one at all, and closes them again", async () => {
+    mockLog.finds.set(1, takenAt(find(1, 0, done(CHANTERELLE)), "2026-09-01T10:00:00Z"));
+    mockLog.finds.set(2, takenAt(find(2, 0, { state: "waiting" }), "2025-06-01T10:00:00Z"));
+    await startApp();
+    await openFilters();
+    expect(screen.getByRole("button", { name: en.log.filters })).toHaveProp(
+      "accessibilityState",
+      expect.objectContaining({ expanded: true }),
+    );
+    for (const all of [en.log.allSpecies, en.log.allYears, en.log.allMonths]) {
+      expect(screen.getByRole("checkbox", { name: all, checked: true })).toBeOnTheScreen();
+    }
+    expect(screen.getByText(en.log.species)).toBeOnTheScreen();
+    expect(screen.getByText(en.log.years)).toBeOnTheScreen();
+    expect(screen.getByText(en.log.months)).toBeOnTheScreen();
+    expect(screen.getByRole("checkbox", { name: "Chanterelle", checked: false })).toBeOnTheScreen();
+    expect(screen.getByRole("checkbox", { name: en.log.notIdentified })).toBeOnTheScreen();
+    expect(screen.getByRole("checkbox", { name: "2026" })).toBeOnTheScreen();
+    expect(screen.getByRole("checkbox", { name: "2025" })).toBeOnTheScreen();
+    for (const month of [1, 6, 12]) {
+      expect(screen.getByRole("checkbox", { name: monthName(month, "en") })).toBeOnTheScreen();
+    }
+    await fireEvent.press(screen.getByRole("button", { name: en.log.filters }));
+    expect(screen.queryByRole("checkbox")).not.toBeOnTheScreen();
+    expect(await rowIds()).toEqual(["1", "2"]);
+  });
+});
+
+describe("the species filter (SPEC 3.9; Clead's decision 3 on PBI-2.7)", () => {
+  it("offers each species once, grouped by the Latin name's genus and species ignoring case, by the newest find's name, and 'not identified'", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(
+      2,
+      find(
+        2,
+        2,
+        done({
+          ...CHANTERELLE,
+          names: {
+            ...CHANTERELLE.names,
+            en: "Golden chanterelle",
+            la: "CANTHARELLUS cibarius f. alba",
+          },
+        }),
+      ),
+    );
+    mockLog.finds.set(3, find(3, 1, done(PORCINI)));
+    mockLog.finds.set(4, find(4, 3, { state: "waiting" }));
+    await startApp();
+    await openFilters();
+    expect(labels(screen.getAllByRole("checkbox")).slice(0, 4)).toEqual([
+      en.log.allSpecies,
+      "Golden chanterelle",
+      "Porcini",
+      en.log.notIdentified,
+    ]);
+    expect(screen.queryByRole("checkbox", { name: "Chanterelle" })).not.toBeOnTheScreen();
+  });
+
+  it("shows only the finds of the chosen species, and every find that could not be read, until all species is chosen again", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, done(PORCINI)));
+    mockLog.finds.set(3, find(3, 2, { state: "waiting" }));
+    mockLog.finds.set(4, find(4, 3, { state: "waiting" }));
+    mockLog.unreadable.add(4);
+    mockLog.withoutId.push("0");
+    await startApp();
+    await openFilters();
+    await choose("Porcini");
+    expect(await rowIds()).toEqual(["4", "2"]);
+    expect(screen.getByTestId("unreadable-row")).toBeOnTheScreen();
+    expect(screen.getByRole("checkbox", { name: "Porcini", checked: true })).toBeOnTheScreen();
+    expect(
+      screen.getByRole("checkbox", { name: en.log.allSpecies, checked: false }),
+    ).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: en.log.filtersOn })).toBeOnTheScreen();
+    await choose("Chanterelle");
+    expect(await rowIds()).toEqual(["4", "2", "1"]);
+    await choose(en.log.allSpecies);
+    expect(await rowIds()).toEqual(["4", "3", "2", "1"]);
+    expect(screen.getByRole("checkbox", { name: "Porcini", checked: false })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: en.log.filters })).toBeOnTheScreen();
+  });
+
+  it("goes back to all species when the last chosen species is unchosen", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, done(PORCINI)));
+    await startApp();
+    await openFilters();
+    await choose("Porcini");
+    expect(await rowIds()).toEqual(["2"]);
+    await choose("Porcini");
+    expect(await rowIds()).toEqual(["2", "1"]);
+    expect(
+      screen.getByRole("checkbox", { name: en.log.allSpecies, checked: true }),
+    ).toBeOnTheScreen();
+  });
+
+  it("holds under 'not identified' the finds waiting, failed, with no mushroom or that cannot tell", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, { state: "waiting" }));
+    mockLog.finds.set(
+      3,
+      find(3, 2, { state: "failed", failure: { cause: "request", detail: "x" } }),
+    );
+    mockLog.finds.set(4, find(4, 3, done({ result: "no_mushroom" })));
+    mockLog.finds.set(5, find(5, 4, done({ result: "cannot_tell" })));
+    await startApp();
+    await openFilters();
+    await choose(en.log.notIdentified);
+    expect(await rowIds()).toEqual(["5", "4", "3", "2"]);
+  });
+
+  it("counts a text find by its text answer's species while the self-check waits (SPEC 3.9)", async () => {
+    mockLog.finds.set(1, textFind(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, done(PORCINI)));
+    await startApp();
+    await openFilters();
+    await choose("Chanterelle");
+    expect(await rowIds()).toEqual(["1"]);
+    expect(
+      within(screen.getByTestId("find-row-1")).getByText(en.find.selfCheck.waiting),
+    ).toBeOnTheScreen();
+  });
+
+  it("says that no find matches the filters, not that the Library is empty", async () => {
+    mockLog.finds.set(1, takenAt(find(1, 0, done(CHANTERELLE)), "2026-09-01T10:00:00Z"));
+    mockLog.finds.set(2, takenAt(find(2, 0, done(PORCINI)), "2025-09-01T10:00:00Z"));
+    await startApp();
+    await openFilters();
+    await choose("Porcini");
+    await choose("2026");
+    expect(await screen.findByText(en.log.noMatch)).toBeOnTheScreen();
+    expect(screen.queryByText(en.log.empty)).not.toBeOnTheScreen();
+    expect(screen.queryByTestId(/^find-row-/)).not.toBeOnTheScreen();
+  });
+
+  it.each(["sv", "it"] as const)(
+    "offers the species by their names in %s, with 'not identified' and every filter in that language",
+    async (lang) => {
+      phoneIn(lang);
+      const t = STRINGS[lang];
+      mockLog.finds.set(1, find(1, 0, done(PORCINI)));
+      mockLog.finds.set(2, find(2, 1, { state: "waiting" }));
+      await startApp();
+      await openFilters();
+      expect(screen.getByRole("checkbox", { name: PORCINI.names[lang] })).toBeOnTheScreen();
+      expect(screen.getByRole("checkbox", { name: t.log.notIdentified })).toBeOnTheScreen();
+      for (const all of [t.log.allSpecies, t.log.allYears, t.log.allMonths]) {
+        expect(screen.getByRole("checkbox", { name: all, checked: true })).toBeOnTheScreen();
+      }
+      expect(screen.getByRole("checkbox", { name: monthName(1, lang) })).toBeOnTheScreen();
+      await choose(PORCINI.names[lang]);
+      expect(await rowIds()).toEqual(["1"]);
+      expect(screen.getByRole("button", { name: t.log.filtersOn })).toBeOnTheScreen();
+    },
+  );
+});
+
+describe("the years and months filters (SPEC 3.9)", () => {
+  it("takes a find's year and month in its own UTC offset", async () => {
+    // 23:30 UTC on 31 December 2025 is January 2026 at UTC+01:00.
+    mockLog.finds.set(1, takenAt(find(1, 0, done(CHANTERELLE)), "2025-12-31T23:30:00Z", 60));
+    mockLog.finds.set(2, takenAt(find(2, 0, done(PORCINI)), "2025-06-01T10:00:00Z"));
+    await startApp();
+    await openFilters();
+    await choose("2026");
+    expect(await rowIds()).toEqual(["1"]);
+    await choose("2026");
+    await choose(monthName(12, "en"));
+    expect(screen.queryByTestId(/^find-row-/)).not.toBeOnTheScreen();
+    await choose(monthName(1, "en"));
+    expect(await rowIds()).toEqual(["1"]);
+  });
+
+  it("offers only the years that have finds, newest first, and keeps the finds of any chosen year or month", async () => {
+    mockLog.finds.set(1, takenAt(find(1, 0, done(CHANTERELLE)), "2024-05-01T10:00:00Z"));
+    mockLog.finds.set(2, takenAt(find(2, 0, done(PORCINI)), "2026-09-01T10:00:00Z"));
+    mockLog.finds.set(3, takenAt(find(3, 0, { state: "waiting" }), "2025-05-01T10:00:00Z"));
+    await startApp();
+    await openFilters();
+    expect(labels(screen.getAllByRole("checkbox", { name: /^\d{4}$/ }))).toEqual([
+      "2026",
+      "2025",
+      "2024",
+    ]);
+    expect(screen.queryByRole("checkbox", { name: "2023" })).not.toBeOnTheScreen();
+    await choose("2024");
+    await choose("2026");
+    expect(await rowIds()).toEqual(["2", "1"]);
+    await choose(en.log.allYears);
+    await choose(monthName(5, "en"));
+    expect(await rowIds()).toEqual(["3", "1"]);
+  });
+
+  it("keeps only the finds that pass every filter", async () => {
+    mockLog.finds.set(1, takenAt(find(1, 0, done(CHANTERELLE)), "2025-09-01T10:00:00Z"));
+    mockLog.finds.set(2, takenAt(find(2, 0, done(CHANTERELLE)), "2026-09-01T10:00:00Z"));
+    mockLog.finds.set(3, takenAt(find(3, 0, done(CHANTERELLE)), "2026-08-01T10:00:00Z"));
+    mockLog.finds.set(4, takenAt(find(4, 0, done(PORCINI)), "2026-09-02T10:00:00Z"));
+    await startApp();
+    await openFilters();
+    await choose("Chanterelle");
+    await choose("2026");
+    await choose(monthName(9, "en"));
+    expect(await rowIds()).toEqual(["2"]);
+  });
+});
+
+describe("the filters while the app runs (SPEC 3.9)", () => {
+  it("hold when another screen is opened and left", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, done(PORCINI)));
+    const app = await startApp();
+    await openFilters();
+    await choose("Porcini");
+    expect(await rowIds()).toEqual(["2"]);
+    await fireEvent.press(screen.getByTestId("find-row-2"));
+    expect(app.pathname()).toBe("/find/2");
+    await act(async () => router.back());
+    expect(app.pathname()).toBe("/");
+    expect(await rowIds()).toEqual(["2"]);
+    await fireEvent.press(screen.getByRole("link", { name: en.log.settings }));
+    expect(app.pathname()).toBe("/settings");
+    await act(async () => router.back());
+    expect(await rowIds()).toEqual(["2"]);
+    expect(screen.getByRole("button", { name: en.log.filtersOn })).toBeOnTheScreen();
+  });
+
+  it("start at their defaults when the app starts again", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, done(PORCINI)));
+    await startApp();
+    await openFilters();
+    await choose("Porcini");
+    expect(await rowIds()).toEqual(["2"]);
+    screen.unmount();
+    await startApp();
+    expect(await rowIds()).toEqual(["2", "1"]);
+    expect(screen.getByRole("button", { name: en.log.filters })).toBeOnTheScreen();
+  });
+
+  it("go back to all species when the last find of the chosen species is deleted", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, done(PORCINI)));
+    const app = await startApp();
+    await openFilters();
+    await choose("Porcini");
+    await fireEvent.press(await screen.findByTestId("find-row-2"));
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.delete }));
+    await fireEvent.press(screen.getByRole("button", { name: en.find.deleteYes }));
+    expect(app.pathname()).toBe("/");
+    expect(await rowIds()).toEqual(["1"]);
+    expect(await screen.findByRole("button", { name: en.log.filters })).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.log.filtersOn })).not.toBeOnTheScreen();
+  });
+
+  it("are not offered while the Library cannot be read, and its rows come back filtered when it is read again", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, done(PORCINI)));
+    const app = await startApp();
+    await openFilters();
+    await choose("Porcini");
+    jest
+      .spyOn(mockLog, "list")
+      .mockRejectedValueOnce(
+        new StoreError("corrupt", "the stored edibility is not one the store knows"),
+      );
+    await fireEvent.press(screen.getByRole("link", { name: en.log.settings }));
+    await act(async () => router.back());
+    expect(app.pathname()).toBe("/");
+    expect(await screen.findByText(en.log.unreadable)).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: en.log.filtersOn })).not.toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole("button", { name: en.log.retry }));
+    expect(await rowIds()).toEqual(["2"]);
+    jest.mocked(mockLog.list).mockRestore();
   });
 });
 
