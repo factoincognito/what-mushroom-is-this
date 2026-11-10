@@ -226,15 +226,12 @@ describe("the texts of a find's values", () => {
 });
 
 describe("matchBasis: what an answer naming a species was based on (Clead's decision 3 on #57)", () => {
-  it.each([
-    "waiting",
-    "agreed",
-    "no-species",
-    "failed",
-    "no-picture",
-  ] as const)("is the description for an answer with a self-check that is %s: the text alone", (state) => {
-    expect(matchBasis({ state })).toBe("described");
-  });
+  it.each(["waiting", "agreed", "no-species", "failed", "no-picture"] as const)(
+    "is the description for an answer with a self-check that is %s: the text alone",
+    (state) => {
+      expect(matchBasis({ state })).toBe("described");
+    },
+  );
 
   it("is the description for an answer whose self-check disagreed", () => {
     const names = { sv: "a", en: "b", la: "c d", it: "e" };

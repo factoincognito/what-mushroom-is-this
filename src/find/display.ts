@@ -178,6 +178,18 @@ export function checkedEdibility(
 }
 
 /**
+ * What an answer naming a species was based on, for its disclaimer (Clead's decision 3 on #57):
+ * the description alone when it has a self-check, since the store starts one exactly when the
+ * analysis sent no photo, the answer is a match and the find has text, and keeps it until the
+ * next answer (`findStore.ts`, `ANSWER_COLUMNS`); photos, with or without text, otherwise. It
+ * holds whatever photos the find has gained or lost since. For "no mushroom" and "cannot tell"
+ * the store keeps no such mark, so their wording still follows whether the find has photos.
+ */
+export function matchBasis(selfCheck: SelfCheck | null): "described" | "photo" {
+  return selfCheck === null ? "photo" : "described";
+}
+
+/**
  * Why the edibility of an answer from the text alone is "unknown" (docs/SPEC.md 3.9), in the
  * app's language: one sentence for each state of the check but "agreed"; a disagreement names
  * both species. Null once the check agreed, or for an answer without a check.

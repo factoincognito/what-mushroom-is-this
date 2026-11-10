@@ -1095,23 +1095,23 @@ describe("the edibility of an answer from text alone, until its self-check agree
 });
 
 describe("the disclaimer follows what the answer shown was based on (Clead's decision 3 on #57)", () => {
-  it.each([
-    "waiting",
-    "not-analysed",
-  ] as const)("an answer from the text alone keeps the disclaimer for a description once the find has photos that are %s", async (addedPhotos) => {
-    mockLog.finds.set(
-      1,
-      aTextFind(done(CHANTERELLE), {
-        photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
-        addedPhotos,
-        selfCheck: { state: "agreed" },
-      }),
-    );
-    await startApp();
-    const edibility = within(await screen.findByTestId("match-edibility"));
-    expect(edibility.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
-    expect(edibility.queryByText(en.disclaimer)).not.toBeOnTheScreen();
-  });
+  it.each(["waiting", "not-analysed"] as const)(
+    "an answer from the text alone keeps the disclaimer for a description once the find has photos that are %s",
+    async (addedPhotos) => {
+      mockLog.finds.set(
+        1,
+        aTextFind(done(CHANTERELLE), {
+          photos: [{ uri: "file:///photos/1.jpg", batch: 1 }],
+          addedPhotos,
+          selfCheck: { state: "agreed" },
+        }),
+      );
+      await startApp();
+      const edibility = within(await screen.findByTestId("match-edibility"));
+      expect(edibility.getByText(en.disclaimerDescribed)).toBeOnTheScreen();
+      expect(edibility.queryByText(en.disclaimer)).not.toBeOnTheScreen();
+    },
+  );
 
   it("an answer from the text alone keeps the disclaimer for a description after the photos added since are removed, through the find log", async () => {
     const id = await mockLog.addText({

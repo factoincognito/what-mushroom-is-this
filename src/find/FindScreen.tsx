@@ -38,6 +38,7 @@ import {
   formatCoordinates,
   formatFindTime,
   mapLink,
+  matchBasis,
   positionSourceText,
   selfCheckReason,
   timeSourceText,
@@ -429,7 +430,9 @@ function AnalysisView({
           <AnswerView
             answer={analysis.answer}
             selfCheck={find.selfCheck}
-            subject={subject}
+            // A match's disclaimer follows what the answer was based on (Clead's decision 3 on
+            // #57); "no mushroom" and "cannot tell" follow whether the find has photos.
+            subject={analysis.answer.result === "match" ? matchBasis(find.selfCheck) : subject}
             language={language}
             strings={strings}
           />
