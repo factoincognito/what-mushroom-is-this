@@ -1224,6 +1224,7 @@ describe("get", () => {
         answer_json: answerToJson(match),
         model: "claude-model-x",
         analysed_at_ms: 1_762_600_000_000,
+        answer_basis: "photos",
         added_photos: "analysed",
         confidence_score: 90,
       }),
@@ -1966,7 +1967,10 @@ describe("setAnswer", () => {
   it("refuses, as wrong-state, an analysis of the text alone for a find without text, and stores nothing (PBI-2.15)", async () => {
     await expect(
       store.setAnswer(7, { ...analysed, answer: { result: "no_mushroom" } }, { photoUris: [] }),
-    ).rejects.toMatchObject({ code: "wrong-state", message: "find 7 has no text to analyse alone" });
+    ).rejects.toMatchObject({
+      code: "wrong-state",
+      message: "find 7 has no text to analyse alone",
+    });
     expect(events).toEqual([{ method: "first", sql: PHOTOS_OF, params: [7] }]);
   });
 

@@ -81,6 +81,8 @@ function find(
             edibility: "edible",
             confidence: 90,
           },
+    // Not used by the map: an answer naming a species without a self-check is from photos.
+    answerBasis: species === null ? null : "photos",
     selfCheck: null,
     species,
     picture: null,

@@ -81,6 +81,19 @@ export interface AnalysisSent {
   photoUris: readonly string[];
 }
 
+/**
+ * What an answer was based on (docs/SPEC.md 3.9, Answers; PBI-2.15): the find's text alone, when
+ * its analysis sent no photo, or photos, with the text when the find has one. The wording of the
+ * answer follows it, whatever photos the find has gained or lost since.
+ */
+export const ANSWER_BASES = ["text", "photos"] as const;
+export type AnswerBasis = (typeof ANSWER_BASES)[number];
+
+/** The basis of an answer from the analysis that gave it: no photo sent is the text alone. */
+export function basisOf(sent: AnalysisSent): AnswerBasis {
+  return sent.photoUris.length === 0 ? "text" : "photos";
+}
+
 export function checkSent(sent: AnalysisSent | undefined): void {
   if (sent === undefined || sent === null || typeof sent !== "object") {
     throw invalid("there is no account of what the analysis sent");
@@ -133,6 +146,8 @@ export interface FindSummary {
   /** Where the find was made, or null; the Library's map shows it there (SPEC 3.9, PBI-2.8). */
   position: Position | null;
   analysis: SummaryAnalysis;
+  /** What the find's answer was based on, as `StoredFind.answerBasis` (PBI-2.15). */
+  answerBasis: AnswerBasis | null;
   /**
    * The self-check of an answer from the text alone, or null for any other find: the edibility
    * shown is "unknown" until it agrees (docs/SPEC.md 3.9).
@@ -250,6 +265,13 @@ export interface StoredFind {
   time: FindTime;
   position: Position | null;
   analysis: Analysis;
+  /**
+   * What the find's answer was based on (PBI-2.15); null without an answer, and for an answer
+   * stored before schema version 3 whose basis the stored data could not prove: one naming no
+   * species, on a text find that has had a photo. Its wording then follows whether the find has
+   * photos.
+   */
+  answerBasis: AnswerBasis | null;
   /** On a find with an answer, the state of the photos added since; null without one. */
   addedPhotos: AddedPhotosState | null;
   picture: Picture | null;

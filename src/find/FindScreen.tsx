@@ -30,6 +30,7 @@ import type { QueueNotice, QueueState } from "../queue/queue";
 import { useFindLog } from "../store/FindLogContext";
 import { type Position, type SelfCheck, type StoredFind, StoreError } from "../store/find";
 import {
+  answerSubject,
   checkedEdibility,
   confidenceText,
   edibilityText,
@@ -38,7 +39,6 @@ import {
   formatCoordinates,
   formatFindTime,
   mapLink,
-  matchBasis,
   positionSourceText,
   selfCheckReason,
   timeSourceText,
@@ -444,9 +444,9 @@ function AnalysisView({
           <AnswerView
             answer={analysis.answer}
             selfCheck={find.selfCheck}
-            // A match's disclaimer follows what the answer was based on (Clead's decision 3 on
-            // #57); "no mushroom" and "cannot tell" follow whether the find has photos.
-            subject={analysis.answer.result === "match" ? matchBasis(find.selfCheck) : subject}
+            // Its disclaimer, "no mushroom" and "cannot tell" follow what the answer was based on
+            // (Clead's decision 3 on #57; SPEC 3.9, Answers; PBI-2.15).
+            subject={answerSubject(find.answerBasis, find.photos.length > 0)}
             language={language}
             strings={strings}
           />

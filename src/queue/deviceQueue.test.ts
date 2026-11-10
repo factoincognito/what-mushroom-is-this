@@ -31,6 +31,7 @@ const FIND: StoredFind = {
   time: { takenAtMs: 1, utcOffsetMinutes: 0, source: "saved" },
   position: null,
   analysis: { state: "waiting" },
+  answerBasis: null,
   addedPhotos: null,
   picture: null,
   selfCheck: null,

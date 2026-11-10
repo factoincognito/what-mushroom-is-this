@@ -1290,9 +1290,11 @@ describe("no mushroom and cannot tell follow what the answer was based on (SPEC 
         time: { ...TAKEN, source: "saved" },
         position: null,
       });
-      await mockLog.setAnswer(id, { answer: { result }, model: "m", analysedAtMs: 1 }, {
-        photoUris: [],
-      });
+      await mockLog.setAnswer(
+        id,
+        { answer: { result }, model: "m", analysedAtMs: 1 },
+        { photoUris: [] },
+      );
       await mockLog.addPhoto(id, "file:///photos/a.jpg");
       await mockLog.completeBatch(id);
       await startApp(`/find/${id}`);
@@ -1312,9 +1314,11 @@ describe("no mushroom and cannot tell follow what the answer was based on (SPEC 
       });
       await mockLog.addPhoto(id, "file:///photos/a.jpg");
       await mockLog.completeBatch(id);
-      await mockLog.setAnswer(id, { answer: { result }, model: "m", analysedAtMs: 1 }, {
-        photoUris: ["file:///photos/a.jpg"],
-      });
+      await mockLog.setAnswer(
+        id,
+        { answer: { result }, model: "m", analysedAtMs: 1 },
+        { photoUris: ["file:///photos/a.jpg"] },
+      );
       await mockLog.removePhoto(id, 1);
       await startApp(`/find/${id}`);
       expect(await screen.findByText(photo)).toBeOnTheScreen();

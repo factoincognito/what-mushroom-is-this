@@ -370,7 +370,10 @@ describe("the migration to schema version 3, on a version 2 database (PBI-2.15)"
     // Passes the CHECKs, but its answer is not of the shape.
     const badAnswer = insert({ ...textFind([], 0, 20_000), ...done(match), answer_json: "{" });
     // Past the CHECKs, as a damaged file could hold them.
-    const unknownTimeSource = insert({ ...photoFind(["u2.jpg"], 21_000), time_source: "gps" }, true);
+    const unknownTimeSource = insert(
+      { ...photoFind(["u2.jpg"], 21_000), time_source: "gps" },
+      true,
+    );
     const checkWithoutText = insert(
       { ...photoFind(["u3.jpg"], 22_000), ...done(match), self_check: "waiting" },
       true,
@@ -579,7 +582,10 @@ describe("the constraints of schema version 3 on a real SQLite (PBI-2.15)", () =
   });
 
   it("refuses a basis on a find without an answer", async () => {
-    refused("UPDATE finds SET answer_basis = 'text' WHERE id = ?", await saveTextFind(await open()));
+    refused(
+      "UPDATE finds SET answer_basis = 'text' WHERE id = ?",
+      await saveTextFind(await open()),
+    );
   });
 
   it("refuses an answer from the text alone on a find without text", async () => {
