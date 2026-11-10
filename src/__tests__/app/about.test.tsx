@@ -6,6 +6,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getLocales } from "expo-localization";
 import { fireEvent, renderRouter, screen, within } from "expo-router/testing-library";
+import { Linking } from "react-native";
 
 import { NOTICES } from "../../about/notices";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
@@ -137,6 +138,50 @@ describe("the About view", () => {
     }
   });
 
+  it("lists the map data credits, each with its licence and a link that opens its page (SPEC 3.9, PBI-2.8)", async () => {
+    const openURL = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    try {
+      await startApp("/about");
+      expect(await screen.findByText(t.mapDataHeading)).toBeOnTheScreen();
+      expect(NOTICES.mapData.length).toBeGreaterThan(0);
+      for (const entry of NOTICES.mapData) {
+        const shown = within(screen.getByTestId(`map-data-${entry.name}`));
+        expect(shown.getByText(entry.credit)).toBeOnTheScreen();
+        expect(shown.getByText(entry.licence)).toBeOnTheScreen();
+        await fireEvent.press(shown.getByRole("link", { name: entry.url }));
+        expect(openURL).toHaveBeenLastCalledWith(entry.url);
+      }
+    } finally {
+      openURL.mockRestore();
+    }
+  });
+
+  it("links OpenStreetMap's credit to its copyright page", async () => {
+    const openURL = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    try {
+      await startApp("/about");
+      const osm = within(await screen.findByTestId("map-data-OpenStreetMap"));
+      expect(osm.getByText("© OpenStreetMap contributors")).toBeOnTheScreen();
+      await fireEvent.press(osm.getByRole("link"));
+      expect(openURL).toHaveBeenCalledWith("https://www.openstreetmap.org/copyright");
+    } finally {
+      openURL.mockRestore();
+    }
+  });
+
+  it("stays on the About view when a link cannot be opened", async () => {
+    const openURL = jest.spyOn(Linking, "openURL").mockRejectedValue(new Error("no browser"));
+    try {
+      const app = await startApp("/about");
+      const osm = within(await screen.findByTestId("map-data-OpenStreetMap"));
+      await fireEvent.press(osm.getByRole("link"));
+      expect(app.pathname()).toBe("/about");
+      expect(screen.getByText(t.mapDataHeading)).toBeOnTheScreen();
+    } finally {
+      openURL.mockRestore();
+    }
+  });
+
   it.each([
     ["sv", STRINGS.sv],
     ["it", STRINGS.it],
@@ -145,6 +190,7 @@ describe("the About view", () => {
     await startApp("/about");
     expect(await screen.findByText(strings.about.librariesHeading)).toBeOnTheScreen();
     expect(screen.getByText(strings.about.appHeading)).toBeOnTheScreen();
+    expect(screen.getByText(strings.about.mapDataHeading)).toBeOnTheScreen();
     expect(screen.getByText(strings.disclaimer)).toBeOnTheScreen();
     expect(screen.getAllByRole("button", { name: strings.about.showText }).length).toBeGreaterThan(
       0,

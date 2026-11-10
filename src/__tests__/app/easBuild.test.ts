@@ -133,6 +133,32 @@ describe("app.json: the Android build (PBI-1.10)", () => {
     expect(declared()).not.toContain(WIFI_STATE);
   });
 
+  it("still removes ACCESS_WIFI_STATE with MapLibre React Native's plugin registered, since MapLibre Android declares it (PBI-2.8)", () => {
+    const plugins = (appJson.expo.plugins ?? []) as (string | [string, unknown])[];
+    expect(
+      plugins.some(
+        (plugin) =>
+          plugin === "@maplibre/maplibre-react-native" ||
+          (Array.isArray(plugin) && plugin[0] === "@maplibre/maplibre-react-native"),
+      ),
+    ).toBe(true);
+    expect(appJson.expo.android?.blockedPermissions).toContain(WIFI_STATE);
+    expect(removed()).toContain(WIFI_STATE);
+    expect(declared()).not.toContain(WIFI_STATE);
+  });
+
+  it("keeps the location permissions MapLibre React Native's own manifest declares, which the map's position uses (PBI-2.8)", () => {
+    const maplibre = libraryPermissions("@maplibre/maplibre-react-native");
+    expect(maplibre.sort()).toEqual([
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.INTERNET",
+    ]);
+    for (const permission of maplibre) {
+      expect(removed()).not.toContain(permission);
+    }
+  });
+
   it("removes SYSTEM_ALERT_WINDOW in the manifest, which the prebuild template's own manifest declares", () => {
     expect(removed()).toContain(ALERT_WINDOW);
     expect(declared()).not.toContain(ALERT_WINDOW);

@@ -39,6 +39,38 @@ describe("config", () => {
     expect(config.textLookupSavedAtStart).toBe(false);
   });
 
+  it("holds the map's style, OpenFreeMap's Liberty, of SPEC 3.9 (PBI-2.8)", () => {
+    expect(config.mapStyleUrl).toBe("https://tiles.openfreemap.org/styles/liberty");
+  });
+
+  it("holds the map's opening span of SPEC 3.9, a shorter side of 10 km (PBI-2.8)", () => {
+    expect(config.mapOpeningSideM).toBe(10_000);
+  });
+
+  it("holds the map's position limits of SPEC 3.9: a fix within 5 s, else a last known position no older than two minutes (PBI-2.8)", () => {
+    expect(config.mapPositionFixWaitMs).toBe(5_000);
+    expect(config.mapLastKnownPositionMaxAgeMs).toBe(120_000);
+  });
+
+  it("holds the map's default area as west, south, east and north, a valid box (PBI-2.8)", () => {
+    const [west, south, east, north] = config.mapDefaultArea;
+    expect(config.mapDefaultArea).toHaveLength(4);
+    expect(west).toBeLessThan(east);
+    expect(south).toBeLessThan(north);
+    for (const latitude of [south, north]) {
+      expect(Math.abs(latitude)).toBeLessThanOrEqual(85);
+    }
+    for (const longitude of [west, east]) {
+      expect(Math.abs(longitude)).toBeLessThanOrEqual(180);
+    }
+  });
+
+  it("holds the contact the map's User-Agent names, the repository's address (PBI-2.8)", () => {
+    expect(config.mapUserAgentContact).toBe(
+      "https://github.com/factoincognito/what-mushroom-is-this",
+    );
+  });
+
   it("keeps each model's image limits in the image module's ImageLimits type", () => {
     const limits: ImageLimits = { maxEdge: 1568, maxTokens: 1568, patchSize: 28 };
     const model: ModelConfig = { id: "a-model", imageLimits: limits };
@@ -53,6 +85,7 @@ describe("config", () => {
       expect(Object.isFrozen(model.imageLimits)).toBe(true);
     }
     expect(Object.isFrozen(config.unlistedModelImageLimits)).toBe(true);
+    expect(Object.isFrozen(config.mapDefaultArea)).toBe(true);
   });
 
   it("holds no secret: no API key or token", () => {

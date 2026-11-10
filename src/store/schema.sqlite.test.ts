@@ -296,6 +296,19 @@ describe("the store's statements on a real SQLite", () => {
     expect(list.every((entry) => entry.readable)).toBe(true);
   });
 
+  it("lists each find with its position, or null without one, for the Library's map (PBI-2.8)", async () => {
+    const at = { latitude: 59.64, longitude: 17.08, accuracyM: 12, source: "fix" as const };
+    const placed = await store.add(newFind(2_000, at));
+    const unplaced = await store.add(newFind(1_000));
+    const list = await store.list();
+    expect(list.map((entry) => entry.readable && { id: entry.id, position: entry.position })).toEqual(
+      [
+        { id: placed, position: at },
+        { id: unplaced, position: null },
+      ],
+    );
+  });
+
   it("stores an answer, which the find and the list then show", async () => {
     const id = await store.add(newFind(1_000));
     await store.setAnswer(id, analysed, await sentPhoto(id));

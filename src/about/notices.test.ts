@@ -23,7 +23,23 @@ function valid(): Record<string, unknown> {
       { name: "b", version: null, licence: "MIT", source: "https://example.org/b", textId: null },
     ],
     texts: { app: "the terms", a: "MIT text" },
+    mapData: [
+      {
+        name: "OpenStreetMap",
+        credit: "© OpenStreetMap contributors",
+        licence: "ODbL 1.0",
+        url: "https://www.openstreetmap.org/copyright",
+      },
+    ],
   };
+}
+
+function firstMapData(notices: Record<string, unknown>): Record<string, unknown> {
+  const first = (notices.mapData as Record<string, unknown>[])[0];
+  if (first === undefined) {
+    throw new Error("the fixture has no map data");
+  }
+  return first;
 }
 
 /** `valid()` with one change made by `change`. */
@@ -103,6 +119,21 @@ describe("parseNotices", () => {
     [
       "a text that nothing uses",
       broken((n) => ((n.texts as Record<string, unknown>).z = "unused")),
+    ],
+    ["no map data (PBI-2.8)", broken((n) => delete n.mapData)],
+    ["map data that is not a list", broken((n) => (n.mapData = {}))],
+    ["no map data credits", broken((n) => (n.mapData = []))],
+    ["a map data credit that is not an object", broken((n) => (n.mapData = ["OSM"]))],
+    ["a map data credit without its credit", broken((n) => delete firstMapData(n).credit)],
+    ["a map data credit with an empty licence", broken((n) => (firstMapData(n).licence = ""))],
+    ["a map data credit with an unknown key", broken((n) => (firstMapData(n).logo = "x"))],
+    [
+      "a map data credit whose link is not https",
+      broken((n) => (firstMapData(n).url = "http://www.openstreetmap.org/copyright")),
+    ],
+    [
+      "two map data credits of one name",
+      broken((n) => (n.mapData = [firstMapData(n), { ...firstMapData(n) }])),
     ],
   ])("refuses %s", (_name, input) => {
     expect(() => parseNotices(input)).toThrow(NoticesError);
@@ -235,6 +266,15 @@ describe("the development tools in THIRD-PARTY-NOTICES.md against what is instal
   );
 });
 
+/** The notices' entry of the library named `name`. */
+function library(name: string) {
+  const found = NOTICES.libraries.find((entry) => entry.name === name);
+  if (found === undefined) {
+    throw new Error(`no library ${name} in the notices`);
+  }
+  return found;
+}
+
 describe("the licence texts", () => {
   const fromNpm = NOTICES.libraries.filter((entry) => npmPackage(entry.name) !== undefined);
 
@@ -277,7 +317,99 @@ describe("the licence texts", () => {
       "com.google.android.gms:play-services-base",
       "com.google.android.gms:play-services-basement",
       "com.google.android.gms:play-services-tasks",
+      "org.maplibre.gl:android-sdk-opengl",
+      "org.maplibre.gl:android-plugin-annotation-v9",
+      "org.maplibre.gl:android-plugin-scalebar-v9",
+      "org.maplibre.gl:android-sdk-turf",
+      "com.squareup.okhttp3:okhttp",
+      "com.squareup.okhttp3:okhttp-urlconnection",
+      "maplibre-gl-native-distribution",
     ]);
+  });
+
+  /**
+   * The Maven libraries MapLibre React Native's `android/build.gradle` asks for, its versions
+   * filled in from its `android/gradle.properties`, as app.json's plugin options leave them (only
+   * `locationEngine`, at its default; appConfig.test.ts), without Google's location engine, which
+   * that option leaves out, and without React Native and Kotlin, which come with the app.
+   */
+  function mapLibreMavenLibraries(): { name: string; version: string }[] {
+    const dir = join(MODULES, "@maplibre", "maplibre-react-native", "android");
+    const properties = new Map(
+      [
+        ...readFileSync(join(dir, "gradle.properties"), "utf8").matchAll(
+          /^org\.maplibre\.reactnative\.(\w+)=(.*)$/gm,
+        ),
+      ].map(([, key = "", value = ""]) => [key, value.trim()]),
+    );
+    const gradle = readFileSync(join(dir, "build.gradle"), "utf8");
+    const google = gradle.indexOf('if (getConfigurableExtOrDefault("locationEngine") == "google")');
+    const asked = gradle
+      // The module's own dependencies block, at the start of a line, not the buildscript's.
+      .slice(gradle.indexOf("\ndependencies {"), google)
+      .matchAll(/^\s*implementation\s*\(?\s*"([^":]+):([^":]+)(?::([^"]+))?"/gm);
+    return [...asked]
+      .map(([, group = "", artifact = "", version = ""]) => ({
+        name: `${group}:${artifact}`.replace(
+          /\$\{getConfigurableExtOrDefault\('(\w+)'\)\}/g,
+          (_whole, key: string) => properties.get(key) ?? `?${key}`,
+        ),
+        version: version.replace(
+          /\$\{getConfigurableExtOrDefault\('(\w+)'\)\}/g,
+          (_whole, key: string) => properties.get(key) ?? `?${key}`,
+        ),
+      }))
+      .filter(
+        ({ name }) =>
+          name !== "com.facebook.react:react-android" && name !== "org.jetbrains.kotlin:kotlin-stdlib",
+      );
+  }
+
+  it("list @maplibre/maplibre-react-native with the licence text its package ships (PBI-2.8)", () => {
+    expect(library("@maplibre/maplibre-react-native")).toMatchObject({
+      version: "11.5.1",
+      licence: "MIT",
+      textId: "@maplibre/maplibre-react-native",
+    });
+  });
+
+  it("name every Maven library MapLibre React Native's Android build file asks for, at its version (PBI-2.8)", () => {
+    const wanted = mapLibreMavenLibraries();
+    expect(wanted).toEqual([
+      { name: "org.maplibre.gl:android-sdk-opengl", version: "13.6.1" },
+      { name: "org.maplibre.gl:android-plugin-annotation-v9", version: "3.0.2" },
+      { name: "org.maplibre.gl:android-plugin-scalebar-v9", version: "3.0.2" },
+      { name: "org.maplibre.gl:android-sdk-turf", version: "6.0.1" },
+      { name: "com.squareup.okhttp3:okhttp", version: "4.12.0" },
+      { name: "com.squareup.okhttp3:okhttp-urlconnection", version: "4.12.0" },
+      { name: "androidx.vectordrawable:vectordrawable", version: "1.2.0" },
+      { name: "androidx.annotation:annotation", version: "1.9.1" },
+      { name: "androidx.appcompat:appcompat", version: "1.7.1" },
+    ]);
+    const record = readFileSync(join(ROOT, "THIRD-PARTY-NOTICES.md"), "utf8");
+    for (const { name, version } of wanted) {
+      const entry = NOTICES.libraries.find((candidate) => candidate.name === name);
+      expect(entry).toBeDefined();
+      // A library another one already asks for at another version keeps its row; the record
+      // names the version MapLibre asks for beside it (Gradle builds in one version of each).
+      if (entry?.version !== version) {
+        expect(record).toContain(`\`${name}\` ${version}`);
+      }
+    }
+  });
+
+  it("name the iOS MapLibre Native that MapLibre React Native's podspec asks for, at its version (PBI-2.8)", () => {
+    const podspec = readFileSync(
+      join(MODULES, "@maplibre", "maplibre-react-native", "MapLibreReactNative.podspec"),
+      "utf8",
+    );
+    const version = /\$MLRN_NATIVE_VERSION \|\|= "([^"]+)"/.exec(podspec)?.[1];
+    expect(version).toBe("6.31.0");
+    expect(podspec).toContain('url: "https://github.com/maplibre/maplibre-gl-native-distribution"');
+    expect(library("maplibre-gl-native-distribution")).toMatchObject({
+      version,
+      source: "https://github.com/maplibre/maplibre-gl-native-distribution",
+    });
   });
 
   /** play-services-location, and the Play services libraries its POM and theirs name. */
@@ -376,6 +508,47 @@ describe("the licence texts", () => {
     expect(gradle).toContain(`'${wanted}'`);
     const [name, version] = [wanted.slice(0, wanted.lastIndexOf(":")), wanted.split(":")[2]];
     expect(NOTICES.libraries.find((entry) => entry.name === name)?.version).toBe(version);
+  });
+});
+
+describe("the map data credits (SPEC 3.9, PBI-2.8)", () => {
+  const credit = (name: string) => NOTICES.mapData.find((entry) => entry.name === name);
+
+  it("credit OpenStreetMap, with a link to its copyright page", () => {
+    expect(credit("OpenStreetMap")).toMatchObject({
+      credit: "© OpenStreetMap contributors",
+      url: "https://www.openstreetmap.org/copyright",
+    });
+    expect(credit("OpenStreetMap")?.licence).toContain("ODbL");
+  });
+
+  it("credit OpenMapTiles, as it asks, and the CC BY 4.0 of its design", () => {
+    expect(credit("OpenMapTiles")?.credit).toBe("© OpenMapTiles");
+    expect(credit("OpenMapTiles")?.licence).toContain("CC BY 4.0");
+  });
+
+  it("credit OpenFreeMap's style, whose design is CC BY 4.0", () => {
+    const style = NOTICES.mapData.find((entry) => entry.name.startsWith("OpenFreeMap"));
+    expect(style?.licence).toContain("CC BY 4.0");
+    expect(style?.credit).toContain("OpenFreeMap");
+  });
+
+  it("are exactly those THIRD-PARTY-NOTICES.md records under Map data, in the same order", () => {
+    const recorded = tableRows("## Map data").map(([name = "", credit = "", licence = "", url = ""]) => ({
+      name: /^`([^`]+)`$/.exec(name)?.[1] ?? name,
+      credit,
+      licence,
+      url,
+    }));
+    expect(recorded.length).toBeGreaterThan(0);
+    expect(NOTICES.mapData).toEqual(recorded);
+  });
+
+  it("are not libraries: none of them is listed as one", () => {
+    const names = NOTICES.libraries.map((entry) => entry.name);
+    for (const entry of NOTICES.mapData) {
+      expect(names).not.toContain(entry.name);
+    }
   });
 });
 

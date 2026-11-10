@@ -193,6 +193,20 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
     },
   ],
   [
+    "the list gives each find's position, a photo find's and a text find's, or null (PBI-2.8)",
+    async (log) => {
+      const at = { latitude: 59.64, longitude: 17.08, accuracyM: 12, source: "fix" as const };
+      await log.add({ ...photoFind, position: at, time: { ...time, takenAtMs: 1_000 } });
+      await log.add({ ...photoFind, time: { ...time, takenAtMs: 2_000 } });
+      await log.addText({
+        ...textFind,
+        position: { ...at, accuracyM: null, source: "last-known" },
+        time: { ...time, takenAtMs: 3_000 },
+      });
+      return [await listView(log)];
+    },
+  ],
+  [
     "the most photos a find holds, and the refusals",
     async (log) => {
       const id = await log.addWithOpenBatch(photoFind);
@@ -231,6 +245,19 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
       expect.objectContaining({ batchOpen: false, batches: [1, 1] }),
       1,
       "wrong-state",
+    ]);
+  });
+
+  it("the position scenario sees the positions the store gives, not nothing (PBI-2.8)", async () => {
+    const scenario = scenarios.find(([name]) => name.startsWith("the list gives each find's position"));
+    if (scenario === undefined) {
+      throw new Error("no position scenario");
+    }
+    const [seen] = await scenario[1](await realStore());
+    expect((seen as { position: unknown }[]).map((entry) => entry.position)).toEqual([
+      { latitude: 59.64, longitude: 17.08, accuracyM: null, source: "last-known" },
+      null,
+      { latitude: 59.64, longitude: 17.08, accuracyM: 12, source: "fix" },
     ]);
   });
 
