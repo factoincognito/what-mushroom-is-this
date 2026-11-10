@@ -4,7 +4,7 @@ import { wikimediaConfig } from "./wikimedia";
 const ASCII_NO_SPACE = /^[\x21-\x7E]+$/;
 
 describe("wikimediaConfig (docs/SPEC.md 3.9, Known unknown 15; PBI-2.9)", () => {
-  it("asks only for Wikimedia's standard thumbnail widths, smallest first (Clead's decision 6)", () => {
+  it("asks only for Wikimedia's standard thumbnail widths, smallest first (SPEC 3.9)", () => {
     expect(wikimediaConfig.thumbnailWidths).toEqual([
       20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840,
     ]);
@@ -17,7 +17,7 @@ describe("wikimediaConfig (docs/SPEC.md 3.9, Known unknown 15; PBI-2.9)", () => 
     expect(wikimediaConfig.mediaHostSuffix).toBe(".wikimedia.org");
   });
 
-  it("names the repository and the library in the User-Agent, in ASCII (Clead's decision 5)", () => {
+  it("names the repository and the library in the User-Agent, in ASCII (SPEC Known unknown 15)", () => {
     expect(wikimediaConfig.userAgentContact).toBe(
       "https://github.com/factoincognito/what-mushroom-is-this",
     );
@@ -31,8 +31,10 @@ describe("wikimediaConfig (docs/SPEC.md 3.9, Known unknown 15; PBI-2.9)", () => 
     expect(wikimediaConfig.searchLimit).toBe(50);
   });
 
-  it("accepts the Creative Commons versions 2.0, 2.5, 3.0 and 4.0 (Clead's decision 3)", () => {
-    expect(wikimediaConfig.ccVersions).toEqual(["2.0", "2.5", "3.0", "4.0"]);
+  it("accepts every version of CC BY and CC BY-SA, and the ports not named by a country code (SPEC Known unknown 15, #72)", () => {
+    expect(wikimediaConfig.ccVersions).toEqual(["1.0", "2.0", "2.1", "2.5", "3.0", "4.0"]);
+    expect(wikimediaConfig.ccNamedPorts).toEqual(["igo", "scotland"]);
+    expect(Object.isFrozen(wikimediaConfig.ccNamedPorts)).toBe(true);
   });
 
   it("counts as public domain only templates that say they apply worldwide, and as CC0 Commons' own", () => {

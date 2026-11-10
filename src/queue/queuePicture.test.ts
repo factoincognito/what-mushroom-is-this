@@ -96,6 +96,20 @@ async function textFind(log: ReturnType<typeof memoryFindLog>, takenAtMs = 1_000
   return log.addText({ text: "A yellow funnel.", time: { ...time, takenAtMs }, position: null });
 }
 
+/**
+ * Counts the store's picks, and fails the run after 20 of them: a run that would take the same find
+ * without end then rejects, where it would otherwise never give the test back.
+ */
+function boundedPicks(log: ReturnType<typeof memoryFindLog>) {
+  const original = log.oldestWaiting.bind(log);
+  return jest.spyOn(log, "oldestWaiting").mockImplementation(async () => {
+    if (jest.mocked(log.oldestWaiting).mock.calls.length > 20) {
+      throw new Error("the run took the same find without end");
+    }
+    return original();
+  });
+}
+
 async function photoFind(log: ReturnType<typeof memoryFindLog>): Promise<number> {
   return log.add({ photoUri: "file:///cache/a.jpg", time, position: null });
 }
@@ -164,7 +178,7 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
     expect(t.queue.getState().pause).toBeNull();
   });
 
-  it("a fault on Wikimedia's side pauses the run with its own cause, and the picture is not asked for again before Retry-After (Clead's decision 5)", async () => {
+  it("a fault on Wikimedia's side pauses the run with its own cause, and the picture is not asked for again before Retry-After (SPEC 3.9, Fetching it)", async () => {
     const t = setup();
     await textFind(t.log);
     await photoFind(t.log);
@@ -262,6 +276,46 @@ describe("a run that brings a text answer (docs/SPEC.md 3.9)", () => {
       .spyOn(damaged.log, "setSelfCheck")
       .mockRejectedValueOnce(new StoreError("corrupt", "damaged"));
     await expect(damaged.queue.trigger()).rejects.toMatchObject({ code: "corrupt" });
+  });
+
+  it("does not take a damaged find again whose check waits beside an answer that names no species: it has no picture, and the run goes on (review of #71, note 2)", async () => {
+    const t = setup();
+    // Reachable only through a damaged file: a waiting check beside "cannot tell".
+    t.log.finds.set(1, {
+      id: 1,
+      text: "A yellow funnel.",
+      photos: [],
+      batchOpen: false,
+      time,
+      position: null,
+      analysis: { state: "done", answer: { result: "cannot_tell" }, model: MODEL, analysedAtMs: 1 },
+      addedPhotos: "analysed",
+      picture: null,
+      selfCheck: { state: "waiting" },
+    });
+    await photoFind(t.log);
+    const picks = boundedPicks(t.log);
+    await t.queue.trigger();
+    expect(t.events).toEqual(["analyse photos"]);
+    expect((await t.log.getStored(1))?.selfCheck).toEqual({ state: "no-picture" });
+    expect(picks.mock.calls.length).toBeLessThan(5);
+  });
+
+  it("ends the run, and does not loop, when the store keeps giving a find whose picture it would not store", async () => {
+    const t = setup();
+    const text = await textFind(t.log);
+    // The picture is refused as stale every time, and the store still picks the find.
+    jest
+      .spyOn(t.log, "setPicture")
+      .mockRejectedValue(new StoreError("wrong-state", "the check changed meanwhile"));
+    const picks = boundedPicks(t.log);
+    await t.queue.trigger();
+    expect(t.events).toEqual(["analyse text", `picture Cantharellus cibarius ${MODEL}`]);
+    expect(picks.mock.calls.length).toBeLessThan(5);
+    expect((await t.log.getStored(text))?.picture).toBeNull();
+    // The next run tries it again, once.
+    await t.queue.trigger();
+    expect(t.events.filter((event) => event.startsWith("picture"))).toHaveLength(2);
   });
 
   it("rejects the run with an error of the fetch that is not Wikimedia's, leaving the check waiting", async () => {

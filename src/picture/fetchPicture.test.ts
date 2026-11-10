@@ -200,7 +200,7 @@ describe("a picture found (docs/SPEC.md 3.9)", () => {
     expect(t.removed).toEqual(["file:///cache/copy-1.jpg"]);
   });
 
-  it("sends its requests one at a time, each a GET with the app's User-Agent and gzip (Clead's decision 5)", async () => {
+  it("sends its requests one at a time, each a GET with the app's User-Agent and gzip (SPEC Known unknown 15)", async () => {
     const t = setup();
     await fetchPicture(NAME, HIGH_TIER_MODEL, t.deps);
     expect(t.mostActive()).toBe(1);
@@ -427,7 +427,7 @@ describe("Wikimedia's failures, classed (docs/SPEC.md 3.9, Fetching it)", () => 
   });
 
   it.each(steps)(
-    "at the %s: a 429 makes the picture wait until its Retry-After (Clead's decision 5)",
+    "at the %s: a 429 makes the picture wait until its Retry-After (SPEC 3.9, Fetching it)",
     async (step) => {
       const t = setup({ [step]: { status: 429, headers: { "Retry-After": "30" }, text: "" } });
       await expect(fetchPicture(NAME, HIGH_TIER_MODEL, t.deps)).resolves.toEqual({
@@ -519,13 +519,15 @@ describe("Wikimedia's failures, classed (docs/SPEC.md 3.9, Fetching it)", () => 
   });
 
   it.each(["search", "entities", "fileinfo", "thumb"] as const)(
-    "at the %s: an answer that is not JSON gives no picture",
+    "at the %s: a status-200 answer that is not JSON, such as a Wi-Fi sign-in page, counts as no network: the picture waits (Clead, #71)",
     async (step) => {
       const t = setup({ [step]: { status: 200, text: "<html>Wi-Fi sign-in</html>" } });
       await expect(fetchPicture(NAME, HIGH_TIER_MODEL, t.deps)).resolves.toEqual({
-        kind: "none",
-        reason: "answer",
+        kind: "waits",
+        cause: "network",
+        retryAtMs: null,
       });
+      expect(t.steps().at(-1)).toBe(step);
     },
   );
 

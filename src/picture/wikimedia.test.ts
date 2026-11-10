@@ -141,7 +141,7 @@ describe("readSearch", () => {
   });
 });
 
-describe("chooseImageFile (Clead's decisions 1 and 2)", () => {
+describe("chooseImageFile (docs/SPEC.md Known unknown 15, settled for PBI-2.9)", () => {
   it("takes the species item's image", () => {
     expect(chooseImageFile(entitiesChanterelle, ["Q1001"], "Cantharellus cibarius")).toEqual({
       ok: true,
@@ -157,13 +157,34 @@ describe("chooseImageFile (Clead's decisions 1 and 2)", () => {
     });
   });
 
-  it("takes the first of the search's order when two have as many sitelinks", () => {
+  it("filters by the image before it counts sitelinks: a species item with more sitelinks and only a deprecated image is not taken (review of #71, fix 1)", () => {
+    // Q1102: of species rank, 7 sitelinks, only a deprecated P18; Q1103: 5 sitelinks, an image.
+    expect(chooseImageFile(entitiesHomonyms, ["Q1102", "Q1103"], "Amanita virosa")).toEqual({
+      ok: true,
+      file: "Most sitelinks.jpg",
+    });
+  });
+
+  it("gives no picture on a tie for the most sitelinks, whatever the search's order", () => {
     const answer = changed(entitiesHomonyms, (copy) => {
       copy.entities.Q1104.sitelinks = copy.entities.Q1103.sitelinks as never;
     });
-    expect(chooseImageFile(answer, ["Q1104", "Q1103"], "Amanita virosa")).toEqual({
+    for (const ids of [
+      ["Q1104", "Q1103"],
+      ["Q1103", "Q1104"],
+      ["Q1102", "Q1103", "Q1104"],
+    ]) {
+      expect(chooseImageFile(answer, ids, "Amanita virosa")).toEqual({ ok: false, reason: "tie" });
+    }
+  });
+
+  it("is not tied by an item with as many sitelinks and no image", () => {
+    const answer = changed(entitiesHomonyms, (copy) => {
+      copy.entities.Q1102.sitelinks = copy.entities.Q1103.sitelinks as never;
+    });
+    expect(chooseImageFile(answer, ["Q1102", "Q1103"], "Amanita virosa")).toEqual({
       ok: true,
-      file: "Fewer sitelinks.jpg",
+      file: "Most sitelinks.jpg",
     });
   });
 
@@ -242,7 +263,7 @@ describe("chooseImageFile (Clead's decisions 1 and 2)", () => {
   });
 });
 
-describe("readFileInfo (Clead's decisions 3 and 4)", () => {
+describe("readFileInfo (docs/SPEC.md 3.9 and Known unknown 15: licence and author)", () => {
   it("reads the size, the original's address, the page, the author as text and the licence to credit", () => {
     expect(readFileInfo(fileInfoChanterelle)).toEqual({
       ok: true,
@@ -428,7 +449,7 @@ describe("isMediaUrl", () => {
   });
 });
 
-describe("plainText (Clead's decision 4: Artist, its HTML stripped to text)", () => {
+describe("plainText (docs/SPEC.md 3.9: the author as text, from Artist's HTML)", () => {
   it.each([
     ["Ann Exempel", "Ann Exempel"],
     ['<a href="//commons.wikimedia.org/wiki/User:X">X&nbsp;Y</a>', "X Y"],
@@ -441,7 +462,7 @@ describe("plainText (Clead's decision 4: Artist, its HTML stripped to text)", ()
   });
 });
 
-describe("pictureUserAgent (Clead's decision 5)", () => {
+describe("pictureUserAgent (docs/SPEC.md Known unknown 15: a User-Agent that names the app)", () => {
   it("names the app and its version from app.json, the repository and the library", () => {
     expect(pictureUserAgent({ name: "Washroom", version: "0.1.0" })).toBe(
       "Washroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",

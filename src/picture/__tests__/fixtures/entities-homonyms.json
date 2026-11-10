@@ -80,9 +80,28 @@
             "type": "statement",
             "rank": "normal"
           }
+        ],
+        "P18": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P18",
+              "datavalue": { "value": "Deprecated image.jpg", "type": "string" }
+            },
+            "type": "statement",
+            "rank": "deprecated"
+          }
         ]
       },
-      "sitelinks": {}
+      "sitelinks": {
+        "a": { "site": "a" },
+        "b": { "site": "b" },
+        "c": { "site": "c" },
+        "d": { "site": "d" },
+        "e": { "site": "e" },
+        "f": { "site": "f" },
+        "g": { "site": "g" }
+      }
     },
     "Q1103": {
       "type": "item",
