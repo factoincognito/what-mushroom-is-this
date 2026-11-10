@@ -415,8 +415,8 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   photos stay waiting and the queue takes the find again at its next run.
   Any other class marks them as not yet analysed, and they are analysed
   only when the user asks. Either way the find keeps its answer, as 3.3
-  says (**[Clead]**). Two cases outside 3.3's classes leave the photos
-  waiting, as they leave a find without an answer (3.2, 3.3;
+  says (**[Clead]**). Even so, two cases leave the photos waiting, as
+  they leave a find without an answer (3.2, 3.3;
   **[Clead]**, 2026-11-10, #57):
   - there is no key;
   - the queue stops with an internal error, including the stop after two
