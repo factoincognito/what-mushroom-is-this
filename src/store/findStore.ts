@@ -890,10 +890,16 @@ function readFind(row: Row, photos: PhotoFiles): Find {
   return { id, photoUri: first.uri, time, position, analysis };
 }
 
-/** Everything the store holds of a find, each column checked against what the store writes. */
+/**
+ * Everything the store holds of a find, each column checked against what the store writes. A find
+ * past the limits the store keeps when it writes, more photos than `config.maxPhotosPerFind` or a
+ * text past `config.lookupTextMaxLength`, which only a damaged file can hold, is one the store
+ * cannot read, so the queue passes it over rather than stop at it every run (PBI-2.14, PBI-2.16).
+ * The limits are checked here and not in `readPhotos`, which the writes also use.
+ */
 function readStored(row: Row, photos: PhotoFiles): StoredFind {
   const id = idOf(row);
-  const text = row.text === null ? null : nonEmptyTextOf(row, "text");
+  const text = row.text === null ? null : readFindText(row);
   const batches = integerOf(row, "batches");
   const found = readPhotos(row, batches).map(({ name, batch }) => ({
     uri: photos.uriOf(name),
@@ -901,6 +907,9 @@ function readStored(row: Row, photos: PhotoFiles): StoredFind {
   }));
   if (text === null && found.length === 0) {
     throw corrupt(`find ${id} has neither text nor a photo`);
+  }
+  if (found.length > config.maxPhotosPerFind) {
+    throw corrupt(`find ${id} holds more photos than a find may`);
   }
   const batchOpen = flagOf(row, "batch_open");
   const analysis = readAnalysis(row);
@@ -923,6 +932,18 @@ function readStored(row: Row, photos: PhotoFiles): StoredFind {
     picture: readPicture(row, selfCheck, photos),
     selfCheck,
   };
+}
+
+/**
+ * The find's text: not blank, and at most `config.lookupTextMaxLength` code points, counted as
+ * `checkNewTextFind` counts the text it saves (PBI-2.14, note 1).
+ */
+function readFindText(row: Row): string {
+  const text = nonEmptyTextOf(row, "text");
+  if ([...text].length > config.lookupTextMaxLength) {
+    throw corrupt("the stored text is longer than a lookup takes");
+  }
+  return text;
 }
 
 /** The stored photo list: `{"file", "batch"}` objects, their batches in order, none past `batches`. */
@@ -1127,14 +1148,30 @@ function readTime(row: Row): FindTime {
   };
 }
 
+/**
+ * The position, its latitude within 90 degrees and its longitude within 180, as `checkPosition`
+ * and the schema's CHECKs keep them, so that a coordinate past them, which only a damaged file
+ * can hold, never reaches the map, which would wrap such a longitude onto the Earth (PBI-2.16,
+ * #68).
+ */
 function readPosition(row: Row): Position | null {
-  const { latitude, longitude, accuracy_m, position_source } = row;
-  if (latitude === null && longitude === null && accuracy_m === null && position_source === null) {
+  const { accuracy_m, position_source } = row;
+  if (
+    row.latitude === null &&
+    row.longitude === null &&
+    accuracy_m === null &&
+    position_source === null
+  ) {
     return null;
   }
+  const latitude = numberOf(row, "latitude");
+  const longitude = numberOf(row, "longitude");
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    throw corrupt("the stored position is past the range of latitudes or longitudes");
+  }
   return {
-    latitude: numberOf(row, "latitude"),
-    longitude: numberOf(row, "longitude"),
+    latitude,
+    longitude,
     accuracyM: accuracy_m === null ? null : numberOf(row, "accuracy_m"),
     source: enumOf(row, "position_source", POSITION_SOURCES),
   };
