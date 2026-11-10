@@ -548,6 +548,8 @@ function setUpLookup(
     storedPhotos?: number;
     /** How many times the camera is closed without a photo before it gives one. */
     cancelCamera?: number;
+    /** Runs while the camera is open, before it gives its photo (its number, from 1). */
+    whileCameraOpen?: (shot: number) => void;
   } = {},
 ) {
   const location = options.location;
@@ -613,6 +615,7 @@ function setUpLookup(
             return { kind: "canceled" };
           }
           cameraShots += 1;
+          options.whileCameraOpen?.(cameraShots);
           return photo(`file:///cache/camera-${cameraShots}.jpg`);
         },
       },
@@ -1166,6 +1169,108 @@ describe("removing a photo from an unsaved photo lookup (Clead's decision on #61
         time: phoneTimeNow(new Date(NOW_MS + 2 * 60_000)),
       }),
     ]);
+  });
+
+  it("gives the new first photo after the last was removed the fix that comes while the camera is open, not the earlier photo's (review fix 1 on #61)", async () => {
+    const location = new FakeLocation();
+    const { flow, log } = setUpLookup({
+      location,
+      cancelCamera: 1,
+      whileCameraOpen: (shot) => {
+        if (shot === 2) {
+          location.send(60.5, 18.5, 5);
+        }
+      },
+    });
+    await flow.start();
+    await flow.takePhoto();
+    // The first photo's wait for its fix settles on fix A.
+    location.send(59.66, 17.1, 9);
+    await settle();
+    flow.askToRemove(1);
+    flow.discardPending();
+    await flow.takePhoto();
+    await flow.setSave(true);
+    expect(log.added).toEqual([
+      expect.objectContaining({
+        photoUri: "file:///cache/camera-2.jpg",
+        position: { latitude: 60.5, longitude: 18.5, accuracyM: 5, source: "fix" },
+      }),
+    ]);
+    expect(log.positions).toEqual([]);
+  });
+
+  it("goes on asking for the new first photo's position for up to 30 seconds, and adds the fix that comes (review fix 1 on #61)", async () => {
+    jest.useFakeTimers();
+    const location = new FakeLocation();
+    const { flow, log } = setUpLookup({ location, cancelCamera: 1 });
+    await flow.start();
+    await flow.takePhoto();
+    // No fix comes for the first photo: its wait ends after 30 seconds.
+    jest.advanceTimersByTime(30_000);
+    await settle();
+    flow.askToRemove(1);
+    flow.discardPending();
+    await flow.takePhoto();
+    await flow.setSave(true);
+    expect(log.added).toEqual([
+      expect.objectContaining({ photoUri: "file:///cache/camera-2.jpg", position: null }),
+    ]);
+    jest.advanceTimersByTime(29_000);
+    location.send(60.5, 18.5, 5);
+    await settle();
+    expect(log.positions).toEqual([
+      [1, { latitude: 60.5, longitude: 18.5, accuracyM: 5, source: "fix" }],
+    ]);
+  });
+
+  it("does not give the new first photo a fix older than two minutes (review fix 1 on #61)", async () => {
+    const location = new FakeLocation();
+    const { flow, log } = setUpLookup({ location, cancelCamera: 1 });
+    await flow.start();
+    location.send(59.66, 17.1, 9);
+    await flow.takePhoto();
+    flow.askToRemove(1);
+    flow.discardPending();
+    // The phone's last known position is that fix, now more than two minutes old.
+    location.lastKnownReply = {
+      coords: { latitude: 59.66, longitude: 17.1, accuracy: 9 },
+      timestamp: NOW_MS,
+    };
+    await flow.takePhoto();
+    await flow.setSave(true);
+    expect(location.lastKnownAsked).toContain(120_000);
+    expect(log.added).toEqual([
+      expect.objectContaining({ photoUri: "file:///cache/camera-2.jpg", position: null }),
+    ]);
+    expect(log.positions).toEqual([]);
+  });
+
+  it("removes the copies of the photos discarded after a save that failed partway, though a find was made (review note on #61)", async () => {
+    const { flow, log, removed } = setUpLookup();
+    await flow.start();
+    await flow.takePhoto();
+    await flow.takePhoto();
+    log.failNext.push(false, false, true);
+    await flow.setSave(true);
+    flow.askToDiscard();
+    flow.discardPending();
+    flow.close();
+    expect(log.photosAdded).toEqual([[1, "file:///cache/camera-2.jpg"]]);
+    expect(removed).toEqual(["file:///cache/camera-3.jpg"]);
+  });
+
+  it("removes the copies of held photos discarded after a failed save, also once a later photo made a find (review note on #61)", async () => {
+    const { flow, log, removed } = setUpLookup();
+    await flow.start();
+    log.failNext.push(true);
+    await flow.setSave(true);
+    flow.askToDiscard();
+    flow.discardPending();
+    await flow.takePhoto();
+    expect(log.added.map((find) => find.photoUri)).toEqual(["file:///cache/camera-2.jpg"]);
+    flow.close();
+    expect(removed).toEqual(["file:///cache/camera-1.jpg"]);
   });
 
   it("removes each copy once: the one removed is not removed again when the screen is left", async () => {
