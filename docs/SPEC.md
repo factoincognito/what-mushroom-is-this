@@ -512,8 +512,9 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
-  Commons are shown with it, as its licence requires (**[Clead]**). A
-  file whose author Wikimedia does not give in machine-readable form is
+  Commons are shown with it, as its licence requires (**[Clead]**), and
+  the file's own attribution text when it gives one, beside the author
+  (**[Clead]**, 2026-11-10, #71's review). A file whose author Wikimedia does not give in machine-readable form is
   not used: there is no picture, and the find says it could not be
   checked (Adam, 2026-11-10 00:10, approving Clead's proposal).
 - On a saved find it is stored with the find, apart from its photos: it
@@ -525,8 +526,10 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   IP address (**[Clead]**).
 - Fetching it (**[Clead]**):
   - no network, a time limit, 429 or 5xx from Wikimedia, or an API
-    error whose code is `ratelimited`, `maxlag` or `readonly`
-    (**[Clead]**, 2026-11-10, #71): the picture, and so the
+    error whose code is `ratelimited`, `maxlag` or `readonly`, or an API
+    answer with status 200 that is not JSON, such as a network's sign-in
+    page, as 3.3 treats one (**[Clead]**, 2026-11-10, #71): the picture,
+    and so the
     check, wait; on a saved find the queue tries again at its next run,
     and an unsaved lookup's screen offers "Check again";
   - no Wikidata item, no image, a licence the IP policy does not allow
