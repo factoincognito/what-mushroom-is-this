@@ -81,6 +81,8 @@ All notable changes to What mushroom is this? are documented here.
 - The Library replaces the Log as the start screen: the finds with
   species, year and month filters, held while the app runs; a text find
   without photos shows a text mark (#63).
+- Photos from the phone's files, beside the camera and the gallery: images
+  only, with no time or position of their own (#66).
 
 ## Project created
 
