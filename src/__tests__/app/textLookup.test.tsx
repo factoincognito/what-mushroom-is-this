@@ -299,13 +299,24 @@ describe("opening the text lookup (SPEC 3.9, Lookups)", () => {
    * take it: the field lets its text grow to at most its `maxLength`, counted in UTF-16 units, and
    * refuses the rest of what is typed or pasted; when it is full it refuses all of it, and the
    * screen hears nothing. The test renderer does not apply `maxLength` by itself.
+   *
+   * With `selected`, the insertion replaces that many UTF-16 units from `at`, a selection, whose
+   * units the field counts as free. The field takes no half of a character of two units; when it
+   * then has room for nothing of the insertion it refuses the change whole, the selection staying
+   * (as React Native 0.86.3's iOS handler reads, `textInputShouldChangeText`).
    */
-  async function putInOnThePhone(inserted: string, at?: number): Promise<void> {
+  async function putInOnThePhone(inserted: string, at?: number, selected = 0): Promise<void> {
     const held: string = field().props.value;
     const place = at ?? held.length;
-    const taken = inserted.slice(0, Math.max(0, field().props.maxLength - held.length));
+    const room = Math.max(0, field().props.maxLength - (held.length - selected));
+    const cut = inserted.slice(0, room);
+    const halved = cut.length < inserted.length && /[\uD800-\uDBFF]$/.test(cut);
+    const taken = halved ? cut.slice(0, -1) : cut;
     if (taken !== "") {
-      await fireEvent.changeText(field(), held.slice(0, place) + taken + held.slice(place));
+      await fireEvent.changeText(
+        field(),
+        held.slice(0, place) + taken + held.slice(place + selected),
+      );
     }
   }
   const counted = (count: number) =>
@@ -353,6 +364,79 @@ describe("opening the text lookup (SPEC 3.9, Lookups)", () => {
     expect(field()).toHaveProp("maxLength", 2001);
     await putInOnThePhone("b", 0);
     expect(field()).toHaveProp("value", `${"a".repeat(1999)}🍄`);
+  });
+
+  // Ten characters short of the limit the field has room for 20 UTF-16 units, so it takes 20
+  // pasted letters, ten more than the description has room for.
+  const NEARLY_FULL = "a".repeat(1000) + "z".repeat(990);
+
+  it.each([
+    ["in the middle", 1000, `${"a".repeat(1000)}${"b".repeat(10)}${"z".repeat(990)}`],
+    ["at the start", 0, `${"b".repeat(10)}${NEARLY_FULL}`],
+    ["at the end", 1990, `${NEARLY_FULL}${"b".repeat(10)}`],
+  ])(
+    "cuts a paste %s that is too long for a nearly full description, and keeps all of the description (review of #89, note 1)",
+    async (_, at, kept) => {
+      await openLookup();
+      await putInOnThePhone(NEARLY_FULL);
+      expect(field()).toHaveProp("maxLength", 2010);
+      await putInOnThePhone("b".repeat(30), at);
+      expect(field()).toHaveProp("value", kept);
+      expect(screen.getByText(counted(2000))).toBeOnTheScreen();
+      expect(field()).toHaveProp("maxLength", 2000);
+    },
+  );
+
+  it("cuts a paste of letters and emoji, too long for a nearly full description, at a whole emoji, and keeps all of the description", async () => {
+    await openLookup();
+    await putInOnThePhone(NEARLY_FULL);
+    // The field's room of 20 units takes the five letters and seven emoji whole, twelve
+    // characters; the description has room for ten.
+    await putInOnThePhone(`bbbbb${"🍄".repeat(10)}`, 1000);
+    expect(field()).toHaveProp(
+      "value",
+      `${"a".repeat(1000)}bbbbb${"🍄".repeat(5)}${"z".repeat(990)}`,
+    );
+    expect(screen.getByText(counted(2000))).toBeOnTheScreen();
+  });
+
+  it("cuts the paste, not the description, when a paste over a selection is too long for it", async () => {
+    await openLookup();
+    await putInOnThePhone(NEARLY_FULL);
+    // The five selected letters go; the field's room is then 25 units, the description's 15.
+    await putInOnThePhone("b".repeat(30), 1000, 5);
+    expect(field()).toHaveProp("value", `${"a".repeat(1000)}${"b".repeat(15)}${"z".repeat(985)}`);
+    expect(screen.getByText(counted(2000))).toBeOnTheScreen();
+  });
+
+  it("at the limit, takes the first of two letters pasted over a selected emoji, and keeps the rest of the description", async () => {
+    await openLookup();
+    await putInOnThePhone(`${"a".repeat(1000)}🍄${"z".repeat(999)}`);
+    expect(screen.getByText(counted(2000))).toBeOnTheScreen();
+    // The emoji's two units make room in the field for both letters, one character too many.
+    await putInOnThePhone("xy", 1000, 2);
+    expect(field()).toHaveProp("value", `${"a".repeat(1000)}x${"z".repeat(999)}`);
+    expect(screen.getByText(counted(2000))).toBeOnTheScreen();
+  });
+
+  it("at the limit, the field still refuses an emoji put in over a selected letter, and the description stays as it was", async () => {
+    const full = "a".repeat(1000) + "z".repeat(1000);
+    await openLookup();
+    await putInOnThePhone(full);
+    // One free unit in the field is half an emoji: the field's count stops it, not the flow.
+    await putInOnThePhone("🍄", 1000, 1);
+    expect(field()).toHaveProp("value", full);
+    // A letter over the same selection fits.
+    await putInOnThePhone("b", 1000, 1);
+    expect(field()).toHaveProp("value", `${"a".repeat(1000)}b${"z".repeat(999)}`);
+  });
+
+  it("cuts nothing of a paste that fits, in the middle of a description below the limit", async () => {
+    await openLookup();
+    await putInOnThePhone(NEARLY_FULL);
+    await putInOnThePhone("🍄bbbbbbbb", 1000);
+    expect(field()).toHaveProp("value", `${"a".repeat(1000)}🍄bbbbbbbb${"z".repeat(990)}`);
+    expect(screen.getByText(counted(1999))).toBeOnTheScreen();
   });
 
   it("does not analyse an empty description, and says so", async () => {

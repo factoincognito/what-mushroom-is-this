@@ -96,10 +96,47 @@ export function lookupSelfCheck(outcome: TextLookupOutcome | null): SelfCheck | 
  * still free: it never stops a text the counter still has room for, and at the limit it is full
  * and takes no more, wherever in the text the user types (Clead's decision on #89). Short of the
  * limit it can let through more characters than are free, when they take one unit each; those
- * `setText` cuts.
+ * `setText` cuts, from what was put in (`cutDescription`).
  */
 export function lookupFieldMaxLength(text: string, maxCodePoints: number): number {
   return text.length + 2 * (maxCodePoints - [...text].length);
+}
+
+/**
+ * `given`, the description as the text field gives it after a change to `held`, cut to
+ * `maxCodePoints` characters when it is longer. What is over the limit goes from what was put in,
+ * not from the text the user already had (review of #89, note 1): the two texts are compared for
+ * their common start and common end, the part of `given` between them is what was put in, and it
+ * loses its last characters. The texts are compared and cut by code point, so no character of two
+ * UTF-16 units is halved.
+ *
+ * Where the letters put in are the same as their neighbours, the comparison cannot tell which of
+ * them were put in; the text outside the user's selection is kept whole either way. A `held` that
+ * is itself over the limit, which `setText` never holds, loses what was put in and then its end.
+ */
+export function cutDescription(held: string, given: string, maxCodePoints: number): string {
+  const after = [...given];
+  const surplus = after.length - maxCodePoints;
+  if (surplus <= 0) {
+    return given;
+  }
+  const before = [...held];
+  const shorter = Math.min(before.length, after.length);
+  let start = 0;
+  while (start < shorter && before[start] === after[start]) {
+    start += 1;
+  }
+  let end = 0;
+  while (
+    end < shorter - start &&
+    before[before.length - 1 - end] === after[after.length - 1 - end]
+  ) {
+    end += 1;
+  }
+  // What was put in is `after` from `start` up to `putInEnd`.
+  const putInEnd = after.length - end;
+  const keptEnd = Math.max(start, putInEnd - surplus);
+  return [...after.slice(0, keptEnd), ...after.slice(putInEnd)].slice(0, maxCodePoints).join("");
 }
 
 export interface TextLookupView {
@@ -216,9 +253,12 @@ export class TextLookupFlow {
     this.show({ phase: "ready", save, location });
   }
 
-  /** The description as typed, cut to the configured number of code points. */
+  /**
+   * The description as the field gives it, cut to the configured number of code points; what is
+   * over it goes from what was put in, not from the description held (`cutDescription`).
+   */
   setText(text: string): void {
-    const kept = [...text].slice(0, this.deps.appConfig.lookupTextMaxLength).join("");
+    const kept = cutDescription(this.view.text, text, this.deps.appConfig.lookupTextMaxLength);
     if (kept === this.view.text) {
       return;
     }
