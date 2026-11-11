@@ -2,7 +2,7 @@
 
 All notable changes to What mushroom is this? are documented here.
 
-## [Unreleased]
+## [0.2.0]
 
 ### Added
 
