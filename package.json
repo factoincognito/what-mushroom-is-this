@@ -1,6 +1,6 @@
 {
   "name": "what-mushroom-is-this",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Give a forager a quick best assessment of a mushroom from a photo, and a private log of their finds",
   "private": true,
   "main": "expo-router/entry",

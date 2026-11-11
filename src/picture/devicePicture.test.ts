@@ -30,7 +30,7 @@ beforeEach(() => {
 describe("devicePictureDeps (PBI-2.9)", () => {
   it("names the app as app.json does, in the User-Agent", () => {
     expect(devicePictureDeps().userAgent).toBe(
-      "Wushroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
+      "Wushroom/0.2.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
     );
     expect(devicePictureDeps({ name: "Wushroom" }).userAgent).toBeNull();
   });
@@ -115,7 +115,7 @@ describe("devicePictureDeps (PBI-2.9)", () => {
       method: "GET",
       headers: {
         "User-Agent":
-          "Wushroom/0.1.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
+          "Wushroom/0.2.0 (https://github.com/factoincognito/what-mushroom-is-this) expo-fetch",
       },
     });
   });
