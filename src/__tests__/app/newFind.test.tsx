@@ -1004,6 +1004,33 @@ describe("adding photos to a find from its screen (SPEC 3.9, Batches; PBI-2.5)",
     expect(mockLog.added).toEqual([]);
     expect(screen.getByText(photoCount(2))).toBeOnTheScreen();
   });
+
+  /**
+   * The titles of the screens' headers, the Library's first. Under Jest the native stack's header
+   * is not drawn as text: its title is a prop of the header's configuration element.
+   */
+  function headerTitles(): string[] {
+    return screen.container
+      .queryAll((node) => node.type === "RNSScreenStackHeaderConfig")
+      .map((node) => String(node.props.title));
+  }
+
+  it("is titled Add photos, where a new photo lookup is titled New find (PBI-2.16, Crog on #57)", async () => {
+    expect(en.newFind.addTitle).not.toBe(en.newFind.title);
+    mockLog.stored.set(7, storedFind(7, 1));
+    await openAddTo(7);
+    expect(headerTitles()).toEqual([en.log.title, en.newFind.addTitle]);
+    await screen.unmount();
+    await openNewFind();
+    expect(headerTitles()).toEqual([en.log.title, en.newFind.title]);
+  });
+
+  it.each(["sv", "it"] as const)("is titled Add photos in %s", async (lang) => {
+    phoneIn(lang);
+    mockLog.stored.set(7, storedFind(7, 1));
+    await openAddTo(7);
+    expect(headerTitles()).toEqual([STRINGS[lang].log.title, STRINGS[lang].newFind.addTitle]);
+  });
 });
 
 /** A file the phone's files give, copied to the app's cache, with a date it was last changed. */

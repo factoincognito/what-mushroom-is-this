@@ -156,11 +156,14 @@ const NOW_MS = Date.UTC(2026, 10, 9, 12, 0, 0);
 /** Stands in for the phone's location service: fixes are sent by the test. */
 class FakeLocation implements LocationSource {
   onFix: ((fix: unknown) => void) | null = null;
+  /** The watches started, and those of them stopped. */
+  watches = 0;
   stops = 0;
   lastKnownAsked: number[] = [];
   lastKnownReply: unknown = null;
 
   async watch(onFix: (fix: unknown) => void): Promise<() => void> {
+    this.watches += 1;
     this.onFix = onFix;
     return () => {
       this.stops += 1;
@@ -1277,6 +1280,34 @@ describe("removing a photo from an unsaved photo lookup (Clead's decision on #61
       expect.objectContaining({ photoUri: "file:///cache/camera-2.jpg", position: null }),
     ]);
     expect(log.positions).toEqual([]);
+  });
+
+  it("stops the earlier first photo's watch before the camera opens for the new first photo, whose own watch is the only one left, stopped when the screen closes (PBI-2.16, note 1 of round 2 on #61)", async () => {
+    const location = new FakeLocation();
+    /** The watches started and stopped while the camera is open for each photo. */
+    const whileOpen: { shot: number; watches: number; stops: number }[] = [];
+    const { flow } = setUpLookup({
+      location,
+      cancelCamera: 1,
+      whileCameraOpen: (shot) => {
+        whileOpen.push({ shot, watches: location.watches, stops: location.stops });
+      },
+    });
+    await flow.start();
+    // The first photo takes the fix at once, so nothing has stopped its watch.
+    location.send(59.66, 17.1, 9);
+    await flow.takePhoto();
+    expect({ watches: location.watches, stops: location.stops }).toEqual({ watches: 1, stops: 0 });
+    flow.askToRemove(1);
+    flow.discardPending();
+    await flow.takePhoto();
+    expect(whileOpen).toEqual([
+      { shot: 1, watches: 1, stops: 0 },
+      { shot: 2, watches: 2, stops: 1 },
+    ]);
+    flow.close();
+    await settle();
+    expect({ watches: location.watches, stops: location.stops }).toEqual({ watches: 2, stops: 2 });
   });
 
   it("removes the copies of the photos discarded after a save that failed partway, though a find was made (review note on #61)", async () => {

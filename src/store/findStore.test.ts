@@ -1424,7 +1424,11 @@ describe("get", () => {
 
   it.each<[string, Record<string, unknown>]>([
     ["a result", row({ result: "match" })],
-    ["a name", row({ name_en: "Chanterelle" })],
+    // Each name column by itself, and all three (PBI-2.16, the notes on #87).
+    ["a Swedish name", row({ name_sv: "Kantarell" })],
+    ["an English name", row({ name_en: "Chanterelle" })],
+    ["an Italian name", row({ name_it: "Gallinaccio" })],
+    ["every name", row({ name_sv: "Kantarell", name_en: "Chanterelle", name_it: "Gallinaccio" })],
     ["an edibility", row({ edibility: "edible" })],
     [
       "an edibility, failed",

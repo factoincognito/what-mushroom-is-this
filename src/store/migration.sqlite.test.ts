@@ -386,6 +386,36 @@ describe("the migration to schema version 2, on a version 1 database (PBI-2.2)",
     });
   });
 
+  // The three levels written out, not taken from the code that reads them.
+  it.each(["low", "medium", "high"] as const)(
+    "keeps a Phase 1 find whose level is %s through both migrations: its confidence columns as they were, and read with its level by get, getStored and the list (PBI-2.16, the notes on #81)",
+    async (level) => {
+      await versionOne();
+      const answer: Match = { ...match, confidence: level };
+      const id = insertV1({ ...base("a.jpg", 1_000), ...done(answer) });
+      photos.files.add("a.jpg");
+      const store = await open();
+      expect(sqlite.prepare("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+      expect(
+        sqlite
+          .prepare("SELECT confidence, confidence_score, answer_basis FROM finds WHERE id = ?")
+          .get(id),
+      ).toEqual({ confidence: level, confidence_score: null, answer_basis: "photos" });
+      await expect(store.get(id)).resolves.toMatchObject({ analysis: { state: "done", answer } });
+      await expect(store.getStored(id)).resolves.toMatchObject({
+        analysis: { state: "done", answer },
+        answerBasis: "photos",
+      });
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({
+          readable: true,
+          id,
+          analysis: expect.objectContaining({ result: "match", confidence: level }),
+        }),
+      ]);
+    },
+  );
+
   it("keeps the waiting finds waiting for the queue, oldest first", async () => {
     await versionOne();
     const ids = phaseOneFinds();

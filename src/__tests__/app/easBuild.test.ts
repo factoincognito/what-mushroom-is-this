@@ -175,6 +175,32 @@ describe("app.json: the Android build (PBI-1.10)", () => {
     expect(calling).toEqual([]);
   });
 
+  it("reaches the image picker in one file only, and there only by naming one of four functions after its import's name, so that no computed property or other name for it can call a media-library permission function unseen by the test above (PBI-2.16, the notes on #79)", () => {
+    /** A file's code without its block comments, some of which name the library in prose. */
+    const codeOf = (file: string) => readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const importing = appSourceFiles().filter((file) =>
+      /["'`]expo-image-picker["'`]/.test(codeOf(file)),
+    );
+    const devicePicker = join(PROJECT_ROOT, "src", "newFind", "devicePicker.ts");
+    expect(importing).toEqual([devicePicker]);
+    const code = codeOf(devicePicker);
+    expect(code.match(/["'`]expo-image-picker["'`]/g)).toHaveLength(1);
+    expect(code).toContain('import * as ImagePicker from "expo-image-picker";');
+    // Every use of the import's name, by what follows it: a dot and a name, or anything else.
+    const uses = [...code.matchAll(/\bImagePicker\b(?:\.([A-Za-z_$][\w$]*))?/g)].map(
+      (use) => use[1] ?? null,
+    );
+    // Anything else once: the import itself. An `ImagePicker[...]`, an `ImagePicker?.`, a
+    // destructuring or another name given to it would be a second.
+    expect(uses.filter((name) => name === null)).toHaveLength(1);
+    expect([...new Set(uses.filter((name) => name !== null))].sort()).toEqual([
+      "getCameraPermissionsAsync",
+      "launchCameraAsync",
+      "launchImageLibraryAsync",
+      "requestCameraPermissionsAsync",
+    ]);
+  });
+
   it("removes ACCESS_WIFI_STATE in the manifest, which expo-network's own manifest adds at the merge", () => {
     expect(libraryPermissions("expo-network")).toContain(WIFI_STATE);
     expect(removed()).toContain(WIFI_STATE);
