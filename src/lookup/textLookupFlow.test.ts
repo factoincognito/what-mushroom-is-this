@@ -4,6 +4,7 @@ import type { PictureFetch } from "../picture/fetchPicture";
 import type { AnalyseLookupResult, CheckLookupResult } from "../queue/queue";
 import type { NewTextFind, Position } from "../store/find";
 import {
+  cutDescription,
   INITIAL_TEXT_LOOKUP_VIEW,
   lookupFieldMaxLength,
   lookupSelfCheck,
@@ -275,6 +276,131 @@ describe("the text (SPEC 3.9: up to the configured length)", () => {
     t.flow.setText("a".repeat(21));
     expect(t.view().text).toBe("a".repeat(20));
   });
+
+  /** The flow with `held` as its description, as if the user had written it. */
+  async function holding(held: string) {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(held);
+    expect(t.view().text).toBe(held);
+    return t;
+  }
+  const a = (count: number) => "a".repeat(count);
+  const b = (count: number) => "b".repeat(count);
+  const z = (count: number) => "z".repeat(count);
+  const cap = (count: number) => "🍄".repeat(count);
+
+  // The limit of these tests is 20 characters. `held` is the description before, `given` what the
+  // field gives after the user put something in, `kept` what the flow keeps of it.
+  it.each([
+    [
+      "a paste in the middle",
+      `${a(10)}${z(5)}`,
+      `${a(10)}${b(10)}${z(5)}`,
+      `${a(10)}${b(5)}${z(5)}`,
+    ],
+    ["a paste at the start", z(15), `${b(10)}${z(15)}`, `${b(5)}${z(15)}`],
+    ["a paste at the end", a(15), `${a(15)}${b(10)}`, `${a(15)}${b(5)}`],
+    [
+      "a paste over a selection",
+      `${a(8)}cccc${z(6)}`,
+      `${a(8)}${b(10)}${z(6)}`,
+      `${a(8)}${b(6)}${z(6)}`,
+    ],
+    [
+      "emoji pasted among letters",
+      `${a(9)}${z(9)}`,
+      `${a(9)}${cap(4)}${z(9)}`,
+      `${a(9)}${cap(2)}${z(9)}`,
+    ],
+    ["letters pasted among emoji", cap(18), `${cap(9)}wxyz${cap(9)}`, `${cap(9)}wx${cap(9)}`],
+    [
+      "emoji pasted over a selection among emoji",
+      `${cap(9)}🌲${cap(9)}`,
+      `${cap(9)}🍂🍁🌰${cap(9)}`,
+      `${cap(9)}🍂🍁${cap(9)}`,
+    ],
+    [
+      "at the limit, two pasted letters over a selected emoji",
+      `${a(10)}🍄${z(9)}`,
+      `${a(10)}xy${z(9)}`,
+      `${a(10)}x${z(9)}`,
+    ],
+    [
+      "at the limit, two pasted emoji over a selected letter",
+      `${a(10)}c${z(9)}`,
+      `${a(10)}🍂🍁${z(9)}`,
+      `${a(10)}🍂${z(9)}`,
+    ],
+  ])(
+    "takes what is over the limit from what was put in, not from the text already there: %s (review of #89, note 1)",
+    async (_, held, given, kept) => {
+      const t = await holding(held);
+      t.flow.setText(given);
+      expect(t.view().text).toBe(kept);
+      expect([...t.view().text]).toHaveLength(20);
+    },
+  );
+
+  it("keeps a full description as it is, and shows no new view, when the field lets one more character through before its end", async () => {
+    // The field is full at the limit and refuses it; this is for a field that did not, such as
+    // on a second keystroke that comes before the field has its new limit.
+    const full = `${a(10)}${z(10)}`;
+    const t = await holding(full);
+    const shown = t.view();
+    t.flow.setText(`${a(10)}b${z(10)}`);
+    expect(t.view()).toBe(shown);
+    expect(t.view().text).toBe(full);
+  });
+
+  it.each([
+    ["an insertion that fills it exactly", `${a(10)}${z(5)}`, `${a(10)}${b(5)}${z(5)}`],
+    ["at the limit, an emoji over a selected letter", `${a(10)}c${z(9)}`, `${a(10)}🍄${z(9)}`],
+    ["at the limit, a letter over a selected emoji", `${a(10)}🍄${z(9)}`, `${a(10)}c${z(9)}`],
+    ["an insertion short of the limit", `${a(5)}${z(5)}`, `${a(5)}${cap(3)}b${z(5)}`],
+    ["a paste over a selection, short of the limit", `${a(5)}cc${z(5)}`, `${a(5)}${b(4)}${z(5)}`],
+    ["a deletion", `${a(10)}${z(10)}`, `${a(10)}${z(4)}`],
+  ])("cuts nothing while the text stays within the limit: %s", async (_, held, given) => {
+    const t = await holding(held);
+    t.flow.setText(given);
+    expect(t.view().text).toBe(given);
+  });
+
+  it("keeps the whole of the text already there where the letters put in are the same as their neighbours, though it cannot tell which of them were put in", async () => {
+    // "ab" pasted before "ab…": the comparison reads it as put in after the first "ab". Either
+    // way the text before stays whole and one of the two pasted letters is taken.
+    const t = await holding(`ab${z(17)}`);
+    t.flow.setText(`abab${z(17)}`);
+    expect(t.view().text).toBe(`aba${z(17)}`);
+  });
+
+  it("cuts a text over the limit that comes into the empty field, such as one restored, to its first characters", async () => {
+    const t = setup();
+    await t.flow.start();
+    t.flow.setText(`${a(10)}${cap(5)}${z(10)}`);
+    expect(t.view().text).toBe(`${a(10)}${cap(5)}${z(5)}`);
+  });
+
+  it.each([
+    [
+      "what is put into it goes first, then its end",
+      `${a(10)}${z(15)}`,
+      `${a(10)}b${z(15)}`,
+      `${a(10)}${z(10)}`,
+    ],
+    [
+      "a deletion leaves it cut at its end",
+      `${a(10)}${z(15)}`,
+      `${a(9)}${z(15)}`,
+      `${a(9)}${z(11)}`,
+    ],
+    ["a text with nothing in common with it", a(25), `${z(15)}${cap(10)}`, `${z(15)}${cap(5)}`],
+  ])(
+    "cuts to the limit also when the text held is itself over it, which the flow never holds: %s",
+    (_, held, given, kept) => {
+      expect(cutDescription(held, given, 20)).toBe(kept);
+    },
+  );
 
   it("does not analyse or save an empty text, and says so", async () => {
     const t = setup({ saveAtStart: true });
