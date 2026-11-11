@@ -57,6 +57,8 @@ function setup() {
   const analyses: AnalysisInput[] = [];
   const replies: AnalysisCallResult[] = [];
   const pictures: PictureFetch[] = [];
+  /** The requests held open, one per request, in order, each until its release is called. */
+  const holds: Promise<void>[] = [];
   /** What preparing a URI gives, when not the stand-in's success. */
   const prepared = new Map<string, PreparedPhoto | Error>();
   let key: ReadKeyResult = { ok: true, key: "sk-ant-test" };
@@ -90,6 +92,10 @@ function setup() {
             ? "check"
             : "analyse photos",
       );
+      const hold = holds.shift();
+      if (hold !== undefined) {
+        await hold;
+      }
       return replies.shift() ?? ok(MATCH);
     },
     now: () => NOW,
@@ -116,7 +122,24 @@ function setup() {
     setKey: (value: ReadKeyResult) => {
       key = value;
     },
+    /** Holds the next request open, after it is sent, until the function it gives is called. */
+    holdNextRequest: (): (() => void) => {
+      let release: () => void = () => undefined;
+      holds.push(
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+      );
+      return release;
+    },
   };
+}
+
+/** Lets the queue's chain of promises run as far as it goes (a bounded number of turns). */
+async function turns(): Promise<void> {
+  for (let i = 0; i < 100; i += 1) {
+    await Promise.resolve();
+  }
 }
 
 type Setup = ReturnType<typeof setup>;
@@ -643,6 +666,53 @@ describe("a text find analysed from its screen (docs/SPEC.md 3.9)", () => {
       analysis: { state: "done", answer: MATCH },
       selfCheck: { state: "waiting" },
     });
+  });
+
+  it("waits for a run's check in flight on the same find: the late outcome is stored for the answer it checked, before the new analysis is sent, and the new answer gets its own check (PBI-2.16, #75: the queue's single lock)", async () => {
+    const t = setup();
+    checkWaits(t, 1);
+    const setSelfCheck = t.log.setSelfCheck.bind(t.log);
+    jest.spyOn(t.log, "setSelfCheck").mockImplementation(async (id, outcome) => {
+      await setSelfCheck(id, outcome);
+      t.events.push(`store check ${outcome.state}`);
+    });
+    // The run's check of the Chanterelle answer names the Porcini, and its answer is held back.
+    const release = t.holdNextRequest();
+    t.replies.push(ok(PORCINI));
+    const run = t.queue.trigger();
+    await turns();
+    const inFlight = [`prepare ${PICTURE.uri} ${MODEL}`, "check"];
+    expect(t.events).toEqual(inFlight);
+    // "Analyse again" on the find's screen while that check is in flight: nothing is sent yet.
+    const next = { ...PICTURE, uri: "file:///photos/picture-3.jpg" };
+    t.pictures.push({ kind: "picture", picture: next });
+    t.replies.push(ok(PORCINI), ok(PORCINI));
+    const again = t.queue.analyseFind(1);
+    await turns();
+    expect(t.events).toEqual(inFlight);
+    expect(await t.log.getStored(1)).toMatchObject({
+      analysis: { answer: MATCH },
+      selfCheck: { state: "waiting" },
+    });
+    release();
+    await run;
+    await expect(again).resolves.toEqual({ ok: true });
+    expect(t.events).toEqual([
+      ...inFlight,
+      "store check disagreed",
+      "analyse text",
+      "picture Boletus edulis",
+      `prepare ${next.uri} ${MODEL}`,
+      "check",
+      "store check agreed",
+    ]);
+    // The Porcini answer's own check agreed: the late outcome did not land on it.
+    expect(await t.log.getStored(1)).toMatchObject({
+      analysis: { answer: PORCINI },
+      picture: { uri: next.uri },
+      selfCheck: { state: "agreed" },
+    });
+    expect(t.queue.getState()).toEqual({ running: false, stop: null, pause: null });
   });
 });
 

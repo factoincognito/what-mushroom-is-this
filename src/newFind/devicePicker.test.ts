@@ -265,10 +265,23 @@ describe("removePickedCopy (SPEC 3.9: an unsaved lookup's copies of its photos)"
 
   it.each([
     ["an address that is not a file's", "content://media/picker/0/media/1000000033"],
-    ["a copy that is gone already", `${Paths.cache.uri}/ImagePicker/gone.jpg`],
     ["an empty address", ""],
   ])("does nothing, and does not throw, for %s", (_name, uri) => {
     expect(() => removePickedCopy(uri)).not.toThrow();
+  });
+
+  it("does not throw for a copy that is gone already, by the address the picker gave it (PBI-2.16, note 7 on #61)", () => {
+    // The address of a copy that was there, as the tests above have theirs: the cache's own
+    // address ends with a slash, so one joined to it with another slash would hold "//", which
+    // no picker gives.
+    const copy = fileIn(new Directory(Paths.cache, "ImagePicker"), "gone.jpg");
+    const { uri } = copy;
+    copy.delete();
+    expect(copy.exists).toBe(false);
+    expect(uri.startsWith(Paths.cache.uri)).toBe(true);
+    expect(uri.slice("file:///".length)).not.toContain("//");
+    expect(() => removePickedCopy(uri)).not.toThrow();
+    expect(new File(uri).exists).toBe(false);
   });
 });
 

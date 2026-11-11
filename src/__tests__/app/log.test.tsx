@@ -1142,6 +1142,35 @@ describe("the filters while the app runs (SPEC 3.9)", () => {
     expect(screen.getByRole("button", { name: en.log.filtersOn })).toBeOnTheScreen();
   });
 
+  it("hold when the Library's own screen is gone and a new one opens, which a screen's own state does not outlast: they are held above the screen (PBI-2.16, note 1 on #63)", async () => {
+    mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
+    mockLog.finds.set(2, find(2, 1, done(PORCINI)));
+    const app = await startApp();
+    await openFilters();
+    await choose("Porcini");
+    expect(await rowIds()).toEqual(["2"]);
+    expect(screen.getByRole("button", { name: en.log.filtersOn })).toHaveProp(
+      "accessibilityState",
+      expect.objectContaining({ expanded: true }),
+    );
+    // Settings takes the Library's place, so the Library's screen is gone, not kept below it.
+    await act(async () => router.replace("/settings"));
+    expect(app.pathname()).toBe("/settings");
+    expect(await screen.findByText(en.settings.languageHeading)).toBeOnTheScreen();
+    expect(screen.queryByTestId(/^find-row-/, { includeHiddenElements: true })).toBeNull();
+    expect(headerTitles()).toEqual([en.settings.title]);
+    await act(async () => router.replace("/"));
+    expect(app.pathname()).toBe("/");
+    expect(await rowIds()).toEqual(["2"]);
+    // The new screen has its own state from the start: its filters are closed again.
+    expect(screen.getByRole("button", { name: en.log.filtersOn })).toHaveProp(
+      "accessibilityState",
+      expect.objectContaining({ expanded: false }),
+    );
+    await openFilters(en.log.filtersOn);
+    expect(screen.getByRole("checkbox", { name: "Porcini", checked: true })).toBeOnTheScreen();
+  });
+
   it("start at their defaults when the app starts again", async () => {
     mockLog.finds.set(1, find(1, 0, done(CHANTERELLE)));
     mockLog.finds.set(2, find(2, 1, done(PORCINI)));

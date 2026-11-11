@@ -34,6 +34,22 @@ if (!fs.existsSync(path.join(PROJECT_ROOT, "app.json"))) {
 }
 
 /**
+ * Whether a file under `src/`, by its path relative to `src/`, is one of the app's own source
+ * files: a `.ts` or `.tsx` file that is not a test (`*.test.*`, `*.spec.*`, `__tests__/`) nor a
+ * test helper of `src/testing/`. The path's folders are told apart by "/" or "\", since Node gives
+ * the paths below a folder with the system's separator.
+ */
+export function isAppSourceFile(file: string): boolean {
+  const folders = file.split(/[\\/]/).slice(0, -1);
+  return (
+    /\.tsx?$/.test(file) &&
+    !/\.(test|spec)\.tsx?$/.test(file) &&
+    !folders.includes("__tests__") &&
+    folders[0] !== "testing"
+  );
+}
+
+/**
  * The app's own source files under `src/`, by their paths: every `.ts` and `.tsx` file, leaving out
  * the tests (`*.test.*`, `*.spec.*`, `__tests__/`) and the test helpers of `src/testing/`.
  */
@@ -41,12 +57,6 @@ export function appSourceFiles(): string[] {
   const src = path.join(PROJECT_ROOT, "src");
   return fs
     .readdirSync(src, { recursive: true })
-    .filter(
-      (file) =>
-        /\.tsx?$/.test(file) &&
-        !/\.(test|spec)\.tsx?$/.test(file) &&
-        !file.split("/").includes("__tests__") &&
-        !file.startsWith("testing/"),
-    )
+    .filter(isAppSourceFile)
     .map((file) => path.join(src, file));
 }
