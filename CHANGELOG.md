@@ -126,8 +126,9 @@ All notable changes to What mushroom is this? are documented here.
 - The app's copies of photos and pictures are removed by one rule: only a
   file in its cache directory, named without a parent step. A fetched
   picture's copy now has the guard a picked photo's had, and a parent
-  step that is percent-encoded, or set off by backslashes or encoded
-  slashes, is refused as a plain one is (#96).
+  step that is percent-encoded, set off by backslashes or encoded
+  slashes, or written with a tab or a line break in it, is refused as a
+  plain one is (#96).
 
 ## Project created
 
