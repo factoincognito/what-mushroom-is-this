@@ -71,9 +71,9 @@ describe("isCacheFileAddress: a file under the app's cache directory", () => {
   /*
    * A URL's reader ends the path at the first "?" or "#", and trims the characters U+0000 to
    * U+0020 from the address's end: a parent step before one of those is the path's last step to
-   * it, while a split of the whole address sees a step named "..#x". The address of a `File`
-   * holds none of them: in a name they are written "%3F", "%23" and "%20" (`Paths.join`, read;
-   * the removals' tests show it).
+   * it, while a split of the whole address sees a step named "..#x". The address `File` makes
+   * from a folder and a name holds none of them: in a name they are written "%3F", "%23" and
+   * "%20" (`Paths.join`, read; the removals' tests show it).
    */
   describe("with what ends the path for a URL's reader, or is trimmed by it", () => {
     it.each([
