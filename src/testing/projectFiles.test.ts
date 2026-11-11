@@ -53,10 +53,15 @@ describe("appSourceFiles: the files the source-reading tests read", () => {
     );
   });
 
-  it("holds no test, no file of a tests folder and no test helper", () => {
+  it("holds no test, no file of a tests folder and no test helper, wherever the project is checked out", () => {
+    // Judged by each file's path below `src/`, not by its full path: the folders the project is
+    // checked out in, one of which may be named `testing`, say nothing of the file.
+    const src = inSrc();
+    expect(files.filter((file) => !file.startsWith(src))).toEqual([]);
+    const belowSrc = files.map((file) => file.slice(src.length + 1));
+    expect(belowSrc.filter((file) => /__tests__|\.test\.|^testing[\\/]/.test(file))).toEqual([]);
     expect(files).not.toContain(inSrc("store", "findStore.test.ts"));
     expect(files).not.toContain(inSrc("__tests__", "app", "easBuild.test.ts"));
     expect(files).not.toContain(inSrc("testing", "projectFiles.ts"));
-    expect(files.filter((file) => /__tests__|\.test\.|[\\/]testing[\\/]/.test(file))).toEqual([]);
   });
 });
