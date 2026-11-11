@@ -4,6 +4,7 @@ import { File, Paths } from "expo-file-system";
 import { imageLimitsFor } from "../config/modelSetting";
 import { deviceJpegEncoder } from "../image/deviceJpegEncoder";
 import { prepareJpegForAnalysis } from "../image/prepareForAnalysis";
+import { isCacheFileAddress } from "../storage/cacheFile";
 import { fetchPicture, type PictureDeps, type PictureFetch } from "./fetchPicture";
 import { pictureUserAgent } from "./wikimedia";
 
@@ -48,11 +49,17 @@ export function fetchDevicePicture(latinName: string, modelId: string): Promise<
 
 /**
  * Removes a copy of a picture the fetch made, once the store has its own or the screen that showed
- * it is left. One that is not there, or cannot be removed, is left to the system's clearing of the
- * cache.
+ * it is left. The fetch writes its copies into the cache directory (`saveCopy`); only a file there
+ * is removed, named without a parent step, percent-encoded or not (`isCacheFileAddress`), so that
+ * nothing else is, the find log's own photos never. One that is not there, an address that is not
+ * a file's, or one that cannot be removed, is left to the system's clearing of the cache, and is
+ * not an error.
  */
 export function removePictureCopy(uri: string): void {
   try {
+    if (!isCacheFileAddress(uri)) {
+      return;
+    }
     const file = new File(uri);
     if (file.exists) {
       file.delete();

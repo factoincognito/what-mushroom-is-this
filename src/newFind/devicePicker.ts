@@ -1,9 +1,10 @@
 import * as DocumentPicker from "expo-document-picker";
-import { File, Paths } from "expo-file-system";
+import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 
 import { deviceJpegEncoder } from "../image/deviceJpegEncoder";
 import type { JpegEncoder } from "../image/prepareForAnalysis";
+import { isCacheFileAddress } from "../storage/cacheFile";
 import type { PermissionAsker } from "./permissions";
 
 /**
@@ -97,15 +98,14 @@ function isWholePixels(value: number): boolean {
  * Removes the app's own copy of a photo the camera, the gallery or the phone's files gave, for an
  * unsaved lookup whose screen is left (docs/SPEC.md 3.9, Lookups; PBI-2.13), or for a file refused
  * as not an image (PBI-2.6). The pickers leave their copies in the app's cache directory; only a
- * file there is removed, named without a parent step, so that nothing else is, the original in the
- * gallery or the files, or the find log's own photos, never. A copy that is gone, an address that
- * is not a file's, or a failed removal is left to the system, which clears the cache, and is not
- * an error.
+ * file there is removed, named without a parent step, percent-encoded or not (`isCacheFileAddress`),
+ * so that nothing else is, the original in the gallery or the files, or the find log's own photos,
+ * never. A copy that is gone, an address that is not a file's, or a failed removal is left to the
+ * system, which clears the cache, and is not an error.
  */
 export function removePickedCopy(uri: string): void {
   try {
-    const cache = Paths.cache.uri.endsWith("/") ? Paths.cache.uri : `${Paths.cache.uri}/`;
-    if (!uri.startsWith(cache) || uri.split("/").includes("..")) {
+    if (!isCacheFileAddress(uri)) {
       return;
     }
     const copy = new File(uri);
