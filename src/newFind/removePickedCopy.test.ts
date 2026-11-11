@@ -121,3 +121,64 @@ describe("removePickedCopy and a parent step that is not written as two dots (PB
     expect(copy.exists).toBe(false);
   });
 });
+
+/*
+ * A URL's reader drops a tab, a line feed and a carriage return from an address before it reads
+ * the path (Node's does, which the first tests here show by the address `new File` gets), so a
+ * parent step with one of them in it is a parent step. Their percent-encoded forms it keeps.
+ */
+describe("removePickedCopy and a parent step with a character a URL's reader drops (PBI-2.16)", () => {
+  describe.each([
+    ["a tab", "\t"],
+    ["a line feed", "\n"],
+    ["a carriage return", "\r"],
+  ])("%s", (_name, dropped) => {
+    it.each([
+      ["between the dots", `.${dropped}.`],
+      ["before the dots", `${dropped}..`],
+      ["after the dots", `..${dropped}`],
+      ["inside an encoded dot", `%${dropped}2e%2e`],
+    ])(
+      "leaves the find log's photo, named through the cache by a parent step with it %s",
+      (_place, step) => {
+        const { photo, fromAboveTheCache } = findLogPhoto();
+        const viaCache = `${Paths.cache.uri}${step}/${fromAboveTheCache}`;
+        expect(viaCache.startsWith(Paths.cache.uri)).toBe(true);
+        expect(new File(viaCache).uri).toBe(photo.uri);
+        removePickedCopy(viaCache);
+        expect(photo.exists).toBe(true);
+      },
+    );
+
+    it("does not ask the file system about an address with it inside the encoded slashes around a parent step", () => {
+      const asked = jest.spyOn(File.prototype, "exists", "get");
+      removePickedCopy(`${Paths.cache.uri}ImagePicker/gone.jpg`);
+      expect(asked).toHaveBeenCalledTimes(1);
+      asked.mockClear();
+      removePickedCopy(
+        `${Paths.cache.uri}ImagePicker%${dropped}2f..%2${dropped}f..%2fdocument/photos-guard-test/p1.jpg`,
+      );
+      expect(asked).not.toHaveBeenCalled();
+    });
+
+    it("still removes a copy in the cache whose name holds it", () => {
+      const copy = fileIn(new Directory(Paths.cache, "ImagePicker"), `held${dropped}8.jpg`);
+      expect(copy.uri).toMatch(/held%0[9AD]8\.jpg$/);
+      removePickedCopy(copy.uri);
+      expect(copy.exists).toBe(false);
+    });
+  });
+
+  it.each(["%09", "%0a", "%0A", "%0d", "%0D"])(
+    "takes .%s. for a folder's name, as the address's reader does, and reaches nothing outside the cache",
+    (encoded) => {
+      const { photo, fromAboveTheCache } = findLogPhoto();
+      const address = `${Paths.cache.uri}.${encoded}./${fromAboveTheCache}`;
+      expect(new File(address).uri).toBe(address);
+      const asked = jest.spyOn(File.prototype, "exists", "get");
+      removePickedCopy(address);
+      expect(asked).toHaveBeenCalledTimes(1);
+      expect(photo.exists).toBe(true);
+    },
+  );
+});

@@ -13,6 +13,15 @@ const cache = Paths.cache.uri;
 const PARENT_STEPS = ["..", "%2e%2e", "%2E%2E", ".%2e", ".%2E", "%2e.", "%2E.", "%2e%2E"];
 /** What ends a step: a slash or a backslash, plain or percent-encoded, in either case. */
 const SEPARATORS = ["/", "%2f", "%2F", "\\", "%5c", "%5C"];
+/**
+ * The characters a URL's reader drops from an address before it reads the path (Node's does, which
+ * the removals' tests show): a step with one of them in it is read as the step without it.
+ */
+const DROPPED: [string, string][] = [
+  ["a tab", "\t"],
+  ["a line feed", "\n"],
+  ["a carriage return", "\r"],
+];
 
 describe("isCacheFileAddress: a file under the app's cache directory", () => {
   it("has, in these tests, a cache directory whose address ends with a slash", () => {
@@ -78,6 +87,52 @@ describe("isCacheFileAddress: a file under the app's cache directory", () => {
   ])("refuses a parent step with %s", (_name, uri) => {
     expect(isCacheFileAddress(uri)).toBe(false);
   });
+
+  describe.each(DROPPED)("with %s, which a URL's reader drops", (_name, dropped) => {
+    it.each([
+      ["between the dots of a parent step", `${cache}.${dropped}./document/photos/p1.jpg`],
+      ["before a parent step", `${cache}${dropped}../document/photos/p1.jpg`],
+      ["after a parent step", `${cache}..${dropped}/document/photos/p1.jpg`],
+      ["twice in a parent step", `${cache}${dropped}.${dropped}./document/photos/p1.jpg`],
+      ["in a parent step at the address's end", `${cache}ImagePicker/.${dropped}.`],
+      ["in a parent step that stays in the cache", `${cache}ImagePicker/.${dropped}./a.jpg`],
+      ["inside the first encoded dot", `${cache}%${dropped}2e%2e/document/photos/p1.jpg`],
+      ["inside the second encoded dot", `${cache}.%2${dropped}e/document/photos/p1.jpg`],
+      ["inside an encoded slash", `${cache}ImagePicker%${dropped}2f..%2${dropped}fa.jpg`],
+      ["inside an encoded backslash", `${cache}ImagePicker%5${dropped}c..%${dropped}5ca.jpg`],
+      ["between backslashes", `${cache}ImagePicker\\.${dropped}.\\a.jpg`],
+    ])("refuses an address with it %s", (_place, uri) => {
+      expect(isCacheFileAddress(uri)).toBe(false);
+    });
+
+    it.each([
+      ["in a file's name", `${cache}ImagePicker/a${dropped}b.jpg`],
+      ["between a dot and a letter", `${cache}ImagePicker/.${dropped}a.jpg`],
+      ["between three dots", `${cache}ImagePicker/.${dropped}.${dropped}./a.jpg`],
+    ])("takes a file under the cache with it %s, where it makes no parent step", (_place, uri) => {
+      expect(isCacheFileAddress(uri)).toBe(true);
+    });
+
+    it.each([
+      ["at its start", `${dropped}${cache}a.jpg`],
+      ["in its scheme", `fi${dropped}le:///mock/cache/a.jpg`],
+      ["in the cache's name", `file:///mock/ca${dropped}che/a.jpg`],
+    ])("refuses an address with it %s, in the cache directory's own part", (_place, uri) => {
+      expect(isCacheFileAddress(uri)).toBe(false);
+    });
+  });
+
+  it("refuses a parent step with all three dropped characters in it", () => {
+    expect(isCacheFileAddress(`${cache}.\t\r\n./document/photos/p1.jpg`)).toBe(false);
+  });
+
+  it.each(["%09", "%0a", "%0A", "%0d", "%0D"])(
+    "takes a file under a folder named .%s., which a URL's reader does not read as a parent step",
+    (encoded) => {
+      expect(isCacheFileAddress(`${cache}.${encoded}./a.jpg`)).toBe(true);
+      expect(isCacheFileAddress(`${cache}ImagePicker/a${encoded}b.jpg`)).toBe(true);
+    },
+  );
 
   describe("when the cache directory's address has no slash at its end", () => {
     beforeEach(() => {
