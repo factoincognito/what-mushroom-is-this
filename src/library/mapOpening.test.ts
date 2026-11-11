@@ -376,6 +376,41 @@ describe("the fallbacks without the phone's position (SPEC 3.9)", () => {
     });
   });
 
+  describe("a find that could not be read is never the find the map opens on (PBI-2.16, the notes on #68)", () => {
+    /**
+     * A find that could not be read passes every filter (3.9), so the fallback is given it. It
+     * holds no position by its type; this one holds one all the same, as a list that came to
+     * give more of such a find would, and is still passed over.
+     */
+    const UNREADABLE = { readable: false, id: 9, position: AT_FIND } as ListedFind;
+    const OTHER: Position = { latitude: 59.5, longitude: 16.9, accuracyM: 10, source: "fix" };
+    const withEntries = (entries: ListedFind[]) =>
+      startOpening(
+        {
+          permission: permission(DENIED),
+          location: location().source,
+          now: () => NOW,
+          filters: { ...DEFAULT_FILTERS, species: new Set([NOT_IDENTIFIED]) },
+          entries,
+        },
+        LIMITS,
+      );
+
+    it("opens on the newest find it could read that has a position, though the unreadable one is listed first", async () => {
+      await expect(withEntries([UNREADABLE, find(2, null), find(1, OTHER)]).area).resolves.toEqual({
+        from: "find",
+        bounds: squareAround(OTHER, 10_000),
+      });
+    });
+
+    it("opens on the default area when no other find has a position", async () => {
+      await expect(withEntries([UNREADABLE, find(1, null)]).area).resolves.toEqual({
+        from: "default",
+        bounds: DEFAULT_AREA,
+      });
+    });
+  });
+
   it("opens on the default area when no find with a position passes the filters, though one outside them has one (Clead, PBI-2.8)", async () => {
     const opening = startOpening(
       {

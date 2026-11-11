@@ -186,6 +186,40 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
     },
   ],
   [
+    "a photo added after one was removed: in a batch past the last begun, though that batch's photos are gone, and in the open batch while one is open (PBI-2.16, note 4)",
+    async (log) => {
+      const id = await log.add(photoFind);
+      await log.setAnswer(id, analysed, await sentAll(log, id));
+      await log.addPhoto(id, "file:///cache/b.jpg");
+      await log.completeBatch(id);
+      // Batch 2's only photo goes: the next photo begins batch 3, not batch 2 again.
+      const seen: unknown[] = [await outcome(() => log.removePhoto(id, 2))];
+      seen.push(view(await log.getStored(id)), await log.oldestWaiting());
+      seen.push(await outcome(() => log.addPhoto(id, "file:///cache/c.jpg")));
+      seen.push(view(await log.getStored(id)), await log.oldestWaiting());
+      // While batch 3 is open its only photo goes: the next photo joins batch 3.
+      seen.push(await outcome(() => log.removePhoto(id, 2)));
+      seen.push(view(await log.getStored(id)));
+      seen.push(await outcome(() => log.addPhoto(id, "file:///cache/d.jpg")));
+      seen.push(view(await log.getStored(id)));
+      seen.push(await outcome(() => log.completeBatch(id)));
+      seen.push(view(await log.getStored(id)), await log.oldestWaiting());
+      // The first photo goes: the next photo still comes last, in batch 4.
+      seen.push(await outcome(() => log.removePhoto(id, 1)));
+      seen.push(await outcome(() => log.addPhoto(id, "file:///cache/e.jpg")));
+      seen.push(view(await log.getStored(id)));
+      // A text find whose only photo goes holds none: the next photo begins batch 2.
+      const text = await log.addText(textFind);
+      await log.addPhoto(text, "file:///cache/f.jpg");
+      await log.completeBatch(text);
+      seen.push(await outcome(() => log.removePhoto(text, 1)));
+      seen.push(view(await log.getStored(text)), await log.oldestWaiting());
+      seen.push(await outcome(() => log.addPhoto(text, "file:///cache/g.jpg")));
+      seen.push(view(await log.getStored(text)));
+      return seen;
+    },
+  ],
+  [
     "the list gives each find's species by its current answer, the text answer's too, and none without an answer naming one (PBI-2.7)",
     async (log) => {
       const waiting = await log.add({ ...photoFind, time: { ...time, takenAtMs: 1_000 } });
@@ -377,6 +411,36 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
       expect.objectContaining({ batchOpen: false, batches: [1, 1] }),
       1,
       "wrong-state",
+    ]);
+  });
+
+  it("the scenario of a photo added after one was removed sees the batches the store gives, not nothing (PBI-2.16, note 4)", async () => {
+    const scenario = scenarios.find(([name]) =>
+      name.startsWith("a photo added after one was removed"),
+    );
+    if (scenario === undefined) {
+      throw new Error("no scenario of a photo added after one was removed");
+    }
+    const seen = await scenario[1](await realStore());
+    const batches = (index: number) => {
+      const { batches: found, batchOpen } = seen[index] as {
+        batches: number[];
+        batchOpen: boolean;
+      };
+      return [found, batchOpen];
+    };
+    expect([0, 3, 6, 8, 10, 13, 14, 16, 19].map((index) => seen[index])).toEqual(
+      Array.from({ length: 9 }, () => "ok"),
+    );
+    expect([1, 4, 7, 9, 11, 15, 17, 20].map(batches)).toEqual([
+      [[1], false],
+      [[1, 3], true],
+      [[1], true],
+      [[1, 3], true],
+      [[1, 3], false],
+      [[3, 4], true],
+      [[], false],
+      [[2], true],
     ]);
   });
 

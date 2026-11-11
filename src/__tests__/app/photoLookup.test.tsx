@@ -329,6 +329,30 @@ describe("an unsaved photo lookup (Save off)", () => {
     expect(mockLog.finds.size).toBe(0);
   });
 
+  it.each([
+    [69, "unknown, whatever the answer said", en.find.edibilities.unknown],
+    [70, "the answer's edibility", en.find.edibilities.poisonous],
+  ])(
+    "shows an answer whose confidence is %d with %s, the confidence and the photo's disclaimer (SPEC 3.9, Answers; PBI-2.16, note 6 on #61)",
+    async (confidence, _shown, shown) => {
+      fetchMock.mockResolvedValueOnce(
+        apiAnswer({ ...CHANTERELLE, edibility: "poisonous", confidence }),
+      );
+      await openUnsaved();
+      await press(en.newFind.analyse);
+      expect(await screen.findByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
+      const edibility = within(screen.getByTestId("match-edibility"));
+      expect(
+        edibility.getByText(en.find.edibility.replace("{edibility}", shown)),
+      ).toBeOnTheScreen();
+      expect(edibility.getByText(en.disclaimer)).toBeOnTheScreen();
+      expect(
+        screen.getByText(`Claude's confidence in the match: ${confidence} of 100`),
+      ).toBeOnTheScreen();
+      expect(mockLog.finds.size).toBe(0);
+    },
+  );
+
   it("says no mushroom in the words of a photo", async () => {
     fetchMock.mockResolvedValueOnce(apiAnswer({ result: "no_mushroom" }));
     await openUnsaved();
