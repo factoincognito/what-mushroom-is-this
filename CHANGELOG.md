@@ -120,6 +120,9 @@ All notable changes to What mushroom is this? are documented here.
   photo and says it can be removed; a description takes its full 2,000
   characters also when they are emoji; and the message when the camera
   may not be used names the phone's files beside the gallery (#89).
+- A paste or insertion too long for a nearly full description loses its
+  own last characters, not the end of the description already written
+  (#95).
 
 ## Project created
 
