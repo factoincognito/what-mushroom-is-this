@@ -7,6 +7,8 @@
  * `npx expo config --type introspect` gives it, by running the real config over this project's
  * app.json, as backupRules.test.ts does.
  */
+import ts from "typescript";
+
 import { APPLICATION_ID } from "../../testing/appIdentity";
 import { appSourceFiles, fs, PROJECT_ROOT, path } from "../../testing/projectFiles";
 
@@ -175,25 +177,87 @@ describe("app.json: the Android build (PBI-1.10)", () => {
     expect(calling).toEqual([]);
   });
 
+  /**
+   * Every node of a source file's code, as the TypeScript parser reads the whole file: a comment
+   * is no node, and a text that looks like a comment's start (`"image/*"`) is one text, so no
+   * code is left out, as it was when comments were cut from the file's text (the review of #94).
+   */
+  function nodesOf(file: string): ts.Node[] {
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const nodes: ts.Node[] = [];
+    const visit = (node: ts.Node): void => {
+      nodes.push(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return nodes;
+  }
+
+  /**
+   * The texts in the code that name the image picker's package or a path below it
+   * (`expo-image-picker/src/ImagePicker`), wherever they stand: an import, a `require`, an
+   * `import()`, or the start of a text with parts filled in.
+   */
+  function pickerModuleNames(nodes: ts.Node[]): string[] {
+    return nodes
+      .filter(
+        (node): node is ts.StringLiteralLike | ts.TemplateHead =>
+          ts.isStringLiteralLike(node) || ts.isTemplateHead(node),
+      )
+      .map((node) => node.text)
+      .filter((text) => /^expo-image-picker(\/|$)/.test(text));
+  }
+
   it("reaches the image picker in one file only, and there only by naming one of four functions after its import's name, so that no computed property or other name for it can call a media-library permission function unseen by the test above (PBI-2.16, the notes on #79)", () => {
-    /** A file's code without its block comments, some of which name the library in prose. */
-    const codeOf = (file: string) => readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-    const importing = appSourceFiles().filter((file) =>
-      /["'`]expo-image-picker["'`]/.test(codeOf(file)),
-    );
     const devicePicker = join(PROJECT_ROOT, "src", "newFind", "devicePicker.ts");
-    expect(importing).toEqual([devicePicker]);
-    const code = codeOf(devicePicker);
-    expect(code.match(/["'`]expo-image-picker["'`]/g)).toHaveLength(1);
-    expect(code).toContain('import * as ImagePicker from "expo-image-picker";');
-    // Every use of the import's name, by what follows it: a dot and a name, or anything else.
-    const uses = [...code.matchAll(/\bImagePicker\b(?:\.([A-Za-z_$][\w$]*))?/g)].map(
-      (use) => use[1] ?? null,
-    );
-    // Anything else once: the import itself. An `ImagePicker[...]`, an `ImagePicker?.`, a
-    // destructuring or another name given to it would be a second.
-    expect(uses.filter((name) => name === null)).toHaveLength(1);
-    expect([...new Set(uses.filter((name) => name !== null))].sort()).toEqual([
+    const reaching = appSourceFiles().filter((file) => pickerModuleNames(nodesOf(file)).length > 0);
+    expect(reaching).toEqual([devicePicker]);
+    const nodes = nodesOf(devicePicker);
+    // Named once, by the package's own name, in an import of the whole module under one name.
+    expect(pickerModuleNames(nodes)).toEqual(["expo-image-picker"]);
+    const imported = nodes
+      .filter(ts.isImportDeclaration)
+      .filter(
+        ({ moduleSpecifier }) =>
+          ts.isStringLiteral(moduleSpecifier) && moduleSpecifier.text === "expo-image-picker",
+      )
+      .map(({ importClause }) =>
+        importClause !== undefined &&
+        importClause.name === undefined &&
+        importClause.namedBindings !== undefined &&
+        ts.isNamespaceImport(importClause.namedBindings)
+          ? importClause.namedBindings.name
+          : null,
+      );
+    expect(imported).toHaveLength(1);
+    const [binding] = imported;
+    if (binding === undefined || binding === null) {
+      throw new Error("the image picker is not imported as `import * as <name>`");
+    }
+    // Every other use of that name, by what it is used for: the function named after it and a
+    // dot, or null for anything else, such as `ImagePicker[...]`, `ImagePicker?.`, a
+    // destructuring or another name given to it.
+    const uses = nodes
+      .filter(
+        (node): node is ts.Identifier =>
+          ts.isIdentifier(node) && node.text === binding.text && node !== binding,
+      )
+      .map((use) => {
+        const { parent } = use;
+        return ts.isPropertyAccessExpression(parent) &&
+          parent.expression === use &&
+          parent.questionDotToken === undefined &&
+          ts.isIdentifier(parent.name)
+          ? parent.name.text
+          : null;
+      });
+    expect(uses.filter((name) => name === null)).toEqual([]);
+    expect([...new Set(uses)].sort()).toEqual([
       "getCameraPermissionsAsync",
       "launchCameraAsync",
       "launchImageLibraryAsync",
