@@ -6,6 +6,12 @@ import { isCacheFileAddress } from "./cacheFile";
  * The one rule for removing a copy the app made in its cache directory (`removePickedCopy`,
  * `removePictureCopy`; PBI-2.16). The cache directory is that of jest-expo's in-memory file
  * system, "file:///mock/cache/".
+ *
+ * "A URL's reader" below is the class that reads an address in `new File(address)`: the global
+ * `URL`, which in these tests is `whatwg-url-minimum`'s, the class expo installs as the global
+ * `URL` on a phone too (expo 57.0.32, `src/winter`, loaded by jest-expo's setup; read, and the
+ * class compared in a run; not run on a phone). What it makes of an address the removals' tests
+ * show, by the address `new File` gets.
  */
 const cache = Paths.cache.uri;
 
@@ -14,8 +20,8 @@ const PARENT_STEPS = ["..", "%2e%2e", "%2E%2E", ".%2e", ".%2E", "%2e.", "%2E.", 
 /** What ends a step: a slash or a backslash, plain or percent-encoded, in either case. */
 const SEPARATORS = ["/", "%2f", "%2F", "\\", "%5c", "%5C"];
 /**
- * The characters a URL's reader drops from an address before it reads the path (Node's does, which
- * the removals' tests show): a step with one of them in it is read as the step without it.
+ * The characters a URL's reader drops from an address before it reads the path: a step with one of
+ * them in it is read as the step without it.
  */
 const DROPPED: [string, string][] = [
   ["a tab", "\t"],
@@ -53,8 +59,79 @@ describe("isCacheFileAddress: a file under the app's cache directory", () => {
     ["an address that is not a file's", "content://media/picker/0/media/1000000033"],
     ["a path without a scheme", "/mock/cache/a.jpg"],
     ["an empty address", ""],
+    [
+      "the cache's address in capitals, another folder where case counts",
+      "file:///MOCK/CACHE/a.jpg",
+    ],
+    ["the cache's name with one capital", "file:///mock/Cache/a.jpg"],
   ])("refuses %s", (_name, uri) => {
     expect(isCacheFileAddress(uri)).toBe(false);
+  });
+
+  /*
+   * A URL's reader ends the path at the first "?" or "#", and trims the characters U+0000 to
+   * U+0020 from the address's end: a parent step before one of those is the path's last step to
+   * it, while a split of the whole address sees a step named "..#x". The address of a `File`
+   * holds none of them: in a name they are written "%3F", "%23" and "%20" (`Paths.join`, read;
+   * the removals' tests show it).
+   */
+  describe("with what ends the path for a URL's reader, or is trimmed by it", () => {
+    it.each([
+      ["a fragment", `${cache}..#x`],
+      ["an empty fragment, its dots encoded", `${cache}%2e%2e#`],
+      ["a query", `${cache}..?x`],
+      ["an empty query, its dots encoded", `${cache}%2e%2e?`],
+      ["a fragment that looks like the rest of a path", `${cache}..#/document/photos/p1.jpg`],
+      ["a query that looks like the rest of a path", `${cache}..?/document/photos/p1.jpg`],
+      ["a fragment, with a tab between its dots", `${cache}.\t.#x`],
+      ["a fragment, after an encoded slash", `${cache}ImagePicker%2f..#x`],
+      ["a fragment, in a folder of the cache", `${cache}ImagePicker/..#x`],
+      ["a query and a fragment", `${cache}..?x#y`],
+      ["two spaces", `${cache}..  `],
+      ["a space and a tab", `${cache}.. \t`],
+      ["a line feed and the character U+0001", `${cache}..\n\u0001`],
+    ])("refuses a parent step at the path's end, followed by %s", (_name, uri) => {
+      expect(isCacheFileAddress(uri)).toBe(false);
+    });
+
+    it.each(Array.from({ length: 0x21 }, (_, code) => code))(
+      "refuses a parent step at the address's end, followed by the character of code %i",
+      (code) => {
+        expect(isCacheFileAddress(`${cache}..${String.fromCharCode(code)}`)).toBe(false);
+        expect(isCacheFileAddress(`${cache}ImagePicker/%2e%2e${String.fromCharCode(code)}`)).toBe(
+          false,
+        );
+      },
+    );
+
+    it.each([
+      ["a query after a file's name", `${cache}a.jpg?x`],
+      ["a fragment after a file's name", `${cache}a.jpg#x`],
+      ["a question mark in a file's name", `${cache}ImagePicker/a?b.jpg`],
+      ["a hash sign in a folder's name", `${cache}a#b/c.jpg`],
+      ["a space after a file's name", `${cache}a.jpg `],
+      ["the character U+0000 after a file's name", `${cache}a.jpg\u0000`],
+      ["a line feed after a file's name", `${cache}a.jpg\n`],
+    ])("refuses an address with %s, though it holds no parent step", (_name, uri) => {
+      expect(isCacheFileAddress(uri)).toBe(false);
+    });
+
+    it.each([
+      ["an encoded hash sign in its name", `${cache}ImagePicker/a%23b.jpg`],
+      ["an encoded question mark in its name", `${cache}ImagePicker/a%3Fb.jpg`],
+      ["an encoded space in its name", `${cache}ImagePicker/a%20b.jpg`],
+      ["an encoded space at its name's end", `${cache}ImagePicker/a.jpg%20`],
+      ["an encoded space at its name's start", `${cache}ImagePicker/%20a.jpg`],
+      ["a space inside its name", `${cache}ImagePicker/a b.jpg`],
+      ["two dots and an encoded hash sign for a folder's name", `${cache}..%23x/a.jpg`],
+      ["two dots and an encoded question mark for its name", `${cache}ImagePicker/..%3Fx`],
+      ["two dots and an encoded space for its name", `${cache}ImagePicker/..%20`],
+      ["two dots and the character U+007F for its name", `${cache}ImagePicker/..\u007f`],
+      ["two dots and a no-break space for its name", `${cache}ImagePicker/.. `],
+      ["two dots and an exclamation mark, U+0021, for its name", `${cache}ImagePicker/..!`],
+    ])("takes a file with %s", (_name, uri) => {
+      expect(isCacheFileAddress(uri)).toBe(true);
+    });
   });
 
   describe.each(PARENT_STEPS)("with the parent step %s", (step) => {

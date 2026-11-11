@@ -16,9 +16,11 @@ jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
  * devicePicker.test.ts.
  *
  * jest-expo backs expo-file-system with an in-memory file system. `new File(address)` first reads
- * the address as a URL (`Paths.join`, the library's own JavaScript; the URL here is Node's), and a
- * URL's path takes "%2e%2e", ".%2e" and "%2e." for a parent step and a backslash for a slash: an
- * address that starts as the cache's can so name a file outside it, which the first tests show.
+ * the address as a URL (`Paths.join`, the library's own JavaScript). The URL class here is
+ * `whatwg-url-minimum`'s, which expo installs as the global `URL` on a phone too (expo 57.0.32,
+ * `src/winter`, loaded by jest-expo's setup; read, and the class compared in a run; not run on a
+ * phone). Its path takes "%2e%2e", ".%2e" and "%2e." for a parent step and a backslash for a slash:
+ * an address that starts as the cache's can so name a file outside it, which the first tests show.
  * An encoded slash ("%2f") is not decoded there; Android's file system code is taken to decode it
  * (expo-file-system 57.0.7's `JavaFile` builds a `java.io.File` from a `java.net.URI`; read, not
  * run), so for those the tests check that the file system is not asked at all.
@@ -124,8 +126,8 @@ describe("removePickedCopy and a parent step that is not written as two dots (PB
 
 /*
  * A URL's reader drops a tab, a line feed and a carriage return from an address before it reads
- * the path (Node's does, which the first tests here show by the address `new File` gets), so a
- * parent step with one of them in it is a parent step. Their percent-encoded forms it keeps.
+ * the path (the first tests here show it by the address `new File` gets), so a parent step with
+ * one of them in it is a parent step. Their percent-encoded forms it keeps.
  */
 describe("removePickedCopy and a parent step with a character a URL's reader drops (PBI-2.16)", () => {
   describe.each([
@@ -181,4 +183,48 @@ describe("removePickedCopy and a parent step with a character a URL's reader dro
       expect(photo.exists).toBe(true);
     },
   );
+});
+
+/*
+ * A URL's reader ends the path at "?" or "#" and trims the characters U+0000 to U+0020 from the
+ * address's end, so a parent step before one of those is the path's last step: the address then
+ * names the folder above the cache, which each test here shows first. Nothing was removed for
+ * these before the guard refused them, since that folder is no file; the tests check that the
+ * file system is not asked at all.
+ */
+describe("removePickedCopy and a parent step at the path's end (PBI-2.16)", () => {
+  it.each([
+    ["a fragment", "..#x"],
+    ["a query", "..?x"],
+    ["an empty fragment, its dots encoded", "%2e%2e#"],
+    ["a space", ".. "],
+    ["the character U+0000", "..\u0000"],
+    ["a fragment, with a tab between its dots", ".\t.#x"],
+  ])(
+    "does not ask the file system about an address whose parent step is followed by %s",
+    (_name, end) => {
+      const address = `${Paths.cache.uri}${end}`;
+      expect(address.startsWith(Paths.cache.uri)).toBe(true);
+      expect(new File(address).uri.startsWith(Paths.cache.uri)).toBe(false);
+      const asked = jest.spyOn(File.prototype, "exists", "get");
+      removePickedCopy(`${Paths.cache.uri}ImagePicker/gone.jpg`);
+      expect(asked).toHaveBeenCalledTimes(1);
+      asked.mockClear();
+      removePickedCopy(address);
+      expect(asked).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["a hash sign", "held#9.jpg", "%23"],
+    ["a question mark", "held?9.jpg", "%3F"],
+    ["a space", "held 9.jpg", "%20"],
+    ["a space at its end", "held9.jpg ", "%20"],
+  ])("still removes a copy in the cache whose name holds %s", (_name, name, written) => {
+    const copy = fileIn(new Directory(Paths.cache, "ImagePicker"), name);
+    expect(copy.uri).toContain(written);
+    expect(copy.uri).not.toMatch(/[?# ]/);
+    removePickedCopy(copy.uri);
+    expect(copy.exists).toBe(false);
+  });
 });

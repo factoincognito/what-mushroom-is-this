@@ -124,9 +124,12 @@ describe("devicePictureDeps (PBI-2.9)", () => {
 /*
  * The fetch writes its copies into the cache directory (`saveCopy`); only a file there is removed,
  * named without a parent step (PBI-2.16; the notes on #71). `new File(address)` first reads the
- * address as a URL (`Paths.join`, the library's own JavaScript; the URL here is Node's), whose
- * path takes "..", "%2e%2e", ".%2e" and "%2e." for a parent step and a backslash for a slash, so
- * an address that starts as the cache's can name a file outside it, which these tests show. An
+ * address as a URL (`Paths.join`, the library's own JavaScript). The URL class here is
+ * `whatwg-url-minimum`'s, which expo installs as the global `URL` on a phone too (expo 57.0.32,
+ * `src/winter`, loaded by jest-expo's setup; read, and the class compared in a run; not run on a
+ * phone). Its path takes "..", "%2e%2e", ".%2e" and "%2e." for a parent step and a backslash for a
+ * slash, so an address that starts as the cache's can name a file outside it, which these tests
+ * show. An
  * encoded slash ("%2f") is not decoded there; Android's file system code is taken to decode it
  * (expo-file-system 57.0.7's `JavaFile` builds a `java.io.File` from a `java.net.URI`; read, not
  * run), so for those the tests check that the file system is not asked at all.
@@ -248,8 +251,8 @@ describe("removePictureCopy: only a file in the cache, named without a parent st
 
   /*
    * A URL's reader drops a tab, a line feed and a carriage return from an address before it reads
-   * the path (Node's does, which the first tests here show by the address `new File` gets), so a
-   * parent step with one of them in it is a parent step. Their percent-encoded forms it keeps.
+   * the path (the first tests here show it by the address `new File` gets), so a parent step with
+   * one of them in it is a parent step. Their percent-encoded forms it keeps.
    */
   describe.each([
     ["a tab", "\t"],
@@ -302,6 +305,51 @@ describe("removePictureCopy: only a file in the cache, named without a parent st
       removePictureCopy(address);
       expect(asked).toHaveBeenCalledTimes(1);
       expect(photo.exists).toBe(true);
+    },
+  );
+
+  /*
+   * A URL's reader ends the path at "?" or "#" and trims the characters U+0000 to U+0020 from the
+   * address's end, so a parent step before one of those is the path's last step: the address then
+   * names the folder above the cache, which each test here shows first. Nothing was removed for
+   * these before the guard refused them, since that folder is no file; the tests check that the
+   * file system is not asked at all.
+   */
+  it.each([
+    ["a fragment", "..#x"],
+    ["a query", "..?x"],
+    ["an empty fragment, its dots encoded", "%2e%2e#"],
+    ["a space", ".. "],
+    ["the character U+0000", "..\u0000"],
+    ["a fragment, with a tab between its dots", ".\t.#x"],
+  ])(
+    "does not ask the file system about an address whose parent step, at the path's end, is followed by %s",
+    (_name, end) => {
+      const address = `${Paths.cache.uri}${end}`;
+      expect(address.startsWith(Paths.cache.uri)).toBe(true);
+      expect(new File(address).uri.startsWith(Paths.cache.uri)).toBe(false);
+      const asked = jest.spyOn(File.prototype, "exists", "get");
+      removePictureCopy(`${Paths.cache.uri}picture-gone.jpg`);
+      expect(asked).toHaveBeenCalledTimes(1);
+      asked.mockClear();
+      removePictureCopy(address);
+      expect(asked).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["a hash sign", "picture-a#b.jpg", "%23"],
+    ["a question mark", "picture-a?b.jpg", "%3F"],
+    ["a space", "picture-a b9.jpg", "%20"],
+    ["a space at its end", "picture-ab.jpg ", "%20"],
+  ])(
+    "still removes a copy in the cache whose name holds %s, written as an escape in its address",
+    (_name, name, written) => {
+      const copy = fileIn(Paths.cache, name);
+      expect(copy.uri).toContain(written);
+      expect(copy.uri).not.toMatch(/[?# ]/);
+      removePictureCopy(copy.uri);
+      expect(copy.exists).toBe(false);
     },
   );
 });
