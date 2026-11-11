@@ -127,9 +127,9 @@ describe("devicePictureDeps (PBI-2.9)", () => {
  * address as a URL (`Paths.join`, the library's own JavaScript; the URL here is Node's), whose
  * path takes "..", "%2e%2e", ".%2e" and "%2e." for a parent step and a backslash for a slash, so
  * an address that starts as the cache's can name a file outside it, which these tests show. An
- * encoded slash ("%2f") is not decoded there; Android's file system code decodes it
- * (expo-file-system 57.0.7's `JavaFile`, read, not run), so for those the tests check that the
- * file system is not asked at all.
+ * encoded slash ("%2f") is not decoded there; Android's file system code is taken to decode it
+ * (expo-file-system 57.0.7's `JavaFile` builds a `java.io.File` from a `java.net.URI`; read, not
+ * run), so for those the tests check that the file system is not asked at all.
  */
 describe("removePictureCopy: only a file in the cache, named without a parent step (PBI-2.16)", () => {
   function fileIn(directory: Directory, name: string): File {

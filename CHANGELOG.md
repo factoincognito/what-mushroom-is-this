@@ -120,6 +120,11 @@ All notable changes to What mushroom is this? are documented here.
   photo and says it can be removed; a description takes its full 2,000
   characters also when they are emoji; and the message when the camera
   may not be used names the phone's files beside the gallery (#89).
+- The app's copies of photos and pictures are removed by one rule: only a
+  file in its cache directory, named without a parent step. A fetched
+  picture's copy now has the guard a picked photo's had, and a parent
+  step that is percent-encoded, or set off by backslashes or encoded
+  slashes, is refused as a plain one is (#96).
 
 ## Project created
 
