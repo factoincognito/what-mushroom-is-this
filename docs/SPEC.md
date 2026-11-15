@@ -611,7 +611,11 @@ answers to Clead's questions, 19:05).
   waits; any other marks the check failed, and the find says it could
   not be checked. A check that waits is tried again at the queue's next
   run (except on a find that has photos, above), or by "Check again" on
-  an unsaved lookup's screen (**[Clead]**).
+  an unsaved lookup's screen (**[Clead]**). That screen says that the
+  check waits and shows the queue's message for the pause or the stop
+  in the queue's own words: a pause's speaks of the finds, and some
+  stops' say to tap "Analyse now", where the screen's button is "Check
+  again" (**[Clead]**, 2026-11-15; an open note of PBI-2.16).
   A run takes waiting checks together with waiting finds, oldest find
   first; a check that waits for want of a network or a fault on
   Anthropic's or Wikimedia's side ends the run, as a waiting find does
