@@ -449,8 +449,16 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   new answer replaces the earlier one, as in 3.6.
 - If any photo of the find fails the metadata check, or cannot be loaded,
   decoded or sized, nothing is sent and the find's analysis fails, with a
-  message naming the photo; the user can remove that photo and analyse
-  again (**[Clead]**). For the count of 3.3 (PBI-1.25), a find counts as
+  message that names the photo by its number where it can be removed, on
+  a find with several photos or with text; the user can remove that
+  photo and analyse again (**[Clead]**). The one photo of a find without
+  text is not named (**[Clead]**, 2026-11-15, #89). Once any photo is
+  removed from the find, the stored failure loses its number, and the
+  message names no photo until the find is analysed again (Adam,
+  2026-11-15 22:41, approving Clead's proposal; #101). A stored number
+  above the photos the find holds, which a removal before #101 could
+  leave, is not shown either (**[Clead]**, #89).
+  For the count of 3.3 (PBI-1.25), a find counts as
   one whose photos cannot be loaded when any of its photos cannot; a find
   whose photos all load, or a text find without photos, ends the count
   (**[Clead]**).
