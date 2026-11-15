@@ -377,7 +377,10 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
     tapped again;
   - those that stop the queue (429, the spend limits, 401, 403, 402, 404,
     the shape and cut-off answers, any other status) stop it as for a
-    find, and the screen shows the same message;
+    find, and the screen shows the same message; after the shape and
+    cut-off answers that is the failure, and the stop's own message
+    does not say that a find is marked failed, as none is (3.3;
+    **[Clead]**, 2026-11-15, #89);
   - without a key, the screen says a key is needed, links to Settings and
     offers to turn "Save" on.
   "Analyse" sends the lookup even while the queue is stopped, as "analyse
