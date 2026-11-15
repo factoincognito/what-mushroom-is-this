@@ -6,7 +6,7 @@
 import type { Language } from "../i18n/languages";
 import type { Strings } from "../i18n/strings";
 import type { JpegSegmentFailure } from "../image/jpegSegments";
-import type { FindFailure } from "../store/find";
+import { type FindFailure, numberedPhotoFailure } from "../store/find";
 import type { QueueNotice, QueueStop } from "./queue";
 
 /** Formats a time, ms since the epoch, for a message. */
@@ -90,13 +90,20 @@ function stopMessage(stop: QueueStop, strings: Strings, formatTime: FormatTime):
  * sentence. Details already stored in these forms are read the same way. For a lookup without
  * photos, a refusal names the description, not the photo (PBI-2.4). A photo's failure on a find
  * with several photos, or on a text find with one, which can be removed, names the photo: its
- * detail is `photo <n>: <detail>` (`queue.ts`), and the message gives the number, the sentence of
- * the rest, and that the photo can be removed (docs/SPEC.md 3.9, Batches; PBI-2.5, PBI-2.16).
+ * detail is `photo <n>: <detail>` (`queue.ts`, read by `numberedPhotoFailure`), and the message
+ * gives the number, the sentence of the rest, and that the photo can be removed (docs/SPEC.md
+ * 3.9, Batches; PBI-2.5, PBI-2.16).
+ *
+ * Once a photo is removed from the find, whichever it is, the numbers of the photos left may have
+ * changed, so the store keeps such a failure without its number from that removal on
+ * (`REMOVE_PHOTO` in `src/store/findStore.ts`), and the message is the sentence of the rest alone,
+ * until the find fails again (Adam's decision, 2026-11-15; PBI-2.16).
  *
  * `photosHeld` is the number of photos the find holds now, for a failure read from the store
  * later: once the find holds no photo of the number named (the photo was removed), the message is
  * the sentence of the rest alone, with no number and no advice to remove a photo that is not
- * there (Clead's decision on #89). Without it, every photo named is taken as held.
+ * there (Clead's decision on #89). Without it, every photo named is taken as held. It still
+ * serves a failure whose photo was removed by a version of the app that kept the number.
  */
 export function failureMessage(
   failure: FindFailure,
@@ -106,17 +113,12 @@ export function failureMessage(
 ): string {
   const t = strings.queue.failed;
   const { detail } = failure;
-  const numbered = NUMBERED_PHOTO.exec(detail);
-  if (
-    numbered !== null &&
-    (failure.cause === "photo" || failure.cause === "segment-check") &&
-    numbered[1] !== undefined &&
-    numbered[2] !== undefined
-  ) {
-    const reason = failureMessage({ cause: failure.cause, detail: numbered[2] }, strings, subject);
-    return Number(numbered[1]) > photosHeld
+  const numbered = numberedPhotoFailure(failure);
+  if (numbered !== null) {
+    const reason = failureMessage(numbered.unnumbered, strings, subject);
+    return Number(numbered.number) > photosHeld
       ? reason
-      : fill(t.numbered, { number: numbered[1], reason });
+      : fill(t.numbered, { number: numbered.number, reason });
   }
   switch (failure.cause) {
     case "segment-check":
@@ -145,8 +147,6 @@ export function failureMessage(
   }
 }
 
-/** `queue.ts`: a photo's failure that names the photo, numbered from 1. */
-const NUMBERED_PHOTO = /^photo ([1-9][0-9]*): (.+)$/s;
 const REQUEST_WRONG = /^request-wrong \(status \d+\)$/;
 const REQUEST_TOO_LARGE = /^request-too-large \(status \d+\)$/;
 /** `readMessageBody`'s detail for a body that is not a Messages API message. */

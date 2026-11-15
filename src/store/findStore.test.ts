@@ -200,7 +200,10 @@ const BATCH_OPEN_OF = `SELECT ${SAFE_BATCH_OPEN} FROM finds WHERE id = ?`;
 const NEXT_BATCH = "CASE WHEN batch_open = 1 THEN batches ELSE batches + 1 END";
 const ADD_PHOTO = `UPDATE finds SET photos = json_insert(photos, '$[#]', json_object('file', ?, 'batch', ${NEXT_BATCH})), batches = ${NEXT_BATCH}, batch_open = 1 WHERE id = ? AND ${PHOTO_COUNT} < ?`;
 const PHOTOS_OF = `SELECT text, photos, ${SAFE_BATCHES} FROM finds WHERE id = ?`;
-const REMOVE_PHOTO = `UPDATE finds SET photos = json_remove(photos, ?) WHERE id = ? AND json_extract(photos, ?) = ? AND (text IS NOT NULL OR ${PHOTO_COUNT} > 1)`;
+/** A failure's detail without the photo number it names, or as it is (PBI-2.16). */
+const UNNUMBERED_DETAIL =
+  "CASE WHEN failure_cause IN ('photo', 'segment-check') AND failure_detail GLOB 'photo [1-9]*: ?*' AND substr(failure_detail, 7, instr(failure_detail, ': ') - 7) NOT GLOB '*[^0-9]*' THEN substr(failure_detail, instr(failure_detail, ': ') + 2) ELSE failure_detail END";
+const REMOVE_PHOTO = `UPDATE finds SET photos = json_remove(photos, ?), failure_detail = ${UNNUMBERED_DETAIL} WHERE id = ? AND json_extract(photos, ?) = ? AND (text IS NOT NULL OR ${PHOTO_COUNT} > 1)`;
 const SET_ADDED_PHOTOS = "UPDATE finds SET added_photos = ? WHERE id = ? AND added_photos = ?";
 const ADDED_PHOTOS_OF = "SELECT added_photos FROM finds WHERE id = ?";
 const SET_PICTURE =

@@ -7,7 +7,13 @@
  */
 
 import type { ApiMatch } from "../analysis/answer";
-import type { NewAnalysedAnswer, NewFind, NewTextFind, StoredFind } from "../store/find";
+import type {
+  FindFailure,
+  NewAnalysedAnswer,
+  NewFind,
+  NewTextFind,
+  StoredFind,
+} from "../store/find";
 import { StoreError } from "../store/find";
 import { createFindStore, type FindLog } from "../store/findStore";
 import { memoryFindLog } from "./memoryFindLog";
@@ -181,6 +187,60 @@ const scenarios: [string, (log: Log) => Promise<unknown[]>][] = [
       seen.push(view(await log.getStored(id)));
       const text = await log.addText(textFind);
       await log.addPhoto(text, "file:///cache/d.jpg");
+      seen.push(await outcome(() => log.removePhoto(text, 1)), view(await log.getStored(text)));
+      return seen;
+    },
+  ],
+  [
+    "removing a photo from a failed find: a failure that names a photo loses its number, any other stays, and a new failure has its number again (PBI-2.16)",
+    async (log) => {
+      const failedWith = async (failure: FindFailure, photos: number): Promise<number> => {
+        const id = await log.add(photoFind);
+        for (let number = 2; number <= photos; number += 1) {
+          await log.addPhoto(id, `file:///cache/${number}.jpg`);
+        }
+        if (photos > 1) {
+          await log.completeBatch(id);
+        }
+        await log.markFailed(id, failure);
+        return id;
+      };
+      const seen: unknown[] = [];
+      // The photo before the one that failed, the one that failed, and the one after it.
+      for (const removed of [1, 2, 3]) {
+        const id = await failedWith({ cause: "photo", detail: "photo 2: load-failed" }, 3);
+        seen.push(await outcome(() => log.removePhoto(id, removed)));
+        seen.push(view(await log.getStored(id)), await listView(log));
+      }
+      const marker = await failedWith(
+        { cause: "segment-check", detail: "photo 3: forbidden-segment 0xFFE1" },
+        3,
+      );
+      seen.push(await outcome(() => log.removePhoto(marker, 3)), view(await log.getStored(marker)));
+      // Failed again, with a number, and a photo removed again.
+      await log.markFailed(marker, { cause: "photo", detail: "photo 2: load-failed" });
+      seen.push(view(await log.getStored(marker)));
+      seen.push(await outcome(() => log.removePhoto(marker, 1)), view(await log.getStored(marker)));
+      // A removal that is refused changes nothing: the last photo of a find without text.
+      const one = await failedWith({ cause: "photo", detail: "photo 1: load-failed" }, 1);
+      seen.push(await outcome(() => log.removePhoto(one, 1)), view(await log.getStored(one)));
+      // Failures that name no photo: of a photo cause, and of another cause in the same form.
+      for (const failure of [
+        { cause: "photo", detail: "load-failed" },
+        { cause: "photo", detail: "photo 0: load-failed" },
+        { cause: "photo", detail: "photo 1:x" },
+        { cause: "request", detail: "photo 2: request-wrong (status 400)" },
+        { cause: "answer", detail: "photo 2: the answer was cut off" },
+        { cause: "refused", detail: "photo 2: refused" },
+      ] as const) {
+        const id = await failedWith(failure, 2);
+        seen.push(await outcome(() => log.removePhoto(id, 1)), view(await log.getStored(id)));
+      }
+      // A text find whose only photo failed and is removed.
+      const text = await log.addText(textFind);
+      await log.addPhoto(text, "file:///cache/t.jpg");
+      await log.completeBatch(text);
+      await log.markFailed(text, { cause: "photo", detail: "photo 1: load-failed" });
       seen.push(await outcome(() => log.removePhoto(text, 1)), view(await log.getStored(text)));
       return seen;
     },
@@ -441,6 +501,58 @@ describe("the in-memory find log against the real store (PBI-2.5)", () => {
       [[3, 4], true],
       [[], false],
       [[2], true],
+    ]);
+  });
+
+  it("the scenario of a photo removed from a failed find sees the failures the store keeps, not nothing (PBI-2.16)", async () => {
+    const scenario = scenarios.find(([name]) =>
+      name.startsWith("removing a photo from a failed find"),
+    );
+    if (scenario === undefined) {
+      throw new Error("no scenario of a photo removed from a failed find");
+    }
+    const seen = await scenario[1](await realStore());
+    const failed = (cause: string, detail: string) =>
+      expect.objectContaining({ analysis: { state: "failed", failure: { cause, detail } } });
+    // The three removals from a find whose second photo failed.
+    expect([0, 3, 6].map((index) => seen[index])).toEqual(["ok", "ok", "ok"]);
+    expect([1, 4, 7].map((index) => seen[index])).toEqual([
+      failed("photo", "load-failed"),
+      failed("photo", "load-failed"),
+      failed("photo", "load-failed"),
+    ]);
+    // The marker's failure, the new failure with its number, and that one after a removal.
+    expect(seen.slice(9, 14)).toEqual([
+      "ok",
+      failed("segment-check", "forbidden-segment 0xFFE1"),
+      failed("photo", "photo 2: load-failed"),
+      "ok",
+      failed("photo", "load-failed"),
+    ]);
+    // The refused removal, and the failures that name no photo.
+    expect(seen.slice(14, 28)).toEqual([
+      "wrong-state",
+      failed("photo", "photo 1: load-failed"),
+      "ok",
+      failed("photo", "load-failed"),
+      "ok",
+      failed("photo", "photo 0: load-failed"),
+      "ok",
+      failed("photo", "photo 1:x"),
+      "ok",
+      failed("request", "photo 2: request-wrong (status 400)"),
+      "ok",
+      failed("answer", "photo 2: the answer was cut off"),
+      "ok",
+      failed("refused", "photo 2: refused"),
+    ]);
+    // The text find, left without a photo.
+    expect(seen.slice(28)).toEqual([
+      "ok",
+      expect.objectContaining({
+        batches: [],
+        analysis: { state: "failed", failure: { cause: "photo", detail: "load-failed" } },
+      }),
     ]);
   });
 
