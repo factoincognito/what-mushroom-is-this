@@ -420,7 +420,8 @@ function AnalysisView({
       return (
         <View style={styles.section}>
           <Text style={styles.text}>{t.failed}</Text>
-          {/* A photo the failure names that was removed since is not named (decision on #89). */}
+          {/* Once a photo is removed the store keeps the failure without its photo number, so
+              none is named (PBI-2.16); nor is one the find no longer holds (decision on #89). */}
           <Text style={styles.text}>
             {failureMessage(analysis.failure, strings, subject, find.photos.length)}
           </Text>

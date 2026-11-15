@@ -12,8 +12,9 @@
  * its batch open, a photo added to the open batch or as the first of a new one numbered one past
  * the last begun (kept per find, as the store's `batches` column, also when photos are removed),
  * up to `config.maxPhotosPerFind`; completing a batch; the queue's pick of a waiting find or an
- * analysed one whose added photos wait, its batch complete; removing a photo; and the state of
- * the photos added since an answer. `memoryFindLog.test.ts` runs the same changes on both.
+ * analysed one whose added photos wait, its batch complete; removing a photo, which takes the
+ * photo number off a failure that names one (PBI-2.16); and the state of the photos added since
+ * an answer. `memoryFindLog.test.ts` runs the same changes on both.
  *
  * A text answer's representative picture (PBI-2.9) follows them too: it is set, as the picture given
  * (the store would keep a copy of its own), only beside a self-check that waits and has none; the
@@ -36,6 +37,7 @@ import {
   type FindSummary,
   invalid,
   type ListedFind,
+  numberedPhotoFailure,
   type StoredFind,
   StoreError,
   type SummaryAnalysis,
@@ -266,7 +268,16 @@ export function memoryFindLog(): MemoryFindLog {
         throw new StoreError("wrong-state", `find ${id} has no text, so keeps its last photo`);
       }
       const photos = find.photos.filter((_, index) => index !== photoNumber - 1);
-      put(id, { ...find, photos }, batchesOf(id));
+      // As the store's `REMOVE_PHOTO`: a failure that names a photo loses its number (PBI-2.16).
+      const { analysis } = find;
+      const kept: Analysis =
+        analysis.state === "failed"
+          ? {
+              state: "failed",
+              failure: numberedPhotoFailure(analysis.failure)?.unnumbered ?? analysis.failure,
+            }
+          : analysis;
+      put(id, { ...find, photos, analysis: kept }, batchesOf(id));
       return { photoRemoved: true };
     },
     async setAddedPhotos(id, state) {

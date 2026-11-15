@@ -57,6 +57,34 @@ export interface FindFailure {
   detail: string;
 }
 
+/** The start of a detail that names a photo by its number, from 1: `photo <n>: `. */
+const PHOTO_NUMBER = /^photo [1-9][0-9]*: /;
+
+/**
+ * A photo's failure that names the photo by its number among the find's photos, from 1, as the
+ * queue writes it (`naming` in `src/queue/queue.ts`; docs/SPEC.md 3.9, Batches): the detail
+ * `photo <n>: <detail>`, on the causes that are about a photo, `photo` and `segment-check`. Gives
+ * the number as written and the failure without it, whose detail is everything after the first
+ * `: `, at least one character; or null for a failure of another cause or form. The store's
+ * `REMOVE_PHOTO` reads the same form in SQL (`src/store/findStore.ts`).
+ */
+export function numberedPhotoFailure(
+  failure: FindFailure,
+): { number: string; unnumbered: FindFailure } | null {
+  const { cause, detail } = failure;
+  if (cause !== "photo" && cause !== "segment-check") {
+    return null;
+  }
+  const start = PHOTO_NUMBER.exec(detail)?.[0];
+  if (start === undefined || start.length === detail.length) {
+    return null;
+  }
+  return {
+    number: start.slice("photo ".length, -": ".length),
+    unnumbered: { cause, detail: detail.slice(start.length) },
+  };
+}
+
 /** An answer, the model that gave it and when. */
 export interface AnalysedAnswer<A extends Answer = Answer> {
   answer: A;

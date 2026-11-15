@@ -2,6 +2,16 @@
 
 All notable changes to What mushroom is this? are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- After a photo is removed from a failed find whose failure named one of
+  its photos by number, the find says why it failed without a photo
+  number, since the photos left may have other numbers and the number
+  could name a photo that did not fail; when the find is analysed again
+  and fails, the photo is named by the number it then has (#101).
+
 ## [0.2.0]
 
 ### Added
