@@ -101,13 +101,16 @@ may come through Cloudflare as its CDN (3.9).
    photo, date and time, the species name in the app's language, and the
    edibility. A find still waiting for analysis says so.
 2. **New find**: opens the camera; a photo can also be picked from the
-   gallery. The photo, the time and the position are saved before any
+   gallery or, in Phase 2, from the phone's files (3.9, Lookups). The
+   photo, the time and the position are saved before any
    analysis, so a find is never lost. For a photo from the gallery, the
    time and position are those the photo's own metadata holds, if any,
    and the find says that they come from the photo; a metadata time
    without a UTC offset is read as the phone's offset on that date, and the
    find marks it so. Without them, the time is that of saving and the find
-   has no position. A photo whose find could not be saved is kept on the
+   has no position. A photo from the files has no time or position of
+   its own, as a gallery photo without metadata (3.9, Lookups). A photo
+   whose find could not be saved is kept on the
    screen until it is saved again or discarded. It is dropped only after a
    question on the screen, not a system alert: when "Discard the photo" is
    tapped, and when the screen is left while the photo is kept
@@ -225,7 +228,7 @@ When the queue has stopped (3.3), the Log screen says why and offers
   | 404 | the model is not known (for example retired) | the queue stops; Settings asks for a model |
   | 400, 413 | the request is wrong or too large | that find is marked failed; the queue goes on with the next |
   | an answer whose `stop_reason` is `refusal` | Claude declined to answer (**[Clead]**, PBI-1.13) | that find is marked failed; the queue goes on with the next |
-  | an answer that does not fit the shape, is cut off (`stop_reason` `max_tokens` or `model_context_window_exceeded`), or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops |
+  | an answer that does not fit the shape, is cut off (`stop_reason` `max_tokens` or `model_context_window_exceeded`), or is not from the API at all (for example a Wi-Fi sign-in page) | | that find is marked failed and the queue stops. The stop's message says that a find is marked failed only when one was: not for a find that keeps its answer (below), nor for an unsaved lookup or a self-check (3.9), where the queue stops all the same (**[Clead]**, 2026-11-15, PBI-2.14, PBI-2.16, #89) |
   | any other status | | the queue stops; the message gives the status |
   | the find's photo cannot be loaded, decoded or sized | the photo itself is the problem (**[Clead]**, #17, #23; on Android a failed load does not say why, so a cause that is not the photo's can look the same: PBI-1.25) | that find is marked failed; the queue goes on with the next. When the photos of two finds in a row in one run cannot be loaded, the second find stays waiting instead, as do the finds after it, and the queue stops as in the next row; the first stays failed. A photo that loads, whatever then comes of its find, ends the count, and each run counts afresh, the one "analyse now" starts too; a find analysed from its screen is not counted (**[Clead]**, PBI-1.25) |
   | any other error in the app while the queue runs (for example, full storage) | (**[Clead]**, #17, PBI-1.21) | the find stays waiting; the queue stops and the Log screen says so, without the error's text; "analyse now" starts it again |
@@ -374,7 +377,10 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
     tapped again;
   - those that stop the queue (429, the spend limits, 401, 403, 402, 404,
     the shape and cut-off answers, any other status) stop it as for a
-    find, and the screen shows the same message;
+    find, and the screen shows the same message; after the shape and
+    cut-off answers that is the failure, and the stop's own message
+    does not say that a find is marked failed, as none is (3.3;
+    **[Clead]**, 2026-11-15, #89);
   - without a key, the screen says a key is needed, links to Settings and
     offers to turn "Save" on.
   "Analyse" sends the lookup even while the queue is stopped, as "analyse
@@ -443,8 +449,16 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   new answer replaces the earlier one, as in 3.6.
 - If any photo of the find fails the metadata check, or cannot be loaded,
   decoded or sized, nothing is sent and the find's analysis fails, with a
-  message naming the photo; the user can remove that photo and analyse
-  again (**[Clead]**). For the count of 3.3 (PBI-1.25), a find counts as
+  message that names the photo by its number where it can be removed, on
+  a find with several photos or with text; the user can remove that
+  photo and analyse again (**[Clead]**). The one photo of a find without
+  text is not named (**[Clead]**, 2026-11-15, #89). Once any photo is
+  removed from the find, the stored failure loses its number, and the
+  message names no photo until the find is analysed again (Adam,
+  2026-11-15 22:41, approving Clead's proposal; #101). A stored number
+  above the photos the find holds, which a removal before #101 could
+  leave, is not shown either (**[Clead]**, 2026-11-15, #89).
+  For the count of 3.3 (PBI-1.25), a find counts as
   one whose photos cannot be loaded when any of its photos cannot; a find
   whose photos all load, or a text find without photos, ends the count
   (**[Clead]**).
@@ -519,7 +533,10 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   find's photos fails, the check stays waiting, the edibility stays
   "unknown" and the find gives the waiting check as the reason, until an
   answer replaces the text answer or the photos are removed
-  (**[Clead]**, 2026-11-10, #75).
+  (**[Clead]**, 2026-11-10, #75). While the find has photos, that
+  reason says that the check waits until the photos are analysed or
+  removed, not that it has not been made yet (**[Clead]**, 2026-11-15,
+  PBI-2.16, #89).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
