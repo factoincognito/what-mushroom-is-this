@@ -101,13 +101,16 @@ may come through Cloudflare as its CDN (3.9).
    photo, date and time, the species name in the app's language, and the
    edibility. A find still waiting for analysis says so.
 2. **New find**: opens the camera; a photo can also be picked from the
-   gallery. The photo, the time and the position are saved before any
+   gallery or, in Phase 2, from the phone's files (3.9, Lookups). The
+   photo, the time and the position are saved before any
    analysis, so a find is never lost. For a photo from the gallery, the
    time and position are those the photo's own metadata holds, if any,
    and the find says that they come from the photo; a metadata time
    without a UTC offset is read as the phone's offset on that date, and the
    find marks it so. Without them, the time is that of saving and the find
-   has no position. A photo whose find could not be saved is kept on the
+   has no position. A photo from the files has no time or position of
+   its own, as a gallery photo without metadata (3.9, Lookups). A photo
+   whose find could not be saved is kept on the
    screen until it is saved again or discarded. It is dropped only after a
    question on the screen, not a system alert: when "Discard the photo" is
    tapped, and when the screen is left while the photo is kept
