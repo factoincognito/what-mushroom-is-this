@@ -1641,9 +1641,10 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(screen.queryByText(/remove that photo/)).not.toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: removePhoto1 })).not.toBeOnTheScreen();
     expect(screen.queryByLabelText(en.find.photo)).not.toBeOnTheScreen();
+    // The store keeps the failure without the photo's number from the removal on (PBI-2.16).
     expect(await mockLog.getStored(1)).toMatchObject({
       photos: [],
-      analysis: { state: "failed", failure: { cause: "photo", detail: "photo 1: load-failed" } },
+      analysis: { state: "failed", failure: { cause: "photo", detail: "load-failed" } },
     });
     expect(fetchMock).not.toHaveBeenCalled();
     // "Analyse again" sends the description alone, and its answer takes the failure's place.
@@ -1670,6 +1671,158 @@ describe("a find's several photos (SPEC 3.9, Batches; PBI-2.5)", () => {
     expect(
       screen.queryByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
     ).not.toBeOnTheScreen();
+  });
+
+  /** A find of three photos that failed because its second photo could not be loaded. */
+  const secondNotLoaded = () =>
+    withPhotos(3, {
+      analysis: { state: "failed", failure: { cause: "photo", detail: "photo 2: load-failed" } },
+      answerBasis: null,
+      addedPhotos: null,
+    });
+
+  it.each(["sv", "en", "it"] as const)(
+    "names no photo in %s once a photo is removed from a failed find: the reason alone, not the number of a photo that did not fail (PBI-2.16; Adam's decision, 2026-11-15)",
+    async (lang) => {
+      const t = STRINGS[lang];
+      const reason = t.queue.failed.photo.loadFailed;
+      const numbered = (number: string) => fillIn(t.queue.failed.numbered, { number, reason });
+      phoneIn(lang);
+      mockLog.finds.set(1, secondNotLoaded());
+      await startApp();
+      expect(await screen.findByText(numbered("2"))).toBeOnTheScreen();
+      // The first photo goes: the photo that failed is now photo 1, and photo 2 one that loaded.
+      await fireEvent.press(
+        screen.getByRole("button", { name: fillIn(t.find.removePhoto, { number: "1" }) }),
+      );
+      await fireEvent.press(screen.getByRole("button", { name: t.find.removePhotoYes }));
+      expect(await screen.findByText(reason)).toBeOnTheScreen();
+      expect(screen.getByText(t.find.failed)).toBeOnTheScreen();
+      expect(screen.queryByText(numbered("2"))).not.toBeOnTheScreen();
+      expect(screen.queryByText(numbered("1"))).not.toBeOnTheScreen();
+      expect(
+        screen.queryByText(/remove that photo|ta bort det fotot|rimuovere quella foto/),
+      ).not.toBeOnTheScreen();
+      expect(screen.queryByText(INTERNAL)).not.toBeOnTheScreen();
+      expect(await mockLog.getStored(1)).toMatchObject({
+        photos: [{ uri: "file:///photos/2.jpg" }, { uri: "file:///photos/3.jpg" }],
+        analysis: { state: "failed", failure: { cause: "photo", detail: "load-failed" } },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(preparePhotoForAnalysis).not.toHaveBeenCalled();
+    },
+  );
+
+  it("through the real store on a real SQLite: no photo is named after a removal, the same after the screen is opened again, and a find that fails again names its photo by the number it has now (PBI-2.16)", async () => {
+    const sqlite = memorySqlite();
+    let count = 0;
+    const real = await createFindStore(sqliteDatabase(sqlite), memoryPhotos(), {
+      newPhotoName: () => {
+        count += 1;
+        return `p${count}`;
+      },
+    });
+    const id = await real.add({
+      photoUri: "file:///cache/a.jpg",
+      time: { ...TAKEN, source: "saved" },
+      position: null,
+    });
+    await real.addPhoto(id, "file:///cache/b.jpg");
+    await real.addPhoto(id, "file:///cache/c.jpg");
+    await real.completeBatch(id);
+    await real.markFailed(id, { cause: "photo", detail: "photo 2: load-failed" });
+    const reason = en.queue.failed.photo.loadFailed;
+    const numbered = (number: string) => fillIn(en.queue.failed.numbered, { number, reason });
+    jest.mocked(openFindLog).mockResolvedValueOnce(real);
+    const app = renderRouter(APP_DIR, { initialUrl: `/find/${id}` });
+    await app;
+    expect(await screen.findByText(numbered("2"))).toBeOnTheScreen();
+
+    await fireEvent.press(
+      screen.getByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
+    );
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
+    expect(await screen.findByText(reason)).toBeOnTheScreen();
+    expect(screen.queryByText(numbered("2"))).not.toBeOnTheScreen();
+    expect(screen.queryByText(/remove that photo/)).not.toBeOnTheScreen();
+    await expect(real.getStored(id)).resolves.toMatchObject({
+      photos: [{ uri: "file:///photos/p2.jpg" }, { uri: "file:///photos/p3.jpg" }],
+      analysis: { state: "failed", failure: { cause: "photo", detail: "load-failed" } },
+    });
+
+    // The screen is left and opened again: it reads the same from the store.
+    await act(async () => {
+      router.push("/about");
+    });
+    await act(async () => {
+      router.back();
+    });
+    expect(await screen.findByText(reason)).toBeOnTheScreen();
+    expect(screen.queryByText(numbered("2"))).not.toBeOnTheScreen();
+
+    // Analysed again: the first photo loads and the second, another photo, does not. The new
+    // failure names it by its number, with the advice to remove it.
+    jest
+      .mocked(preparePhotoForAnalysis)
+      .mockResolvedValueOnce({ ok: true, imageBase64: "AAAA", width: 2212, height: 1659 })
+      .mockResolvedValueOnce(NOT_LOADED);
+    await fireEvent.press(screen.getByRole("button", { name: en.find.analyseAgain }));
+    expect(await screen.findByText(numbered("2"))).toBeOnTheScreen();
+    expect(screen.queryByText(reason)).not.toBeOnTheScreen();
+    expect(jest.mocked(preparePhotoForAnalysis).mock.calls.map(([uri]) => uri)).toEqual([
+      "file:///photos/p2.jpg",
+      "file:///photos/p3.jpg",
+    ]);
+    await expect(real.getStored(id)).resolves.toMatchObject({
+      analysis: { state: "failed", failure: { cause: "photo", detail: "photo 2: load-failed" } },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    sqlite.close();
+  });
+
+  it("keeps naming the photo when the removal fails: the find holds every photo still, and says the photo could not be removed", async () => {
+    mockLog.finds.set(1, secondNotLoaded());
+    jest.spyOn(mockLog, "removePhoto").mockRejectedValueOnce(new Error("database is locked"));
+    await startApp();
+    const numbered = fillIn(en.queue.failed.numbered, {
+      number: "2",
+      reason: en.queue.failed.photo.loadFailed,
+    });
+    expect(await screen.findByText(numbered)).toBeOnTheScreen();
+    await fireEvent.press(
+      screen.getByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
+    );
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
+    expect(await screen.findByText(en.find.removePhotoFailed)).toBeOnTheScreen();
+    expect(screen.getByText(numbered)).toBeOnTheScreen();
+    expect(screen.getByLabelText(label(3, 3))).toBeOnTheScreen();
+    expect(await mockLog.getStored(1)).toMatchObject({
+      analysis: { state: "failed", failure: { cause: "photo", detail: "photo 2: load-failed" } },
+    });
+  });
+
+  it("drops the message of a failed new analysis that names a photo when a photo is removed from an analysed find, which keeps its answer", async () => {
+    mockLog.finds.set(1, withPhotos(3));
+    jest
+      .mocked(preparePhotoForAnalysis)
+      .mockResolvedValueOnce({ ok: true, imageBase64: "AAAA", width: 2212, height: 1659 })
+      .mockResolvedValueOnce(NOT_LOADED);
+    await startApp();
+    await fireEvent.press(await screen.findByRole("button", { name: en.find.analyseAgain }));
+    const numbered = fillIn(en.queue.failed.numbered, {
+      number: "2",
+      reason: en.queue.failed.photo.loadFailed,
+    });
+    expect(await screen.findByText(numbered)).toBeOnTheScreen();
+    expect(screen.getByText(en.queue.answerKept)).toBeOnTheScreen();
+    await fireEvent.press(
+      screen.getByRole("button", { name: fillIn(en.find.removePhoto, { number: "1" }) }),
+    );
+    await fireEvent.press(screen.getByRole("button", { name: en.find.removePhotoYes }));
+    expect(await screen.findByLabelText(label(2, 2))).toBeOnTheScreen();
+    expect(screen.queryByText(numbered)).not.toBeOnTheScreen();
+    expect(screen.queryByText(en.queue.answerKept)).not.toBeOnTheScreen();
+    expect(screen.getByText(CHANTERELLE.generalInformation.en)).toBeOnTheScreen();
   });
 
   it("a find whose batch is still open: Analyse completes the batch and leaves the find to the queue", async () => {

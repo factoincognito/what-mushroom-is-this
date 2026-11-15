@@ -13,7 +13,16 @@ import {
   memorySqlite,
   sqliteDatabase,
 } from "../testing/sqliteDatabase";
-import type { NewAnalysedAnswer, NewFind, NewPicture, NewTextFind } from "./find";
+import type { FindDatabase } from "./database";
+import {
+  FAILURE_CAUSES,
+  type FindFailure,
+  type NewAnalysedAnswer,
+  type NewFind,
+  type NewPicture,
+  type NewTextFind,
+  numberedPhotoFailure,
+} from "./find";
 import { createFindStore, type FindStore, type LookupStore } from "./findStore";
 
 const match: ApiMatch = {
@@ -706,6 +715,246 @@ describe("removing a photo (PBI-2.2)", () => {
     await store.completeBatch(id);
     await store.removePhoto(id, 3);
     await expect(store.getStored(id)).resolves.toMatchObject({ addedPhotos: "waiting" });
+  });
+});
+
+describe("removing a photo from a failed find whose failure names a photo (PBI-2.16; Adam's decision, 2026-11-15)", () => {
+  /** A failed find without text that holds `count` photos, its batch complete. */
+  async function failedFind(count: number, failure: FindFailure): Promise<number> {
+    const id = await store.add(photoFind());
+    for (let number = 2; number <= count; number += 1) {
+      await store.addPhoto(id, `file:///cache/${number}.jpg`);
+    }
+    if (count > 1) {
+      await store.completeBatch(id);
+    }
+    await store.markFailed(id, failure);
+    return id;
+  }
+
+  /** The failure the store holds of a find, as its screen reads it; null when it has not failed. */
+  async function failureOf(id: number): Promise<FindFailure | null> {
+    const stored = await store.getStored(id);
+    return stored?.analysis.state === "failed" ? stored.analysis.failure : null;
+  }
+
+  /** The failure's two columns as SQLite holds them. */
+  function failureColumns(id: number): unknown {
+    return sqlite.prepare("SELECT failure_cause, failure_detail FROM finds WHERE id = ?").get(id);
+  }
+
+  const SECOND_NOT_LOADED: FindFailure = { cause: "photo", detail: "photo 2: load-failed" };
+
+  it.each([
+    ["a photo before the one that failed", 1],
+    ["the photo that failed", 2],
+    ["a photo after the one that failed", 3],
+  ])(
+    "stores the failure without its number once %s is removed, in the write that removes it, and the list gives the same",
+    async (_which, removed) => {
+      const id = await failedFind(3, SECOND_NOT_LOADED);
+      await expect(store.removePhoto(id, removed)).resolves.toEqual({ photoRemoved: true });
+      await expect(photosOf(id)).resolves.toHaveLength(2);
+      await expect(failureOf(id)).resolves.toEqual({ cause: "photo", detail: "load-failed" });
+      expect(failureColumns(id)).toEqual({ failure_cause: "photo", failure_detail: "load-failed" });
+      await expect(store.list()).resolves.toEqual([
+        expect.objectContaining({
+          id,
+          analysis: { state: "failed", failure: { cause: "photo", detail: "load-failed" } },
+        }),
+      ]);
+    },
+  );
+
+  it("stores a segment-check failure without its number too, the refused marker kept", async () => {
+    const id = await failedFind(3, {
+      cause: "segment-check",
+      detail: "photo 3: forbidden-segment 0xFFE1",
+    });
+    await store.removePhoto(id, 1);
+    await expect(failureOf(id)).resolves.toEqual({
+      cause: "segment-check",
+      detail: "forbidden-segment 0xFFE1",
+    });
+  });
+
+  it("stores the failure of a text find's only photo without its number once that photo is removed", async () => {
+    const id = await store.addText(textFind);
+    await store.addPhoto(id, "file:///cache/a.jpg");
+    await store.completeBatch(id);
+    await store.markFailed(id, { cause: "photo", detail: "photo 1: load-failed" });
+    await store.removePhoto(id, 1);
+    await expect(store.getStored(id)).resolves.toMatchObject({
+      photos: [],
+      analysis: { state: "failed", failure: { cause: "photo", detail: "load-failed" } },
+    });
+  });
+
+  /** Details of every form: those that name a photo, those that nearly do, and the others. */
+  const DETAILS = [
+    "photo 2: load-failed",
+    "photo 5: invalid-size: 0 x 0",
+    "photo 3: forbidden-segment 0xFFE1",
+    "photo 1: trailing-data",
+    "photo 12: load-failed",
+    "photo 10: x",
+    "photo 12345678901234567890: x",
+    "photo 2: load-failed: Could not load: file:///p.jpg",
+    "photo 1: : x",
+    "photo 1: 2: x",
+    "photo 1: photo 2: x",
+    "photo 2: load-failed: a\nb",
+    "photo 2: \n",
+    "photo 1:  ",
+    "photo 9: \u{1F344}",
+    "load-failed",
+    "load-failed: photo 2: x",
+    "trailing-data",
+    "request-wrong (status 400)",
+    "photo",
+    "photo 1",
+    "photo 1:",
+    "photo 1: ",
+    "photo 1:x",
+    "photo 0: x",
+    "photo 01: x",
+    "photo x: y",
+    "photo 1a: x",
+    "photo 1x: y: z",
+    "photo 1 : x",
+    "photo  1: x",
+    "photo -1: x",
+    "photo 1.5: x",
+    "Photo 1: x",
+    " photo 1: x",
+    "aphoto 1: x",
+    "photo 2:\n x",
+    "photo 1٢: x",
+    "photo １: x",
+  ];
+
+  it.each(FAILURE_CAUSES.flatMap((cause) => DETAILS.map((detail) => [cause, detail] as const)))(
+    "after a removal, a %s failure %j is stored as `numberedPhotoFailure` reads it: without the number it names, or as it was",
+    async (cause, detail) => {
+      const failure: FindFailure = { cause, detail };
+      const id = await failedFind(2, failure);
+      await store.removePhoto(id, 1);
+      await expect(failureOf(id)).resolves.toEqual(
+        numberedPhotoFailure(failure)?.unnumbered ?? failure,
+      );
+    },
+  );
+
+  it("the details of that comparison include failures that name a photo and failures that do not", () => {
+    const named = DETAILS.filter(
+      (detail) => numberedPhotoFailure({ cause: "photo", detail }) !== null,
+    );
+    expect(named).toHaveLength(15);
+    expect(DETAILS).toHaveLength(39);
+  });
+
+  it("leaves a failure that names no photo as it was", async () => {
+    const whole: FindFailure = { cause: "photo", detail: "load-failed" };
+    const id = await failedFind(2, whole);
+    await store.removePhoto(id, 2);
+    await expect(failureOf(id)).resolves.toEqual(whole);
+  });
+
+  it("leaves the failure of another cause as it was, though its detail has the form", async () => {
+    const request: FindFailure = {
+      cause: "request",
+      detail: "photo 2: request-wrong (status 400)",
+    };
+    const id = await failedFind(2, request);
+    await store.removePhoto(id, 1);
+    await expect(failureOf(id)).resolves.toEqual(request);
+  });
+
+  it("leaves a waiting find waiting and an analysed find analysed, with no failure stored", async () => {
+    const waiting = await store.add(photoFind());
+    await store.addPhoto(waiting, "file:///cache/b.jpg");
+    await store.completeBatch(waiting);
+    await store.removePhoto(waiting, 1);
+    await expect(store.getStored(waiting)).resolves.toMatchObject({
+      analysis: { state: "waiting" },
+    });
+    expect(failureColumns(waiting)).toEqual({ failure_cause: null, failure_detail: null });
+
+    const done = await store.add(photoFind());
+    await store.addPhoto(done, "file:///cache/c.jpg");
+    await store.completeBatch(done);
+    await store.setAnswer(done, analysed, await sentAll(done));
+    await store.removePhoto(done, 1);
+    await expect(store.getStored(done)).resolves.toMatchObject({
+      analysis: { state: "done", answer: match },
+    });
+    expect(failureColumns(done)).toEqual({ failure_cause: null, failure_detail: null });
+  });
+
+  it("keeps the number when the removal is refused: the last photo of a find without text, or a photo the find does not hold", async () => {
+    const only: FindFailure = { cause: "photo", detail: "photo 1: load-failed" };
+    const one = await failedFind(1, only);
+    await expect(store.removePhoto(one, 1)).rejects.toMatchObject({ code: "wrong-state" });
+    await expect(failureOf(one)).resolves.toEqual(only);
+
+    const three = await failedFind(3, SECOND_NOT_LOADED);
+    await expect(store.removePhoto(three, 4)).rejects.toMatchObject({ code: "invalid-input" });
+    await expect(failureOf(three)).resolves.toEqual(SECOND_NOT_LOADED);
+    await expect(photosOf(three)).resolves.toHaveLength(3);
+  });
+
+  it("keeps the number, and every photo, when the photos changed between the store's read and its write", async () => {
+    const id = await failedFind(3, SECOND_NOT_LOADED);
+    const db = sqliteDatabase(sqlite);
+    const raced: FindDatabase = {
+      ...db,
+      async runAsync(source, values) {
+        if (source.includes("json_remove")) {
+          // Another write names another file as the first photo, after the store read the list.
+          sqlite.prepare("UPDATE finds SET photos = json_set(photos, '$[0].file', 'p9.jpg')").run();
+        }
+        return db.runAsync(source, values);
+      },
+    };
+    const racedStore = await createFindStore(raced, photos, { newPhotoName: () => "unused" });
+    await expect(racedStore.removePhoto(id, 1)).rejects.toMatchObject({ code: "wrong-state" });
+    await expect(photosOf(id)).resolves.toEqual([
+      ["p9.jpg", 1],
+      ["p2.jpg", 2],
+      ["p3.jpg", 2],
+    ]);
+    await expect(failureOf(id)).resolves.toEqual(SECOND_NOT_LOADED);
+  });
+
+  it("stores the failure without its number also when the photo's file cannot be removed: the photo is gone from the find", async () => {
+    const id = await failedFind(3, SECOND_NOT_LOADED);
+    jest.spyOn(photos, "remove").mockImplementationOnce(() => {
+      throw new Error("the file is in use");
+    });
+    await expect(store.removePhoto(id, 1)).resolves.toEqual({ photoRemoved: false });
+    await expect(photosOf(id)).resolves.toHaveLength(2);
+    await expect(failureOf(id)).resolves.toEqual({ cause: "photo", detail: "load-failed" });
+  });
+
+  it("keeps the failure without its number when the store is opened again", async () => {
+    const id = await failedFind(3, SECOND_NOT_LOADED);
+    await store.removePhoto(id, 1);
+    store = await open();
+    await expect(failureOf(id)).resolves.toEqual({ cause: "photo", detail: "load-failed" });
+  });
+
+  it("stores a new failure with its number when the find fails again, and takes that number off at the next removal", async () => {
+    const id = await failedFind(3, SECOND_NOT_LOADED);
+    await store.removePhoto(id, 1);
+    // Analysed again: the second of the two photos left fails the segment check.
+    const again: FindFailure = { cause: "segment-check", detail: "photo 2: trailing-data" };
+    await store.markFailed(id, again);
+    await expect(failureOf(id)).resolves.toEqual(again);
+    await store.removePhoto(id, 2);
+    await expect(failureOf(id)).resolves.toEqual({
+      cause: "segment-check",
+      detail: "trailing-data",
+    });
   });
 });
 

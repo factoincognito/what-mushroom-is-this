@@ -182,7 +182,9 @@ export interface LookupStore {
   /**
    * Removes the find's photo with the number given, 1 for the first, then its file; the others
    * keep their order and batches, and the find its time, position and analysis. The last photo
-   * of a find without text is not removed.
+   * of a find without text is not removed. A failed find whose failure names a photo by its
+   * number keeps the failure without the number, since the photos left may have other numbers
+   * (PBI-2.16); any other failure stays as it is.
    */
   removePhoto(id: number, photoNumber: number): Promise<{ photoRemoved: boolean }>;
   /**
@@ -379,10 +381,28 @@ const ADD_PHOTO = `UPDATE finds SET photos = json_insert(photos, '$[#]',
   WHERE id = ? AND ${PHOTO_COUNT} < ?`;
 const PHOTOS_OF = `SELECT text, photos, ${SAFE_BATCHES} FROM finds WHERE id = ?`;
 /**
+ * A failure's detail without the photo number it names, or as it is when it names none
+ * (PBI-2.16): the form `numberedPhotoFailure` reads (`src/store/find.ts`), written here for SQLite.
+ * On the causes about a photo, a detail that starts `photo `, then a digit from 1 to 9, and holds
+ * `: ` with at least one character after it (the GLOB), with nothing but digits before its first
+ * `: `, gives everything after that `: `. `lookups.sqlite.test.ts` holds the two to each other.
+ */
+const UNNUMBERED_DETAIL = `CASE WHEN failure_cause IN ('photo', 'segment-check')
+  AND failure_detail GLOB 'photo [1-9]*: ?*'
+  AND substr(failure_detail, 7, instr(failure_detail, ': ') - 7) NOT GLOB '*[^0-9]*'
+  THEN substr(failure_detail, instr(failure_detail, ': ') + 2) ELSE failure_detail END`;
+/**
  * Removes the photo at a JSON path, only while that photo is the one read and it is not the last
  * of a find without text, so a change between the read and this leaves the photos as they are.
+ *
+ * The same write takes the photo number off a failure that names one (Adam's decision,
+ * 2026-11-15; PBI-2.16): once any photo is gone, the photos left may have other numbers, so the
+ * number stored could name a photo that did not fail. From here on the failure reads as one that
+ * names no photo, until the find is analysed again and a new failure is stored. In one statement,
+ * so no failure stored between a read and this write keeps a number from before the removal.
  */
-const REMOVE_PHOTO = `UPDATE finds SET photos = json_remove(photos, ?) WHERE id = ?
+const REMOVE_PHOTO = `UPDATE finds SET photos = json_remove(photos, ?),
+  failure_detail = ${UNNUMBERED_DETAIL} WHERE id = ?
   AND json_extract(photos, ?) = ? AND (text IS NOT NULL OR ${PHOTO_COUNT} > 1)`;
 const SET_ADDED_PHOTOS = "UPDATE finds SET added_photos = ? WHERE id = ? AND added_photos = ?";
 const ADDED_PHOTOS_OF = "SELECT added_photos FROM finds WHERE id = ?";

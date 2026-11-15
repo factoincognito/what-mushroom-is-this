@@ -1,10 +1,14 @@
 /**
  * The queue over the real find store on a real SQLite (`src/testing/sqliteDatabase.ts`): what the
- * queue does with a waiting find the store cannot read, and how the list shows it (PBI-1.16).
+ * queue does with a waiting find the store cannot read, and how the list shows it (PBI-1.16); and
+ * what a failed find's message says after one of its photos is removed, from the failure the queue
+ * stores to the sentence the Find screen shows (PBI-2.16).
  */
 
 import type { AnalysisInput } from "../analysis/analyse";
 import type { ApiAnswer } from "../analysis/answer";
+import { LANGUAGES, type Language } from "../i18n/languages";
+import { STRINGS } from "../i18n/strings";
 import { createFindStore, type FindStore, type LookupStore } from "../store/findStore";
 import {
   type DatabaseSync,
@@ -12,6 +16,7 @@ import {
   memorySqlite,
   sqliteDatabase,
 } from "../testing/sqliteDatabase";
+import { failureMessage } from "./messages";
 import { AnalysisQueue } from "./queue";
 
 const MATCH: ApiAnswer = {
@@ -111,6 +116,30 @@ const KINDS: [string, () => number][] = [
   ],
 ];
 
+/** A queue over the store whose photos load, or not, as `loads` says of each photo's address. */
+function queueWhere(loads: (photoUri: string) => boolean): AnalysisQueue {
+  return new AnalysisQueue(
+    {
+      findLog: async () => store,
+      readKey: async () => ({ ok: true, key: "sk-ant-test" }),
+      readModelId: async () => "claude-opus-5-5",
+      preparePhoto: async (photoUri) =>
+        loads(photoUri)
+          ? { ok: true, imageBase64: "AAAA", width: 1, height: 1 }
+          : { ok: false, loaded: false, failure: { cause: "photo", detail: "load-failed" } },
+      analyse: async (input) => {
+        calls.push(input);
+        return { ok: true, answer: MATCH };
+      },
+      now: () => 10_000,
+      schedule: () => () => undefined,
+      fetchPicture: async () => ({ kind: "none", reason: "no-item" }),
+      removePictureCopy: () => undefined,
+    },
+    { apiAddress: "https://api.anthropic.com", timeLimitMs: 60_000 },
+  );
+}
+
 function stateOf(id: number): unknown {
   return sqlite.prepare("SELECT state FROM finds WHERE id = ?").get(id);
 }
@@ -165,5 +194,98 @@ describe.each(KINDS)("a waiting find with %s (PBI-1.16)", (_kind, insertUnreadab
         analysis: expect.objectContaining({ state: "done" }),
       }),
     ]);
+  });
+});
+
+describe("a failed find's message after one of its photos is removed (PBI-2.16; Adam's decision, 2026-11-15)", () => {
+  /** A waiting find without text that holds three photos, the store's `p1.jpg` to `p3.jpg`. */
+  async function findOfThree(): Promise<number> {
+    const id = await store.add({
+      photoUri: "file:///cache/a.jpg",
+      time: { takenAtMs: 1_000, ...takenAt },
+      position: null,
+    });
+    await store.addPhoto(id, "file:///cache/b.jpg");
+    await store.addPhoto(id, "file:///cache/c.jpg");
+    await store.completeBatch(id);
+    return id;
+  }
+
+  /** The store's copy that the phone cannot load, whatever its number in the find. */
+  const BROKEN = "file:///photos/p2.jpg";
+
+  /**
+   * What the Find screen shows for the find's stored failure (`AnalysisView` in
+   * `src/find/FindScreen.tsx`): the failure's message, given the number of photos the find holds.
+   */
+  async function shown(id: number, language: Language): Promise<string | null> {
+    const find = await store.getStored(id);
+    if (find === null || find.analysis.state !== "failed") {
+      return null;
+    }
+    return failureMessage(find.analysis.failure, STRINGS[language], "photo", find.photos.length);
+  }
+
+  const numbered = (language: Language, number: number) => {
+    const t = STRINGS[language].queue.failed;
+    return t.numbered.replace("{number}", String(number)).replace("{reason}", t.photo.loadFailed);
+  };
+
+  it.each(LANGUAGES)(
+    "names no photo in %s once a photo is removed, until the find fails again, and then names the photo by the number it has now",
+    async (language) => {
+      const t = STRINGS[language].queue.failed;
+      const id = await findOfThree();
+      queue.dispose();
+      queue = queueWhere((photoUri) => photoUri !== BROKEN);
+      queue.setInFront(true);
+
+      // A run: the second photo does not load, and the find fails naming it.
+      await queue.trigger();
+      expect(calls).toEqual([]);
+      await expect(store.getStored(id)).resolves.toMatchObject({
+        analysis: { state: "failed", failure: { cause: "photo", detail: "photo 2: load-failed" } },
+      });
+      await expect(shown(id, language)).resolves.toBe(numbered(language, 2));
+
+      // The first photo is removed: the photo that failed is now photo 1, and photo 2 one that
+      // loaded. The message gives the reason as an unnumbered failure does, and no number.
+      await store.removePhoto(id, 1);
+      await expect(shown(id, language)).resolves.toBe(t.photo.loadFailed);
+      await expect(shown(id, language)).resolves.toBe(
+        failureMessage({ cause: "photo", detail: "load-failed" }, STRINGS[language]),
+      );
+      await expect(shown(id, language)).resolves.not.toMatch(/[0-9]/);
+
+      // Analysed again from its screen: the same photo fails, and the new failure names it by the
+      // number it has now.
+      await expect(queue.analyseFind(id)).resolves.toMatchObject({ ok: false, answerKept: false });
+      await expect(store.getStored(id)).resolves.toMatchObject({
+        analysis: { state: "failed", failure: { cause: "photo", detail: "photo 1: load-failed" } },
+      });
+      await expect(shown(id, language)).resolves.toBe(numbered(language, 1));
+
+      // The photo that failed is removed, as the message advises: no number again, and the find
+      // with the one photo left is analysed.
+      await store.removePhoto(id, 1);
+      await expect(shown(id, language)).resolves.toBe(t.photo.loadFailed);
+      await expect(queue.analyseFind(id)).resolves.toEqual({ ok: true });
+      expect(calls).toHaveLength(1);
+      await expect(shown(id, language)).resolves.toBeNull();
+      await expect(store.getStored(id)).resolves.toMatchObject({
+        photos: [{ uri: "file:///photos/p3.jpg" }],
+        analysis: { state: "done" },
+      });
+    },
+  );
+
+  it("names the photo still, by its number, while no photo has been removed", async () => {
+    const id = await findOfThree();
+    queue.dispose();
+    queue = queueWhere((photoUri) => photoUri !== BROKEN);
+    queue.setInFront(true);
+    await queue.trigger();
+    await expect(shown(id, "en")).resolves.toBe(numbered("en", 2));
+    await expect(shown(id, "en")).resolves.toMatch(/remove that photo/);
   });
 });
