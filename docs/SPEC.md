@@ -533,7 +533,10 @@ Wikimedia Commons, is his answer to Clead's question, by 19:03).
   find's photos fails, the check stays waiting, the edibility stays
   "unknown" and the find gives the waiting check as the reason, until an
   answer replaces the text answer or the photos are removed
-  (**[Clead]**, 2026-11-10, #75).
+  (**[Clead]**, 2026-11-10, #75). While the find has photos, that
+  reason says that the check waits until the photos are analysed or
+  removed, not that it has not been made yet (**[Clead]**, 2026-11-15,
+  PBI-2.16, #89).
 - The picture is shown on the find's screen, and in the Library list in
   place of the text mark, labelled as a picture of the species, not of
   the user's mushroom. Its author, its licence and a link to its page on
