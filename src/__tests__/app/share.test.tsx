@@ -14,7 +14,7 @@ import * as Location from "expo-location";
 import { router } from "expo-router";
 import { act, fireEvent, renderRouter, screen, within } from "expo-router/testing-library";
 import * as Sharing from "expo-sharing";
-import { AppState } from "react-native";
+import { AppState, BackHandler, Linking } from "react-native";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { fillIn } from "../../find/display";
@@ -205,8 +205,10 @@ beforeEach(async () => {
   mockLog.withoutId.length = 0;
   mockShare.payloads = [];
   mockShare.resolved = [];
-  if (libraryFolder().exists) {
-    libraryFolder().delete();
+  for (const folder of [libraryFolder(), new Directory(Paths.cache, "SharedPhotos")]) {
+    if (folder.exists) {
+      folder.delete();
+    }
   }
   jest.mocked(Sharing.clearSharedPayloads).mockImplementation(() => {
     mockShare.payloads = [];
@@ -287,8 +289,26 @@ async function startApp(initialUrl: string): Promise<{ pathname: () => string }>
 
 /** A share arrives while the app runs: the library's address opens the choice. */
 async function shareArrives(): Promise<void> {
+  await addressArrives("what-mushroom-is-this://expo-sharing");
+  // Under Jest the router does not hear the phone's addresses (its test renderer replaces
+  // expo-linking's listener), so the route the address leads to is opened here
+  // (`shareAddress.test.ts` checks that the router's native-intent file gives this route).
   await act(async () => {
     router.navigate("/share");
+  });
+  await settle();
+}
+
+/** An address reaches the app from outside it while it runs, as React Native announces it. */
+async function addressArrives(url: string): Promise<void> {
+  const listeners = jest
+    .mocked(Linking.addEventListener)
+    .mock.calls.filter(([type]) => type === "url")
+    .map(([, listener]) => listener as (event: { url: string }) => void);
+  await act(async () => {
+    for (const listener of listeners) {
+      listener({ url });
+    }
   });
   await settle();
 }
@@ -306,6 +326,13 @@ async function comesToFront(): Promise<void> {
 async function press(name: string): Promise<void> {
   await fireEvent.press(screen.getByRole("button", { name }));
   await settle();
+}
+
+/** The titles in the headers of the screens of the stack, the lowest first. */
+function headerTitles(): string[] {
+  return screen.container
+    .queryAll((node) => node.type === "RNSScreenStackHeaderConfig")
+    .map((node) => String(node.props.title));
 }
 
 warmUpRouter(async () => {
@@ -522,8 +549,8 @@ describe('"New find" from a share (SPEC 3.9)', () => {
     await press(t.newFind);
     expect(mockLog.finds.size).toBe(1);
     const save = screen.getByRole("switch", { name: en.newFind.save });
-    expect(save.props.value).toBe(true);
-    expect(save).toBeDisabled();
+    expect(save).toHaveProp("value", true);
+    expect(save).toHaveProp("disabled", true);
   });
 
   it("sends the photo for analysis only with its find, once the batch is completed", async () => {
@@ -627,7 +654,7 @@ describe('"Add to an earlier find" from a share (SPEC 3.9)', () => {
     await fireEvent.press(screen.getByTestId("share-find-1"));
     await settle();
     expect(app.pathname()).toBe("/new-find");
-    expect(screen.getByText(en.newFind.addTitle)).toBeOnTheScreen();
+    expect(headerTitles()).toEqual([en.newFind.addTitle]);
     expect(
       screen.getByText(fillIn(en.newFind.photoCount, { count: "4", max: MAX })),
     ).toBeOnTheScreen();
@@ -760,6 +787,78 @@ describe("Cancel, and leaving the choice (SPEC 3.9: nothing is saved)", () => {
     expect(app.pathname()).toBe("/");
     expect(Sharing.clearSharedPayloads).toHaveBeenCalledTimes(1);
     expect(stored(1).photos).toHaveLength(1);
+  });
+
+  /**
+   * Android's back button, as React Native hands it on: to the listeners from the last added to
+   * the first, until one says that it handled the press. Gives whether one did; without one the
+   * phone closes the app.
+   */
+  function backButton(): { press: () => Promise<boolean> } {
+    const added: { listener: () => boolean | null | undefined; removed: boolean }[] = [];
+    jest.spyOn(BackHandler, "addEventListener").mockImplementation((_, listener) => {
+      const entry = { listener: listener as () => boolean | null | undefined, removed: false };
+      added.push(entry);
+      return {
+        remove: () => {
+          entry.removed = true;
+        },
+      };
+    });
+    return {
+      press: async () => {
+        let handled = false;
+        await act(async () => {
+          for (const entry of [...added].reverse()) {
+            if (!entry.removed && entry.listener() === true) {
+              handled = true;
+              break;
+            }
+          }
+        });
+        await settle();
+        return handled;
+      },
+    };
+  }
+
+  it("cancels on Android's back button when the choice is the app's first screen, and goes to the Library, where the phone would close the app with the share still held", async () => {
+    const back = backButton();
+    const copies = shareImages("a.jpg");
+    const app = await startApp("/share");
+    expect(router.canGoBack()).toBe(false);
+    await expect(back.press()).resolves.toBe(true);
+    expect(app.pathname()).toBe("/");
+    expect(Sharing.clearSharedPayloads).toHaveBeenCalledTimes(1);
+    expect(copies.map(exists)).toEqual([false]);
+    expect(mockLog.finds.size).toBe(0);
+  });
+
+  it("goes back on Android's back button to the screen the choice opened over, which drops the share", async () => {
+    const back = backButton();
+    const app = await startApp("/settings");
+    const copies = shareImages("a.jpg");
+    await shareArrives();
+    expect(app.pathname()).toBe("/share");
+    await expect(back.press()).resolves.toBe(true);
+    expect(app.pathname()).toBe("/settings");
+    expect(Sharing.clearSharedPayloads).toHaveBeenCalledTimes(1);
+    expect(copies.map(exists)).toEqual([false]);
+  });
+});
+
+describe("a share the library kept from an earlier run of the screens", () => {
+  it("is not read when the app opens at another screen: nothing is copied, shown or saved", async () => {
+    shareImages("a.jpg");
+    const app = await startApp("/");
+    expect(app.pathname()).toBe("/");
+    expect(Sharing.getResolvedSharedPayloadsAsync).not.toHaveBeenCalled();
+    expect(screen.queryByText(t.onePhoto)).not.toBeOnTheScreen();
+    await comesToFront();
+    expect(Sharing.getResolvedSharedPayloadsAsync).not.toHaveBeenCalled();
+    await addressArrives("what-mushroom-is-this://settings");
+    expect(Sharing.getResolvedSharedPayloadsAsync).not.toHaveBeenCalled();
+    expect(mockLog.finds.size).toBe(0);
   });
 });
 

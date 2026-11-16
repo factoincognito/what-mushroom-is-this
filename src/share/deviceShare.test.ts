@@ -143,6 +143,25 @@ describe("libraryCopy: the library's copy of a shared file", () => {
     expect(libraryCopy(`${copy.uri}?x=1`)).toBeNull();
     expect(libraryCopy(`${copy.uri}#x`)).toBeNull();
   });
+
+  it.each([null, undefined, 7, { uri: "file:///mock/cache/expo-sharing/a.jpg" }])(
+    "is not taken at %p, which is no address",
+    (value) => {
+      expect(libraryCopy(value as never)).toBeNull();
+    },
+  );
+
+  it("is not taken when the file system cannot say whether the file is there", () => {
+    const copy = libraryFile("IMG_11.jpg");
+    const exists = jest.spyOn(File.prototype, "exists", "get").mockImplementation(() => {
+      throw new Error("file system unavailable");
+    });
+    try {
+      expect(libraryCopy(copy.uri)).toBeNull();
+    } finally {
+      exists.mockRestore();
+    }
+  });
 });
 
 describe("keepSharedCopy: the app's own copy of a shared photo", () => {

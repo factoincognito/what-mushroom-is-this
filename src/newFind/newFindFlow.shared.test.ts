@@ -421,6 +421,30 @@ describe('NewFindFlow: the photos of "Add to an earlier find" from a share', () 
     expect(last()).toMatchObject({ phase: "ready", message: "findUnavailable", canAddMore: false });
   });
 
+  it("have their copies removed when the screen is left before any of them was taken, and none is saved", async () => {
+    const never = setUp({ kind: "add", findId: 7 }, shared(["a", "b"]), { finds: { 7: 1 } });
+    never.flow.close();
+    await never.flow.start();
+    expect(never.removed).toEqual([copy("a"), copy("b")]);
+    expect(never.photosAdded).toEqual([]);
+
+    // Left while the find is being read: the flow stops there.
+    const starting = setUp({ kind: "add", findId: 7 }, shared(["c"]), { finds: { 7: 1 } });
+    const started = starting.flow.start();
+    starting.flow.close();
+    await started;
+    expect(starting.removed).toEqual([copy("c")]);
+    expect(starting.photosAdded).toEqual([]);
+
+    // The same for the photo of a new find, left while the location permission is asked for.
+    const fresh = setUp({ kind: "new" }, shared(["d"]));
+    const opening = fresh.flow.start();
+    fresh.flow.close();
+    await opening;
+    expect(fresh.removed).toEqual([copy("d")]);
+    expect(fresh.added).toEqual([]);
+  });
+
   it("have their batch completed by Analyse, as any batch", async () => {
     const { flow, completed, last } = setUp({ kind: "add", findId: 7 }, shared(["a"]), {
       finds: { 7: 1 },
@@ -431,16 +455,23 @@ describe('NewFindFlow: the photos of "Add to an earlier find" from a share', () 
     expect(last()).toMatchObject({ analysed: 7, batchOpen: false });
   });
 
-  it("drop the counts from the screen when another photo is taken", async () => {
-    const { flow, take, last } = setUp({ kind: "add", findId: 7 }, shared(["a", "b", "c"], 1), {
+  it("keep the counts on the screen until another photo is taken or picked", async () => {
+    const full = setUp({ kind: "add", findId: 7 }, shared(["a", "b", "c"], 1), {
       finds: { 7: 3 },
     });
-    await flow.start();
-    expect(last()).toMatchObject({ sharedLeftOut: 1, sharedRefused: 1, photoCount: 5 });
+    await full.flow.start();
+    expect(full.last()).toMatchObject({ sharedLeftOut: 1, sharedRefused: 1, photoCount: 5 });
     // The find is full, so no photo is taken and the counts stay.
-    await flow.takePhoto();
-    expect(take).not.toHaveBeenCalled();
-    expect(last()).toMatchObject({ sharedLeftOut: 1, sharedRefused: 1 });
+    await full.flow.takePhoto();
+    expect(full.take).not.toHaveBeenCalled();
+    expect(full.last()).toMatchObject({ sharedLeftOut: 1, sharedRefused: 1 });
+
+    const room = setUp({ kind: "add", findId: 7 }, shared(["a"], 2), { finds: { 7: 1 } });
+    await room.flow.start();
+    expect(room.last()).toMatchObject({ sharedRefused: 2 });
+    await room.flow.pickFromGallery();
+    expect(room.pick).toHaveBeenCalledTimes(1);
+    expect(room.last()).toMatchObject({ sharedLeftOut: 0, sharedRefused: 0, phase: "ready" });
   });
 });
 

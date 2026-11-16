@@ -498,6 +498,43 @@ export type Strings = {
     /** The heading of the credits a licence asks for, such as FreeType's (PBI-2.8). */
     readonly creditsHeading: string;
   };
+  /**
+   * The choice another app's share of photos opens, and what the New find screen says of shared
+   * photos (docs/SPEC.md 3.9, Shared photos; PBI-2.21). `{count}` and `{max}` are filled in.
+   */
+  readonly share: {
+    readonly title: string;
+    /** While the share is read: the library copies its files into the app's cache. */
+    readonly reading: string;
+    /** How many photos were shared: one, or `{count}`. */
+    readonly onePhoto: string;
+    readonly severalPhotos: string;
+    /** The two choices. "New find" is offered for a share of one photo only. */
+    readonly newFind: string;
+    readonly addToFind: string;
+    /** Why several photos get no "New find": a new find is made from a share of one photo. */
+    readonly severalOnlyAdd: string;
+    /** There is no find to choose, so "Add to an earlier find" is not offered. */
+    readonly noFindToChoose: string;
+    /** The heading of the list of finds to add to. */
+    readonly chooseFind: string;
+    /** A find in that list that holds the most photos, `{max}`, and cannot be chosen. */
+    readonly full: string;
+    /** Drops the share; nothing is saved. */
+    readonly cancel: string;
+    /** While the shared files are checked as images, after the choice. */
+    readonly choosing: string;
+    /** `{count}` shared items were refused: the app takes only image files on the phone. */
+    readonly refused: string;
+    /** The share could not be read at all; nothing was saved. */
+    readonly unreadable: string;
+    /** The choice was opened with no share to choose for. */
+    readonly none: string;
+    /** On the New find screen: `{count}` shared photos did not fit a find of at most `{max}`. */
+    readonly leftOut: string;
+    /** On the New find screen: `{count}` shared files could not be loaded as images. */
+    readonly notImages: string;
+  };
 };
 
 /**
@@ -533,6 +570,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "queue",
     "find",
     "about",
+    "share",
   ],
   // The disclaimer for a lookup without photos is to be checked by the Italian speaker who
   // checked the disclaimer of SPEC 3.5 (docs/SPEC.md 3.9, Answers; docs/BACKLOG.md PBI-2.4).
@@ -552,6 +590,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "queue",
     "find",
     "about",
+    "share",
   ],
 };
 
@@ -924,6 +963,28 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       mapDataIntro:
         "Kartan hämtar sina kartbilder från OpenFreeMap. Deras källor anges här, som deras licenser kräver.",
     },
+    share: {
+      title: "Delade foton",
+      reading: "Läser in det som delades …",
+      onePhoto: "1 foto delades med appen.",
+      severalPhotos: "{count} foton delades med appen.",
+      newFind: "Nytt fynd",
+      addToFind: "Lägg till i ett tidigare fynd",
+      severalOnlyAdd:
+        "Ett nytt fynd görs av en delning med ett foto. Flera foton kan bara läggas till i ett tidigare fynd.",
+      noFindToChoose: "Det finns inget tidigare fynd som foton kan läggas till i.",
+      chooseFind: "Välj fyndet att lägga till i",
+      full: "Fyndet är fullt: det har {max} foton.",
+      cancel: "Avbryt",
+      choosing: "Kontrollerar de delade fotona …",
+      refused:
+        "Delade objekt som inte togs emot, eftersom appen bara tar emot bildfiler som finns på telefonen: {count}.",
+      unreadable: "Delningen gick inte att läsa, så inget sparades.",
+      none: "Inget är delat med appen just nu.",
+      leftOut: "Delade foton som inte fick plats, eftersom fyndet har högst {max} foton: {count}.",
+      notImages:
+        "Delade filer som inte togs emot, eftersom de inte gick att läsa in som bilder: {count}.",
+    },
   },
   en: {
     languageName: "English",
@@ -1288,6 +1349,26 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       mapDataHeading: "Map data",
       mapDataIntro:
         "The map loads its tiles from OpenFreeMap. Their sources are credited here, as their licences ask.",
+    },
+    share: {
+      title: "Shared photos",
+      reading: "Reading what was shared…",
+      onePhoto: "1 photo was shared with the app.",
+      severalPhotos: "{count} photos were shared with the app.",
+      newFind: "New find",
+      addToFind: "Add to an earlier find",
+      severalOnlyAdd:
+        "A new find is made from a share of one photo. Several photos can only be added to an earlier find.",
+      noFindToChoose: "There is no earlier find that photos can be added to.",
+      chooseFind: "Choose the find to add to",
+      full: "This find is full: it holds {max} photos.",
+      cancel: "Cancel",
+      choosing: "Checking the shared photos…",
+      refused: "Shared items refused, as the app takes only image files on the phone: {count}.",
+      unreadable: "The share could not be read, so nothing was saved.",
+      none: "Nothing is shared with the app right now.",
+      leftOut: "Shared photos left out, as the find holds at most {max} photos: {count}.",
+      notImages: "Shared files refused, as they could not be loaded as images: {count}.",
     },
   },
   // Not checked by an Italian speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
@@ -1666,6 +1747,29 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       mapDataHeading: "Dati della mappa",
       mapDataIntro:
         "La mappa carica le sue tessere da OpenFreeMap. Le loro fonti sono citate qui, come richiedono le loro licenze.",
+    },
+    share: {
+      title: "Foto condivise",
+      reading: "Lettura di ciò che è stato condiviso…",
+      onePhoto: "È stata condivisa 1 foto con l'app.",
+      severalPhotos: "Sono state condivise {count} foto con l'app.",
+      newFind: "Nuovo ritrovamento",
+      addToFind: "Aggiungi a un ritrovamento precedente",
+      severalOnlyAdd:
+        "Un nuovo ritrovamento si crea da una condivisione di una sola foto. Più foto si possono solo aggiungere a un ritrovamento precedente.",
+      noFindToChoose: "Non c'è nessun ritrovamento precedente a cui aggiungere foto.",
+      chooseFind: "Scegli il ritrovamento a cui aggiungere",
+      full: "Il ritrovamento è pieno: ha {max} foto.",
+      cancel: "Annulla",
+      choosing: "Controllo delle foto condivise…",
+      refused:
+        "Elementi condivisi rifiutati, perché l'app accetta solo file immagine presenti sul telefono: {count}.",
+      unreadable:
+        "Non è stato possibile leggere la condivisione, quindi non è stato salvato nulla.",
+      none: "Al momento non c'è nulla di condiviso con l'app.",
+      leftOut: "Foto condivise escluse, perché il ritrovamento ha al massimo {max} foto: {count}.",
+      notImages:
+        "File condivisi rifiutati, perché non è stato possibile caricarli come immagini: {count}.",
     },
   },
 };

@@ -58,7 +58,18 @@
           ]
         }
       ],
-      ["@maplibre/maplibre-react-native", { "android": { "locationEngine": "default" } }]
+      ["@maplibre/maplibre-react-native", { "android": { "locationEngine": "default" } }],
+      [
+        "expo-sharing",
+        {
+          "ios": { "enabled": false },
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": ["image/*"],
+            "multipleShareMimeTypes": ["image/*"]
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {

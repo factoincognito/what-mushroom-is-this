@@ -9,6 +9,7 @@ import { deviceSecretStore } from "../key/secureStore";
 import { LibraryFiltersProvider } from "../library/LibraryFiltersContext";
 import { QueueProvider } from "../queue/QueueContext";
 import { ScreenArea } from "../screen/ScreenArea";
+import { ShareProvider } from "../share/ShareContext";
 import { deviceStore } from "../storage/keyValueStore";
 import { openFindLog } from "../store/deviceFindStore";
 import { FindLogProvider } from "../store/FindLogContext";
@@ -17,8 +18,9 @@ import { FindLogProvider } from "../store/FindLogContext";
  * The root layout: the language, the key (whose first-start clearing runs at once), the find
  * log (opened when a screen first needs it), then the first-start disclaimer, then the analysis
  * queue, which runs only once the disclaimer is accepted, then the Library's filters, held while
- * the app runs (docs/SPEC.md 3.9), then the screens, each laid out clear of the system bars
- * (`screenLayout`).
+ * the app runs (docs/SPEC.md 3.9), then the share another app sent, read only once the disclaimer
+ * is accepted (3.9, Shared photos; PBI-2.21), then the screens, each laid out clear of the system
+ * bars (`screenLayout`).
  */
 export default function RootLayout() {
   return (
@@ -28,7 +30,9 @@ export default function RootLayout() {
           <DisclaimerGate store={deviceStore}>
             <QueueProvider>
               <LibraryFiltersProvider>
-                <Screens />
+                <ShareProvider>
+                  <Screens />
+                </ShareProvider>
               </LibraryFiltersProvider>
             </QueueProvider>
           </DisclaimerGate>
@@ -58,6 +62,7 @@ function Screens() {
       <Stack.Screen name="text-lookup" options={{ title: strings.lookup.title }} />
       <Stack.Screen name="settings" options={{ title: strings.settings.title }} />
       <Stack.Screen name="about" options={{ title: strings.about.title }} />
+      <Stack.Screen name="share" options={{ title: strings.share.title }} />
       <Stack.Screen name="+not-found" options={{ title: strings.notFound.title }} />
     </Stack>
   );

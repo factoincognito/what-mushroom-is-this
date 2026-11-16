@@ -31,6 +31,16 @@
  * its own, as a gallery photo without metadata (3.1): as a find's first photo it gives the find the
  * time of saving, or of picking on an unsaved lookup, and no position. A file the app cannot load
  * as an image is refused with a message (`fileNotImage`), and nothing is saved or held.
+ *
+ * Photos another app shared to the app are a fourth source (docs/SPEC.md 3.9, Shared photos;
+ * PBI-2.21), given to the flow, not picked on the screen: when it starts, from the choice
+ * (`shared`), or while it holds its find's open batch (`addShared`). The camera then does not
+ * open. For a new lookup the one shared photo is saved at once as the find's first photo, with
+ * Save on whatever its starting value; nothing is read from a shared file, so the find gets the
+ * time of saving and no position, never the phone's. For photos added to a find, they are saved
+ * one after another in the order shared, as one batch, while they fit; those that do not are
+ * left out, counted, and their copies removed. A photo whose save fails is kept as any other.
+ * The app's copy of a shared photo that is not saved to a find is removed when the screen is left.
  */
 
 import type { Answer } from "../analysis/answer";
@@ -42,6 +52,7 @@ import {
   startPositionTracker,
 } from "../position/positionTracker";
 import type { AnalyseLookupResult, QueueNotice } from "../queue/queue";
+import type { SharedPhotos } from "../share/shareSession";
 import type { FindLog } from "../store/findStore";
 import type { PickResult } from "./devicePicker";
 import { ensurePermission, type PermissionAsker, type PermissionState } from "./permissions";
@@ -126,6 +137,13 @@ export interface NewFindView {
    * photos and the user has not chosen to drop it.
    */
   holdsLeave: boolean;
+  /**
+   * Of the photos last shared to the screen (docs/SPEC.md 3.9, Shared photos): how many were left
+   * out because the find cannot hold them, and how many files the choice refused as no images.
+   * Both are 0 again once another photo is taken or picked.
+   */
+  sharedLeftOut: number;
+  sharedRefused: number;
 }
 
 export const INITIAL_VIEW: NewFindView = {
@@ -146,6 +164,8 @@ export const INITIAL_VIEW: NewFindView = {
   outcome: null,
   offerSave: false,
   holdsLeave: false,
+  sharedLeftOut: 0,
+  sharedRefused: 0,
 };
 
 /** A new photo lookup, or photos added to a find; `findId` null when the address names none. */
@@ -177,13 +197,15 @@ export interface NewFindDeps {
 }
 
 /**
- * A photo to save: from the camera, the gallery or the phone's files, or held by an unsaved lookup
- * when Save was turned on, the first with its time and position (`taken`), the others without.
+ * A photo to save: from the camera, the gallery or the phone's files, shared by another app, or
+ * held by an unsaved lookup when Save was turned on, the first with its time and position
+ * (`taken`), the others without.
  */
 type Pending =
   | { from: "camera"; uri: string }
   | { from: "gallery"; photo: GalleryPhoto }
   | { from: "files"; uri: string }
+  | { from: "shared"; uri: string }
   | { from: "held"; uri: string; taken: Taken | null };
 
 /** A photo an unsaved lookup holds: the first with its time and position, the others without. */
@@ -225,20 +247,26 @@ export class NewFindFlow {
   private leaveWaits = false;
   /** The user chose to leave without the unsaved lookup. */
   private discarded = false;
+  /** The photos the choice of a share handed to the screen, until the flow takes them. */
+  private shared: SharedPhotos | null;
 
   constructor(
     private readonly deps: NewFindDeps,
     private readonly onChange: (view: NewFindView) => void,
     private readonly target: NewFindTarget = { kind: "new" },
+    shared: SharedPhotos | null = null,
   ) {
     this.findId = target.kind === "add" ? target.findId : null;
+    this.shared = shared;
   }
 
   /**
    * For a new lookup: reads the Save switch's starting value, asks for the location permission
    * the first time, starts asking for a position (with Save on or off, SPEC 3.9), opens the
    * camera. For photos added to a find: reads how many it holds, and opens the camera while it
-   * holds fewer than the most.
+   * holds fewer than the most. With photos shared to the screen, the camera does not open: they
+   * are saved instead, and a new lookup has Save on whatever its starting value, as the choice
+   * was a find (docs/SPEC.md 3.9, Shared photos).
    */
   async start(): Promise<void> {
     if (this.started || this.closed) {
@@ -249,7 +277,7 @@ export class NewFindFlow {
       await this.startAdding();
       return;
     }
-    this.saveOn = await this.deps.readSaveSetting();
+    this.saveOn = this.shared !== null ? true : await this.deps.readSaveSetting();
     if (this.closed) {
       return;
     }
@@ -263,7 +291,42 @@ export class NewFindFlow {
       this.tracker = this.startTracker();
     }
     this.show({ location, canAddMore: true });
+    const { shared } = this;
+    if (shared !== null) {
+      this.shared = null;
+      await this.takeShared(shared);
+      return;
+    }
     await this.takePhoto();
+  }
+
+  /**
+   * Whether photos shared to the app for the find given can join the batch this screen holds
+   * (docs/SPEC.md 3.9, Shared photos): the find is this screen's, its batch is open, and nothing
+   * else is under way here, no photo being saved or kept after a failed save, no question open,
+   * no camera or picker open.
+   */
+  canJoin(findId: number): boolean {
+    return (
+      !this.closed &&
+      this.findId === findId &&
+      this.view.batchOpen &&
+      this.pending.length === 0 &&
+      this.view.confirming === null &&
+      (this.view.phase === "ready" || this.view.phase === "saved")
+    );
+  }
+
+  /**
+   * Photos shared to the app join the batch open on this screen, saved as `start` saves those it
+   * is given. A screen that cannot take them (`canJoin`) saves none, and their copies are removed.
+   */
+  async addShared(shared: SharedPhotos): Promise<void> {
+    if (this.findId === null || !this.canJoin(this.findId)) {
+      this.removeCopies(shared.photos);
+      return;
+    }
+    await this.takeShared(shared);
   }
 
   /** Starts asking the phone for a position, with the limits of SPEC 3.6. */
@@ -481,6 +544,11 @@ export class NewFindFlow {
     for (const uri of this.unsavedCopies) {
       this.deps.removeCopy(uri);
     }
+    // Shared photos the flow never got to take: the screen was left while it started.
+    if (this.shared !== null) {
+      this.removeCopies(this.shared.photos);
+      this.shared = null;
+    }
     const id = this.findId;
     if (id !== null && this.view.batchOpen) {
       this.view = { ...this.view, batchOpen: false };
@@ -526,7 +594,7 @@ export class NewFindFlow {
       taken =
         photo.from === "gallery"
           ? takenFromGallery(photo.photo, this.deps.now)
-          : photo.from === "files"
+          : photo.from === "files" || photo.from === "shared"
             ? takenFromGallery({ uri: photo.uri, exif: null }, this.deps.now)
             : await takenByCamera(this.tracker, this.deps.now);
       this.trackerSpent = true;
@@ -606,7 +674,46 @@ export class NewFindFlow {
     });
   }
 
-  /** Reads the find photos are added to, and opens the camera while it can take more. */
+  /**
+   * Saves the photos shared to the screen (docs/SPEC.md 3.9, Shared photos), in the order shared,
+   * while they fit: one for a find not yet made, since a new find is made of one photo, and up to
+   * the most a find holds otherwise, counting the photos kept after a failed save. Those that do
+   * not fit are left out and their copies removed; the screen says how many, and how many files
+   * the choice refused. The copies of those taken are removed when the screen is left unless
+   * their photo is saved to the find by then.
+   */
+  private async takeShared(shared: SharedPhotos): Promise<void> {
+    const room =
+      this.findId === null
+        ? 1
+        : this.deps.appConfig.maxPhotosPerFind - this.view.photoCount - this.pending.length;
+    const fit = shared.photos.slice(0, Math.max(room, 0));
+    const leftOut = shared.photos.slice(fit.length);
+    this.removeCopies(leftOut);
+    for (const uri of fit) {
+      this.unsavedCopies.push(uri);
+      this.pending.push({ from: "shared", uri });
+    }
+    const counts = { sharedLeftOut: leftOut.length, sharedRefused: shared.refused };
+    if (fit.length === 0) {
+      this.show({ phase: "ready", ...counts });
+      return;
+    }
+    this.show(counts);
+    await this.save();
+  }
+
+  /** Removes the app's copies of shared photos that are not saved to a find. */
+  private removeCopies(uris: readonly string[]): void {
+    for (const uri of uris) {
+      this.deps.removeCopy(uri);
+    }
+  }
+
+  /**
+   * Reads the find photos are added to, and opens the camera while it can take more; with photos
+   * shared to the screen, those are saved instead, and the camera does not open.
+   */
   private async startAdding(): Promise<void> {
     const id = this.findId;
     let count: number | null = null;
@@ -621,13 +728,19 @@ export class NewFindFlow {
     if (this.closed) {
       return;
     }
+    const { shared } = this;
+    this.shared = null;
     if (count === null) {
+      // No photo is saved to a find that is not there: the shared ones' copies are removed.
+      this.removeCopies(shared?.photos ?? []);
       this.show({ phase: "ready", message: "findUnavailable", canAddMore: false });
       return;
     }
     const canAddMore = count < this.deps.appConfig.maxPhotosPerFind;
     this.show({ phase: "ready", photoCount: count, canAddMore });
-    if (canAddMore) {
+    if (shared !== null) {
+      await this.takeShared(shared);
+    } else if (canAddMore) {
       await this.takePhoto();
     }
   }
@@ -644,7 +757,7 @@ export class NewFindFlow {
   private async pick(
     open: () => Promise<PickResult>,
   ): Promise<{ uri: string; exif: unknown } | null> {
-    this.show({ phase: "busy", message: null });
+    this.show({ phase: "busy", message: null, sharedLeftOut: 0, sharedRefused: 0 });
     try {
       const result = await open();
       if (result.kind === "canceled") {
@@ -691,8 +804,9 @@ export class NewFindFlow {
         }
         this.pending.shift();
         photoCount += 1;
-        if (next.from === "held") {
-          // The store has its own copy now; the screen's copy is no longer the lookup's alone.
+        if (next.from === "held" || next.from === "shared") {
+          // The store has its own copy now; the screen's copy is no longer the lookup's alone,
+          // nor a shared photo's one that is removed because its photo was not saved.
           this.forgetCopy(next.uri);
         }
       }
@@ -746,8 +860,12 @@ export class NewFindFlow {
         this.tracker?.stop();
         return id;
       }
-      case "files": {
+      case "files":
+      case "shared": {
         // No metadata of its own: the time of saving and no position, as a gallery photo without.
+        // A shared photo's own time and position would be taken by 3.1's rule for a gallery
+        // photo, but the app has no reader for the tags of a file, and the library gives none
+        // with a share (Known unknown 16): what cannot be read counts as missing (SPEC 3.9).
         const id = await saveGalleryFind({ uri: pending.uri, exif: null }, deps);
         this.tracker?.stop();
         return id;

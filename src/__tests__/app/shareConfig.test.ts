@@ -30,6 +30,8 @@ type ExpoConfig = {
   ios?: Record<string, unknown>;
   extra?: { eas?: Record<string, unknown> };
   _internal?: {
+    /** The project's folder, which Expo's CLI gives a config before its plugins run. */
+    projectRoot?: string;
     modResults?: {
       android?: {
         manifest?: {
@@ -104,9 +106,12 @@ describe("the expo-sharing config plugin in app.json (SPEC 3.9: images only, And
 
   describe("run for real over app.json", () => {
     let config: ExpoConfig;
+    /** The same config without the plugin, to see what the plugin adds. */
+    let without: ExpoConfig;
     let filters: IntentFilter[];
 
-    beforeAll(async () => {
+    /** The Android files of app.json's config, the plugin run over it or not, its mods run dry. */
+    async function compiled(withPlugin: boolean): Promise<ExpoConfig> {
       const entry = sharingEntry();
       if (entry === undefined) {
         throw new Error("app.json registers no expo-sharing plugin");
@@ -114,20 +119,31 @@ describe("the expo-sharing config plugin in app.json (SPEC 3.9: images only, And
       const plugin: { default: (config: ExpoConfig, props: unknown) => ExpoConfig } =
         jest.requireActual("expo-sharing/app.plugin");
       const { compileModsAsync } = jest.requireActual("expo/config-plugins");
-      config = plugin.default(structuredClone(appJson.expo), entry[1]);
-      await compileModsAsync(config, {
+      const base = { ...structuredClone(appJson.expo), _internal: { projectRoot: PROJECT_ROOT } };
+      const result = withPlugin ? plugin.default(base, entry[1]) : base;
+      await compileModsAsync(result, {
         projectRoot: PROJECT_ROOT,
         introspect: true,
         platforms: ["android"],
         assertMissingModProviders: false,
       });
+      return result;
+    }
+
+    const mainActivity = (of: ExpoConfig): Activity => {
       const activities =
-        config._internal?.modResults?.android?.manifest?.manifest.application?.[0]?.activity ?? [];
+        of._internal?.modResults?.android?.manifest?.manifest.application?.[0]?.activity ?? [];
       const main = activities.find((activity) => activity.$["android:name"] === ".MainActivity");
       if (main === undefined) {
         throw new Error("introspection gave no main activity");
       }
-      filters = main["intent-filter"] ?? [];
+      return main;
+    };
+
+    beforeAll(async () => {
+      config = await compiled(true);
+      without = await compiled(false);
+      filters = mainActivity(config)["intent-filter"] ?? [];
     }, 120_000);
 
     /** The filters of the main activity that take a share: those with a SEND action. */
@@ -172,11 +188,24 @@ describe("the expo-sharing config plugin in app.json (SPEC 3.9: images only, And
       expect(appJson.expo.scheme).toBe("what-mushroom-is-this");
     });
 
-    it("asks for no permission", () => {
-      const manifest = config._internal?.modResults?.android?.manifest?.manifest;
-      const withoutPlugin = (appJson.expo.android?.blockedPermissions ?? []).length;
-      // Introspection writes the blocked permissions as removals; the plugin adds none of its own.
-      expect((manifest?.["uses-permission"] ?? []).length).toBeLessThanOrEqual(withoutPlugin);
+    it("adds those two filters to the main activity and no other", () => {
+      const before = mainActivity(without)["intent-filter"] ?? [];
+      expect(filters).toHaveLength(before.length + 2);
+      expect(shareFilters()).toHaveLength(2);
+      expect(
+        before.filter((filter) =>
+          (filter.action ?? []).some((action) =>
+            action.$["android:name"]?.startsWith("android.intent.action.SEND"),
+          ),
+        ),
+      ).toEqual([]);
+    });
+
+    it("asks for no permission: the manifest's permissions are as without the plugin", () => {
+      const permissions = (of: ExpoConfig) =>
+        of._internal?.modResults?.android?.manifest?.manifest["uses-permission"];
+      expect(permissions(without)).toBeDefined();
+      expect(permissions(config)).toEqual(permissions(without));
     });
 
     it("sets up nothing for iOS: no share extension, no app group", () => {
