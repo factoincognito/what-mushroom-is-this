@@ -80,7 +80,7 @@ function isFrameMarker(markerByte: number): boolean {
 }
 
 /** Whether a marker that opens a segment with a length is on the allowlist. */
-function isAllowedSegment(markerByte: number): boolean {
+export function isAllowedSegment(markerByte: number): boolean {
   return (
     isFrameMarker(markerByte) ||
     markerByte === DHT ||
@@ -99,7 +99,7 @@ function startsWith(bytes: Uint8Array, start: number, length: number, id: number
 }
 
 /** Whether an allowed segment's payload is what its marker may hold. */
-function hasAllowedPayload(
+export function hasAllowedPayload(
   markerByte: number,
   bytes: Uint8Array,
   start: number,
@@ -120,7 +120,7 @@ function hasAllowedPayload(
  * scan. Gives the position of the 0xFF that starts that marker, or null when the bytes
  * end first.
  */
-function endOfScan(bytes: Uint8Array, start: number): number | null {
+export function endOfScan(bytes: Uint8Array, start: number): number | null {
   let position = start;
   while (position < bytes.length) {
     if (bytes[position] !== MARKER_PREFIX) {

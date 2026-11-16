@@ -12,6 +12,7 @@ import {
   messageBody,
   photoFailure,
   unloadableEncoder,
+  unstrippedJpegWith,
 } from "../testing/failureDetails";
 import { failureMessage, formatTimeIn, noticeMessage, stopNeedsSettings } from "./messages";
 import type { QueueNotice, QueueStop } from "./queue";
@@ -168,32 +169,32 @@ const STORED: readonly {
 }[] = [
   {
     name: "an APP1 segment (EXIF, XMP)",
-    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.EXIF))),
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(unstrippedJpegWith(JPEG.EXIF))),
     expected: (t) => t.segmentCheck.app1,
   },
   {
     name: "an APP0 segment that is not JFIF (a JFIF extension)",
-    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.JFXX))),
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(unstrippedJpegWith(JPEG.JFXX))),
     expected: (t) => t.segmentCheck.app0,
   },
   {
     name: "an APP2 segment that is not a colour profile",
-    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.MPF))),
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(unstrippedJpegWith(JPEG.MPF))),
     expected: (t) => t.segmentCheck.app2,
   },
   {
     name: "an APP13 segment (IPTC)",
-    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.IPTC))),
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(unstrippedJpegWith(JPEG.IPTC))),
     expected: (t) => t.segmentCheck.app13,
   },
   {
     name: "another application segment (APP5)",
-    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.APP5))),
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(unstrippedJpegWith(JPEG.APP5))),
     expected: (t) => t.segmentCheck.otherApp.replace("{number}", "5"),
   },
   {
     name: "a comment",
-    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(jpegWith(JPEG.COM))),
+    make: () => photoFailure(preparePhotoForAnalysis, encoderOf(unstrippedJpegWith(JPEG.COM))),
     expected: (t) => t.segmentCheck.comment,
   },
   {
@@ -202,12 +203,11 @@ const STORED: readonly {
     expected: (t) => t.segmentCheck.otherMarker,
   },
   {
-    name: "data after the end of the image",
-    make: () =>
-      photoFailure(
-        preparePhotoForAnalysis,
-        encoderOf(jpeg(JPEG.SOI, JPEG.JFIF, JPEG.DQT, JPEG.SOF0, JPEG.SCAN, JPEG.EOI, JPEG.SOI)),
-      ),
+    // Since the strip (PBI-2.22) the image module no longer stores this: the strip removes the
+    // bytes after the end of the image, and a JPEG it passes on unchanged fails the check before
+    // its end. A find that failed before the strip can still hold it.
+    name: "data after the end of the image, as stored before the strip",
+    make: async () => ({ cause: "segment-check", detail: "trailing-data" }),
     expected: (t) => t.segmentCheck.trailingData,
   },
   {
@@ -344,7 +344,6 @@ describe("failureMessage: a failure as the app stores it, in plain words (PBI-1.
       "forbidden-segment 0xFFFE",
       "forbidden-segment 0xFFDC",
     ]);
-    expect(details).toContain("trailing-data");
     expect(details).toContain(
       "load-failed: Could not load the image: file:///data/user/0/app/files/photos/p1.jpg",
     );

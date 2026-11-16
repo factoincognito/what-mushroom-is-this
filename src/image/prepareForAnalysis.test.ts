@@ -25,8 +25,18 @@ const SOF0 = segment(0xc0, [0x08, 0x00, 0x10, 0x00, 0x10, 0x01, 0x01, 0x11, 0x00
 const SCAN = [...segment(0xda, [0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]), 0x12, 0x34, 0xff, 0x00, 0x56];
 const EXIF = segment(0xe1, [0x45, 0x78, 0x69, 0x66, 0x00, 0x00]);
 
+const COM = segment(0xfe, [0x68, 0x69]);
+/** DNL, a marker the check refuses and the strip does not remove (docs/SPEC.md 3.3). */
+const DNL = segment(0xdc, [0x00, 0x10]);
+
 const CLEAN = Uint8Array.from([SOI, JFIF, DQT, SOF0, SCAN, EOI].flat());
 const WITH_EXIF = Uint8Array.from([SOI, JFIF, EXIF, DQT, SOF0, SCAN, EOI].flat());
+/** As `CLEAN`, with an APP1 and a comment in it and a second image after its end. */
+const WITH_METADATA = Uint8Array.from(
+  [SOI, JFIF, EXIF, DQT, COM, SOF0, SCAN, EOI, SOI, EXIF, SCAN, EOI].flat(),
+);
+/** A JPEG the strip passes on unchanged: its APP1 is the first thing the check refuses. */
+const WITH_EXIF_AND_DNL = Uint8Array.from([SOI, JFIF, EXIF, DQT, DNL, SOF0, SCAN, EOI].flat());
 
 /** Stands in for expo-image-manipulator: the decoded size, and the bytes it encodes. */
 class FakeEncoder implements JpegEncoder {
@@ -112,8 +122,33 @@ describe("preparePhotoForAnalysis", () => {
     expect(prepared).toMatchObject({ ok: true, width: 800, height: 600 });
   });
 
-  it("fails the find on the segment check, naming the refused marker, when the encoder writes EXIF", async () => {
+  it("strips the APP1 the encoder writes and gives out the stripped bytes, which pass the check (PBI-2.22)", async () => {
     encoder.bytes = WITH_EXIF;
+    await expect(
+      preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
+    ).resolves.toEqual({
+      ok: true,
+      imageBase64: bytesToBase64(CLEAN),
+      width: 2212,
+      height: 1659,
+    });
+    expect(encoder.released).toBe(1);
+  });
+
+  it("gives out the photo without the encoder's APP1, comment and bytes after the end of the image, and leaves the encoder's bytes as they were", async () => {
+    const encoded = Uint8Array.from(WITH_METADATA);
+    encoder.bytes = encoded;
+    const prepared = await preparePhotoForAnalysis(
+      "file:///doc/photos/p1.jpg",
+      "claude-opus-5-5",
+      encoder,
+    );
+    expect(prepared).toMatchObject({ ok: true, imageBase64: bytesToBase64(CLEAN) });
+    expect(encoded).toEqual(WITH_METADATA);
+  });
+
+  it("fails the find on the segment check, naming the first refused marker, when the encoder's JPEG holds a marker the strip does not remove", async () => {
+    encoder.bytes = WITH_EXIF_AND_DNL;
     await expect(
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
     ).resolves.toEqual({
@@ -122,6 +157,28 @@ describe("preparePhotoForAnalysis", () => {
       failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
     });
     expect(encoder.released).toBe(1);
+  });
+
+  it("fails the find on the segment check, naming that marker, when a marker the strip does not remove is all the check refuses", async () => {
+    encoder.bytes = Uint8Array.from([SOI, JFIF, DQT, DNL, SOF0, SCAN, EOI].flat());
+    await expect(
+      preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
+    ).resolves.toEqual({
+      ok: false,
+      loaded: true,
+      failure: { cause: "segment-check", detail: "forbidden-segment 0xFFDC" },
+    });
+  });
+
+  it("fails the find on the segment check when the encoder's JPEG is not sound after its APP1: nothing is repaired", async () => {
+    encoder.bytes = Uint8Array.from([SOI, JFIF, EXIF, [0x00], DQT, SOF0, SCAN, EOI].flat());
+    await expect(
+      preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
+    ).resolves.toEqual({
+      ok: false,
+      loaded: true,
+      failure: { cause: "segment-check", detail: "forbidden-segment 0xFFE1" },
+    });
   });
 
   it("fails the find on the segment check, naming the reason, when the encoder's output is cut short", async () => {
@@ -135,14 +192,15 @@ describe("preparePhotoForAnalysis", () => {
     });
   });
 
-  it("fails the find on the segment check when bytes follow the end of the image", async () => {
+  it("gives out the image alone when bytes follow its end: a second image after it is removed (PBI-2.22)", async () => {
     encoder.bytes = Uint8Array.from([...CLEAN, ...CLEAN]);
     await expect(
       preparePhotoForAnalysis("file:///doc/photos/p1.jpg", "claude-opus-5-5", encoder),
     ).resolves.toEqual({
-      ok: false,
-      loaded: true,
-      failure: { cause: "segment-check", detail: "trailing-data" },
+      ok: true,
+      imageBase64: bytesToBase64(CLEAN),
+      width: 2212,
+      height: 1659,
     });
   });
 
@@ -255,8 +313,18 @@ describe("prepareJpegForAnalysis (the representative picture's resize, docs/SPEC
     expect(encoder.released).toBe(1);
   });
 
+  it("gives the stripped JPEG's bytes, the ones the check passed, when the encoder writes metadata (PBI-2.22)", async () => {
+    encoder.bytes = WITH_METADATA;
+    const prepared = await prepareJpegForAnalysis(
+      "file:///cache/picture-1.png",
+      "claude-opus-5-5",
+      encoder,
+    );
+    expect(prepared).toEqual({ ok: true, bytes: CLEAN, width: 2212, height: 1659 });
+  });
+
   it("fails as a photo fails: what the segment check refuses, and what cannot be loaded", async () => {
-    encoder.bytes = WITH_EXIF;
+    encoder.bytes = WITH_EXIF_AND_DNL;
     await expect(
       prepareJpegForAnalysis("file:///cache/picture-1.png", "claude-opus-5-5", encoder),
     ).resolves.toEqual({

@@ -1,7 +1,8 @@
 /**
  * The photo for analysis (docs/SPEC.md 3.3): resized to the largest size that fits both image
- * limits of the model in use, re-encoded as JPEG, then put through the segment check. Only bytes
- * that pass the check are given out to be sent.
+ * limits of the model in use, re-encoded as JPEG, stripped of the application segments, comments
+ * and trailing bytes the check refuses (`stripJpegSegments.ts`), then put through the segment
+ * check. Only bytes that pass the check are given out to be sent.
  *
  * It runs at analysis time, not at saving: SPEC 3.3 sizes the photo for "the model in use", which
  * the user can change while a find waits, and has a photo that fails the check marked failed,
@@ -14,6 +15,7 @@ import type { FindFailure } from "../store/find";
 import { bytesToBase64 } from "./base64";
 import { checkJpegSegments } from "./jpegSegments";
 import { resizedSize } from "./resize";
+import { stripJpegSegments } from "./stripJpegSegments";
 
 /** A photo decoded by the encoder, ready to be encoded again; to be released once done with. */
 export interface LoadedImage {
@@ -32,8 +34,9 @@ export interface JpegEncoder {
 export type PreparedPhoto =
   | { ok: true; imageBase64: string; width: number; height: number }
   /**
-   * The find is marked failed: the encoder wrote something the segment check refuses
-   * (`segment-check`), or the photo itself cannot be loaded, decoded or sized (`photo`).
+   * The find is marked failed: the encoder wrote something the segment check refuses and the
+   * strip before it does not remove (`segment-check`), or the photo itself cannot be loaded,
+   * decoded or sized (`photo`).
    * `loaded` is false only when the encoder could not load the photo: on Android such a failure
    * does not say why, so the queue counts these (PBI-1.25).
    */
@@ -116,7 +119,8 @@ export async function prepareJpegForAnalysis(
       }
       throw new PhotoPreparationError(size.reason, what);
     }
-    const bytes = await image.encodeJpeg(size.width, size.height, quality);
+    // Strip, then check: the check runs on the stripped bytes, and those are the bytes given out.
+    const bytes = stripJpegSegments(await image.encodeJpeg(size.width, size.height, quality));
     const check = checkJpegSegments(bytes);
     if (!check.ok) {
       const marker = check.marker === null ? "" : ` ${markerName(check.marker)}`;

@@ -55,6 +55,15 @@ export function jpegWith(...extra: readonly (readonly number[])[]): Uint8Array {
   return jpeg(JPEG.SOI, JPEG.JFIF, ...extra, JPEG.DQT, JPEG.SOF0, JPEG.SCAN, JPEG.EOI);
 }
 
+/**
+ * As `jpegWith`, and with a DNL after the parts: a marker the check refuses and the strip does not
+ * remove, so the strip passes the JPEG on unchanged and the check refuses the first of the parts
+ * (docs/SPEC.md 3.3; PBI-2.22). Without it the strip removes the parts and the photo is prepared.
+ */
+export function unstrippedJpegWith(...extra: readonly (readonly number[])[]): Uint8Array {
+  return jpegWith(...extra, JPEG.DNL);
+}
+
 /** An encoder that loads a photo of the size given and encodes it as the bytes given. */
 export function encoderOf(bytes: Uint8Array, width = 4032, height = 3024): JpegEncoder {
   return {
