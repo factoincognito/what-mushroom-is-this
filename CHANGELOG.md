@@ -12,6 +12,14 @@ All notable changes to What mushroom is this? are documented here.
   could name a photo that did not fail; when the find is analysed again
   and fails, the photo is named by the number it then has (#101).
 
+### Fixed
+
+- The "Settings" link at the bottom of the Finds screen is no longer
+  drawn behind Android's navigation buttons. Every screen now keeps what
+  it shows clear of the system navigation bar (three buttons or gestures)
+  and the display cutout, and the first-start disclaimer clear of the
+  status bar too (PBI-2.20, #106).
+
 ## [0.2.0]
 
 ### Added
