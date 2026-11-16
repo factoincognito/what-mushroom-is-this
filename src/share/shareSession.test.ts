@@ -238,6 +238,18 @@ describe("ShareSession: a second share (SPEC 3.9: it takes the first one's place
     expect(removed.sort()).toEqual([copyOf(A), copyOf(B)].sort());
   });
 
+  it("does not have the library resolve a web address that took the share's place while the earlier share's copies were removed", async () => {
+    const { lib, session, source, files } = setUp([image(A)]);
+    await session.refresh();
+    lib.shared = [image(B)];
+    files.remove.mockImplementationOnce(() => {
+      lib.shared = URL_SHARE;
+    });
+    await session.refresh();
+    expect(source.resolve).toHaveBeenCalledTimes(1);
+    expect(session.getState()).toEqual({ kind: "refused", refused: 1 });
+  });
+
   it("takes nothing of a share that was replaced while the library resolved it", async () => {
     const { lib, session, source, removed } = setUp([image(A)]);
     const first = held<unknown>();
