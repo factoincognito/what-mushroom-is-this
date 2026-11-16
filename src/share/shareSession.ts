@@ -137,6 +137,15 @@ export class ShareSession {
       return;
     }
     this.set({ kind: "reading" });
+    // The library resolves whatever share it holds when it is called, which may no longer be the
+    // one read above: it is read once more, last, so that nothing of the app's own runs between
+    // the check and the call.
+    if (this.readNow()?.key !== share.key) {
+      this.key = null;
+      this.set(NONE);
+      await this.refresh();
+      return;
+    }
     let resolved: unknown;
     try {
       resolved = await this.deps.source.resolve();
