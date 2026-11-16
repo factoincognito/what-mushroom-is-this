@@ -34,6 +34,15 @@ Adam, 2026-11-16 08:42, in chat ("Strip, then check (Recommended)", his
 choice among the options Clead put to him: strip, show the reason
 first, or both).
 
+The share target (3.9, Shared photos; Known unknown 16): Adam's three
+decisions are quoted in the part. He confirmed the choices marked
+**[Clead]** there on 2026-11-16 at 15:07, in chat ("apyr"), answering
+Clead's list of twelve of 14:41 (the choice screen, its line for
+several photos, Save, full finds, the limit, a file that is not an
+image, the disclaimer, a second share, a shared photo's time and
+position, Android only, the files taken, and a find whose batch is
+open), with the further marks that list said it covered.
+
 ---
 
 ## 1. System overview
