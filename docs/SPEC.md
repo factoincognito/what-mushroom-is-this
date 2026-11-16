@@ -790,11 +790,12 @@ answers to Clead's questions, 19:05).
    - whether an encoder writes an Adobe APP14 segment for a picture
      that is not YCbCr or grey. The segment tells a decoder the colour
      transform, and the strip removes it with the other APPn, so such a
-     picture's colours would change, where the check alone refused the
-     photo. Read on 2026-11-16, not run: Android's `Bitmap.compress`
-     encodes through Skia and libjpeg-turbo, which there write YCbCr or
-     grey, with a JFIF header and no Adobe segment; iOS not read.
-     **[not checked]** on a phone;
+     picture's colours can change, where the check alone refused the
+     photo. Read on 2026-11-16, not run, and not in the versions an
+     Android release ships: Android's `Bitmap.compress` encodes through
+     Skia and libjpeg-turbo, which there write YCbCr or grey, with a
+     JFIF header and no Adobe segment; iOS not read. **[not checked]**
+     on a phone;
    - what the strip does with a marker the check refuses that is
      neither an application segment nor a comment (JPG and JPGn, DHP,
      EXP, DNL, TEM, a restart marker outside a scan, the reserved
