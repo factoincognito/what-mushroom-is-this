@@ -29,6 +29,11 @@ out (product-office `RULES.md` § 19 (2)); where the two differ, the
 product office's record holds, and the difference is a defect of this
 file.
 
+The strip before the segment check (3.3, Known unknown 2): approved by
+Adam, 2026-11-16 08:42, in chat ("Strip, then check (Recommended)", his
+choice among the options Clead put to him: strip, show the reason
+first, or both).
+
 ---
 
 ## 1. System overview
@@ -79,7 +84,7 @@ its own tests; the screens only wire them together. The modules:
 | config | the API address, the default model, each model's image limits, the request time limit, the API version, `max_tokens`, the bound on `retry-after`, the position limits (section 3.6) |
 | i18n | the strings of the three app languages, and the language choice |
 | key | the API key in the secure store; the first-start-after-install clearing |
-| image | the resize rule and the check of a JPEG's application segments |
+| image | the resize rule, and the strip and the check of a JPEG's application segments |
 | analysis | the request builder, the answer's shape and its validation, the error classes |
 | queue | the finds waiting for analysis, when the queue runs and stops |
 | store | the database of finds and the photo files |
@@ -170,9 +175,31 @@ When the queue has stopped (3.3), the Log screen says why and offers
   edge half to even as the page's reference code does (so 4032 × 3024 gives
   1270 × 952, not 1269 × 952); the module's tests include that page's
   example (1075 × 1520 to 924 × 1307 on the standard tier).
-- The photo sent carries no metadata. A plain module checks the bytes of
-  the JPEG to be sent, through the whole file to its end, between scans
-  too (**[Clead]**: the check's detail). It is an allowlist:
+- The photo sent carries no metadata. The app first strips its own
+  re-encoded copy of the photo, the JPEG the phone's encoder wrote, and
+  then checks it; only bytes that pass the check are sent (Adam,
+  2026-11-16 08:42; **[Clead]**: the strip's detail).
+  A plain module strips the encoder's bytes. It keeps the structural
+  markers and the entropy-coded data as they are, and APP0 only as JFIF
+  and APP2 only as an ICC colour profile, as the check below passes
+  them. It removes:
+  - every other application segment: APP1 (EXIF, XMP), APP13 (IPTC), a
+    JFIF extension APP0, an APP2 of another kind (such as a
+    Multi-Picture index) and the other APPn;
+  - every comment;
+  - every byte after the end of the image.
+  No other marker the check refuses is removed: the strip passes a
+  JPEG that holds one on unchanged, and the check fails it
+  (**[Clead]**: not decided by Adam, Known unknown 2). Nor is a JPEG
+  that is not structurally sound (not a JPEG, cut short or malformed)
+  repaired: the strip passes it on unchanged, and the check fails it.
+  An EXIF orientation tag goes with APP1; whether the encoder's pixels
+  are already upright without it is **[not checked]** on a phone
+  (Known unknown 2).
+  A plain module then checks the stripped bytes, the JPEG to be sent,
+  through the whole file to its end, between scans too (**[Clead]**:
+  the check's detail). The strip does not change the check, which stays
+  the guarantee that nothing it refuses is sent. It is an allowlist:
   - the structural markers pass (start and end of image, the frame
     markers, Huffman and arithmetic tables, quantisation tables, restart
     interval, start of scan, and restart markers inside a scan);
@@ -186,11 +213,15 @@ When the queue has stopped (3.3), the Log screen says why and offers
   - any byte after the end of the image fails: phones can append further
     images there, with metadata of their own;
   - input that is not a JPEG, or is cut short or malformed, fails.
-  What the phone's image encoder writes (Known unknown 2): if it writes
-  something this check refuses, every analysis fails, so it was checked
-  in Adam's test session on his phone, since the encoder cannot be run
-  off a phone (#14); his camera photos passed (PBI-1.11). Other phones
-  are not checked.
+  After the strip the check fails only a JPEG the strip passed on
+  unchanged.
+  What the phone's image encoder writes (Known unknown 2) is seen only
+  on a phone, since the encoder cannot be run off one (#14). In Adam's
+  Phase 1 test session his camera photos passed the check (PBI-1.11).
+  In his Phase 2 test session, on 2026-11-16, the encoder's copy of a
+  photo picked from the gallery held an APP1 segment: the check refused
+  it, nothing was sent, and the photo could not be analysed at all. The
+  strip is the remedy. Other phones are not checked.
   A JPEG that fails the check is not sent; the find is marked failed.
 - The prompt asks for one answer in a fixed JSON shape:
   - the best match: its names in Swedish, English, Latin and Italian;
@@ -826,9 +857,50 @@ answers to Clead's questions, 19:05).
 2. What `expo-image-manipulator` keeps of a photo's metadata (the segment
    check of 3.3 guards the result either way). The phone's own encoder
    writes the JPEG, so this can be checked only on a phone, in Adam's test
-   session (Crog, #14). Settled for Adam's phone: his camera photos were
-   analysed in his test session, so they passed the segment check
-   (PBI-1.11, 2026-11-09).
+   session (Crog, #14). Settled in Phase 1 for Adam's camera photos
+   only: they were analysed in his test session, so they passed the
+   segment check (PBI-1.11, 2026-11-09).
+   Not so for a gallery photo. In his Phase 2 test session, on
+   2026-11-16 at 08:39, a find failed with the message for an APP1
+   segment (Adam's screenshot); by his account the photo was taken with
+   the phone's camera app and picked from the gallery in the app. The
+   app shows that message only when the first thing the check refused
+   in the encoder's JPEG was an APP1 segment. Not known: whether it
+   held EXIF or XMP, what was in it, and whether anything else the
+   check refuses followed it; the check stops at its first refusal, and
+   the stored detail holds only the reason and the marker. Why his
+   camera photos passed and this photo did not is not known either.
+   Since the strip (3.3; Adam, 2026-11-16 08:42) a photo can be analysed
+   whichever application segments, comments or bytes after the end of
+   the image the encoder writes; what it writes is still seen only on a
+   phone. Open:
+   - whether the encoder's pixels are already upright, so that removing
+     an EXIF orientation tag with APP1 turns no photo: **[not checked]**
+     on a phone. Read on 2026-11-16, not run: the app's own code applies
+     no orientation; in `expo-image-manipulator` 57.0.22, on iOS the
+     photo is redrawn upright when it is loaded, and on Android the
+     library reads no EXIF itself, loads the photo through Glide
+     (`expo-image-loader` 57.0.1) and saves the resized bitmap with the
+     platform's `Bitmap.compress`; Glide's reference says its decoder
+     rotates by the EXIF orientation (read for version 4.14, not for
+     the 5.0.5 the loader names). The library's type definitions say
+     nothing of orientation. The strip's author checks it, and Adam on
+     his phone;
+   - whether an encoder writes an Adobe APP14 segment for a picture
+     that is not YCbCr or grey. The segment tells a decoder the colour
+     transform, and the strip removes it with the other APPn, so such a
+     picture's colours can change, where the check alone refused the
+     photo. Read on 2026-11-16, not run, and not in the versions an
+     Android release ships: Android's `Bitmap.compress` encodes through
+     Skia and libjpeg-turbo, which there write YCbCr or grey, with a
+     JFIF header and no Adobe segment; iOS not read. **[not checked]**
+     on a phone;
+   - what the strip does with a marker the check refuses that is
+     neither an application segment nor a comment (JPG and JPGn, DHP,
+     EXP, DNL, TEM, a restart marker outside a scan, the reserved
+     markers): not decided; 3.3 has the strip pass a JPEG that holds
+     one on unchanged, so the check fails the photo (**[Clead]**).
+     Whether a phone's encoder writes one is not known.
 3. How the database and photos are excluded from iOS backups under Expo,
    and the Android data extraction rules (3.6). Android settled in #21;
    iOS needs native code (PBI-1.23). Android lint's `FullBackupContent`
