@@ -4,6 +4,21 @@ All notable changes to What mushroom is this? are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Wushroom is in Android's "Share with" list for photos. Share a photo
+  to it from the gallery, the camera app or another app that shows one,
+  and choose whether it becomes a new find or is added to an earlier
+  find. Several photos shared at once can only be added to an earlier
+  find, one after another; those that do not fit in the find, which
+  holds at most 5, are left out, and the app says how many. "Cancel"
+  saves nothing. Only image files on the phone are taken: a shared link
+  or text is refused, and nothing is fetched for it. A shared photo is
+  sent for analysis only with its find, as any other photo. A find made
+  from a shared photo has the time it was saved and no position, as the
+  app reads neither from a shared file. This needs a new build of the
+  app: a build already installed does not get it (PBI-2.21, #116).
+
 ## [0.2.1]
 
 ### Changed

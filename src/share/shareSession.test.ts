@@ -328,6 +328,29 @@ describe("ShareSession: Cancel, and leaving the choice", () => {
     expect(source.clear).not.toHaveBeenCalled();
     expect(states).toEqual([]);
   });
+
+  it("removes the copies one by one when the library fails to drop the share", async () => {
+    const { session, source, removed } = setUp([image(A), image(B)]);
+    await session.refresh();
+    source.clear.mockImplementationOnce(() => {
+      throw new Error("native module failed");
+    });
+    session.cancel();
+    expect(session.getState()).toEqual({ kind: "none" });
+    expect(removed).toEqual([copyOf(A), copyOf(B)]);
+  });
+
+  it("goes on when a copy cannot be removed: the others are, and the share is dropped", async () => {
+    const { lib, session, files, removed } = setUp([image(A), image(B)]);
+    await session.refresh();
+    files.remove.mockImplementationOnce(() => {
+      throw new Error("file is busy");
+    });
+    lib.shared = [image(C)];
+    await session.refresh();
+    expect(removed).toEqual([copyOf(B)]);
+    expect(session.getState()).toMatchObject({ kind: "ready", photos: [copyOf(C)] });
+  });
 });
 
 describe('ShareSession: "New find"', () => {
