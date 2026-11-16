@@ -186,13 +186,14 @@ When the queue has stopped (3.3), the Log screen says why and offers
     Multi-Picture index) and the other APPn;
   - every comment;
   - every byte after the end of the image.
-  Any other marker the check refuses is not removed, so the check
-  still fails a JPEG that holds one (**[Clead]**: not decided by Adam,
-  Known unknown 2). A JPEG that is not structurally sound (not a JPEG,
-  cut short or malformed) is not repaired: the strip passes it on
-  unchanged, and the check fails it. An EXIF orientation tag goes with
-  APP1; whether the encoder's pixels are already upright without it is
-  **[not checked]** on a phone (Known unknown 2).
+  No other marker the check refuses is removed: the strip passes a
+  JPEG that holds one on unchanged, and the check fails it
+  (**[Clead]**: not decided by Adam, Known unknown 2). Nor is a JPEG
+  that is not structurally sound (not a JPEG, cut short or malformed)
+  repaired: the strip passes it on unchanged, and the check fails it.
+  An EXIF orientation tag goes with APP1; whether the encoder's pixels
+  are already upright without it is **[not checked]** on a phone
+  (Known unknown 2).
   A plain module then checks the stripped bytes, the JPEG to be sent,
   through the whole file to its end, between scans too (**[Clead]**:
   the check's detail). The strip does not change the check, which stays
@@ -211,7 +212,7 @@ When the queue has stopped (3.3), the Log screen says why and offers
     images there, with metadata of their own;
   - input that is not a JPEG, or is cut short or malformed, fails.
   After the strip the check fails only a JPEG the strip passed on
-  unchanged, or one that holds a marker the strip does not remove.
+  unchanged.
   What the phone's image encoder writes (Known unknown 2) is seen only
   on a phone, since the encoder cannot be run off one (#14). In Adam's
   Phase 1 test session his camera photos passed the check (PBI-1.11).
@@ -786,12 +787,20 @@ answers to Clead's questions, 19:05).
      the 5.0.5 the loader names). The library's type definitions say
      nothing of orientation. The strip's author checks it, and Adam on
      his phone;
+   - whether an encoder writes an Adobe APP14 segment for a picture
+     that is not YCbCr or grey. The segment tells a decoder the colour
+     transform, and the strip removes it with the other APPn, so such a
+     picture's colours would change, where the check alone refused the
+     photo. Read on 2026-11-16, not run: Android's `Bitmap.compress`
+     encodes through Skia and libjpeg-turbo, which there write YCbCr or
+     grey, with a JFIF header and no Adobe segment; iOS not read.
+     **[not checked]** on a phone;
    - what the strip does with a marker the check refuses that is
      neither an application segment nor a comment (JPG and JPGn, DHP,
      EXP, DNL, TEM, a restart marker outside a scan, the reserved
-     markers): not decided; 3.3 leaves it in, so the check fails the
-     photo (**[Clead]**). Whether a phone's encoder writes one is not
-     known.
+     markers): not decided; 3.3 has the strip pass a JPEG that holds
+     one on unchanged, so the check fails the photo (**[Clead]**).
+     Whether a phone's encoder writes one is not known.
 3. How the database and photos are excluded from iOS backups under Expo,
    and the Android data extraction rules (3.6). Android settled in #21;
    iOS needs native code (PBI-1.23). Android lint's `FullBackupContent`
