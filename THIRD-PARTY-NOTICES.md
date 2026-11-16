@@ -35,7 +35,7 @@ shipped in the app (internal tooling).
 | `expo-router` | 57.0.30 | MIT (`package.json`; the package ships no licence file) | depend | https://github.com/expo/expo, `packages/expo-router` | the screens and their routes (PBI-1.1) |
 | `expo-constants` | 57.0.23 | MIT | depend | https://github.com/expo/expo, `packages/expo-constants` | a peer library of `expo-router` (PBI-1.1) |
 | `expo-linking` | 57.0.13 | MIT | depend | https://github.com/expo/expo, `packages/expo-linking` | a peer library of `expo-router` (PBI-1.1) |
-| `react-native-safe-area-context` | 5.7.0 | MIT | depend | https://github.com/AppAndFlow/react-native-safe-area-context | a peer library of `expo-router` (PBI-1.1) |
+| `react-native-safe-area-context` | 5.7.0 | MIT | depend | https://github.com/AppAndFlow/react-native-safe-area-context | a peer library of `expo-router` (PBI-1.1); the app's own code also reads the safe-area insets from it (PBI-2.20) |
 | `react-native-screens` | 4.26.2 | MIT | depend | https://github.com/software-mansion/react-native-screens | a peer library of `expo-router` (PBI-1.1) |
 | `react-dom` | 19.2.3 | MIT | depend | https://github.com/facebook/react, `packages/react-dom` | a peer library of libraries `expo-router` depends on (PBI-1.1) |
 | `react-native-gesture-handler` | 2.32.0 | MIT | depend | https://github.com/software-mansion/react-native-gesture-handler | a peer library of `react-native-drawer-layout`, which `expo-router` depends on (PBI-1.1) |

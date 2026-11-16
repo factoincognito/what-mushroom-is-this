@@ -183,13 +183,16 @@ function areaOf(element: Node): Node {
 }
 
 /**
- * Checks every screen the stack holds, and gives their count: all that the screen draws below its
- * header is inside one screen area, which keeps clear of the bottom, left and right insets, and
- * the header, shown, takes the top inset, so the area adds none.
+ * Checks every screen the stack holds, and gives their count: no screen area lies around the
+ * screen; all that the screen draws below its header is inside one screen area, the only one in
+ * the screen, so each inset is added once; that area keeps clear of the bottom, left and right
+ * insets; and the header is shown, so the area adds no top inset.
  */
 function expectScreensClearOf(insets: EdgeInsets): number {
   const screens = all("RNSScreen");
   for (const each of screens) {
+    // No area lies around the screen, or around the stack: it would add the inset a second time.
+    expect(areasAround(each)).toEqual([]);
     const [content, ...others] = all("RNSScreenContentWrapper", each);
     expect(others).toEqual([]);
     const drawn = wrong<Node>(content).children;
@@ -208,8 +211,10 @@ function expectScreensClearOf(insets: EdgeInsets): number {
     });
     const [header, ...otherHeaders] = all("RNSScreenStackHeaderConfig", each);
     expect(otherHeaders).toEqual([]);
+    // The header is shown. That is what keeps the screen clear of the status bar: the native
+    // header takes the top inset whenever it is shown (react-native-screens' Android toolbar
+    // applies it always, and ignores the `topInsetEnabled` prop).
     expect(wrong<Node>(header).props.hidden).toBe(false);
-    expect(wrong<Node>(header).props.topInsetEnabled).toBe(insets.top > 0);
   }
   return screens.length;
 }
