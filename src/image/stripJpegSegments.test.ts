@@ -460,6 +460,22 @@ describe("stripJpegSegments: a JPEG that is not structurally sound is passed on 
     );
   });
 
+  it.each([0, 1])(
+    "a start-of-scan header with a length of %i, after an APP1 that would be removed",
+    (length) => {
+      expectUnchanged(
+        jpeg(SOI, JFIF, EXIF, DQT, [0xff, 0xda, 0x00, length], [0x12, 0x34], EOI),
+        "forbidden-segment",
+        0xffe1,
+      );
+      expectUnchanged(
+        jpeg(SOI, JFIF, DQT, [0xff, 0xda, 0x00, length], [0x12, 0x34], COM, EOI, [0x00]),
+        "malformed",
+        0xffda,
+      );
+    },
+  );
+
   it("an APP1 whose length is shorter than what it holds, so that no marker follows it", () => {
     const lying = [0xff, 0xe1, 0x00, 0x04, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00];
     expectUnchanged(jpeg(SOI, JFIF, lying, DQT, SCAN, EOI), "forbidden-segment", 0xffe1);
