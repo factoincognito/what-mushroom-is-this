@@ -111,7 +111,7 @@ may come through Cloudflare as its CDN (3.9).
    has no position. A photo from the files has no time or position of
    its own, as a gallery photo without metadata (3.9, Lookups). A photo
    that another app shares to the app follows the gallery photo's rule
-   (3.9, Shared photos; PBI-2.21). A photo
+   (**[Clead]**; 3.9, Shared photos; PBI-2.21). A photo
    whose find could not be saved is kept on the
    screen until it is saved again or discarded. It is dropped only after a
    question on the screen, not a system alert: when "Discard the photo" is
@@ -494,14 +494,20 @@ not confirmed when they were written.
   (**[Clead]**). It reaches a phone only in a new native build (Known
   unknown 16).
 - A share opens a screen of its own, the choice (**[Clead]**). It says
-  how many photos were shared and offers, for one photo, "New find" and
-  "Add to an earlier find", and for several only "Add to an earlier
-  find", with the line saying why (Adam, 09:14): that a new find is
-  made from a share of one photo (**[Clead]**: the wording). "Cancel",
-  and leaving the screen, save nothing (**[Clead]**).
-- Before the choice nothing of the share is saved or sent, and the
-  share uses no network (**[Clead]**). The app coming to the front for
-  it is still the queue trigger of 3.4, for the finds already waiting.
+  how many photos were shared (**[Clead]**). It offers, for one photo,
+  "New find" and "Add to an earlier find", and for several only "Add to
+  an earlier find", with the line saying why (Adam, 09:14): that a new
+  find is made from a share of one photo (**[Clead]**: the wording).
+  "Cancel", and leaving the screen, save nothing (**[Clead]**). The
+  choice takes its photos only from the share the library hands over,
+  never from the address that opens the screen (**[Clead]**).
+- Before the choice nothing of the share is saved to the find log or
+  sent, and the share uses no network (**[Clead]**). Only an image file
+  on the phone is taken: a shared item that is a web address or text is
+  refused, and nothing is fetched for it (**[Clead]**; Known unknown
+  16). All the app may hold of a share before the choice is a copy in
+  its cache (below). The app coming to the front for it is still the
+  queue trigger of 3.4, for the finds already waiting.
 - "Add to an earlier find" lists the finds as the Library's list does,
   each as its row there, newest first, without the Library's filters;
   tapping one chooses it (**[Clead]**). A find that holds the most
@@ -522,11 +528,14 @@ not confirmed when they were written.
   for when the New find screen opens, as Lookups says, not on the
   choice.
 - "Add to an earlier find": the photos are saved to the chosen find one
-  after another, in the order shared (Adam, 09:14), as photos added
-  from the find's screen are (Batches): they are one batch, the find
-  keeps its time and position, and their own metadata is not read
-  (**[Clead]**). When the find cannot hold them all, those that fit are
-  saved and the app says how many were left out (**[Clead]**). The app
+  after another (Adam, 09:14), in the order shared (**[Clead]**), as
+  photos added from the find's screen are (Batches): they are one
+  batch, the find keeps its time and position, and their own metadata
+  is not read (**[Clead]**). When the chosen find's batch is open on a
+  screen under the choice, the photos join that batch and the app goes
+  back to that screen, not to a second one (**[Clead]**). When the find
+  cannot hold them all, those that fit are saved and the app says how
+  many were left out (**[Clead]**). The app
   then shows the find's "Add photos" screen with the batch open, the
   camera not opened, and the batch is completed there as any batch
   (**[Clead]**).
@@ -538,10 +547,13 @@ not confirmed when they were written.
   (**[Clead]**). A share the app cannot read at all saves nothing, and
   the choice says so (**[Clead]**).
 - A shared photo saved to a find is copied into the find log as a
-  picked photo is (3.6). A copy of a shared photo that the app holds in
-  its cache is removed when the share is cancelled, and when the photo
-  is left out or refused, as an unsaved lookup's copies are (Lookups);
-  the original is never removed (**[Clead]**).
+  picked photo is (3.6). A copy of a shared photo in the app's cache,
+  made by the app or by the library (Known unknown 16), is removed when
+  the share ends without that photo saved to a find: when the share is
+  cancelled, the choice is left or a later share takes its place, and
+  when the photo is left out, refused, or discarded after a failed
+  save, as an unsaved lookup's copies are (Lookups). The original is
+  never removed (**[Clead]**).
 - A shared photo is sent for analysis only with its find, resized and
   checked as any photo (3.3, Batches).
 - When the app is not running, a share starts it and the choice is its
@@ -554,7 +566,7 @@ not confirmed when they were written.
   share can still be read then).
 - The texts are in the app's three languages (**[Clead]**: their
   wording). Taking a shared photo in is not 3.7's sharing or importing
-  of finds.
+  of finds (**[Clead]**).
 
 **Answers.**
 
@@ -981,9 +993,9 @@ answers to Clead's questions, 19:05).
     (`src/newFind/devicePicker.ts`, `src/newFind/photoMetadata.ts`): the
     app has no reader for the tags of a file.
     Expo's SDK 57 page for `expo-sharing`
-    (`docs.expo.dev/versions/v57.0.0/sdk/sharing/`), read on 2026-11-16
-    through a tool that summarises a page, not in a browser, so it is
-    read again before the build:
+    (`docs.expo.dev/versions/v57.0.0/sdk/sharing/`), read on 2026-11-16,
+    by the author through a tool that summarises a page and by the
+    reviewer of #111 as the page's own text; nothing of it was run:
     - it calls receiving a share experimental;
     - its config plugin, with `android.enabled`, adds the intent filter
       to the manifest, for the MIME types in
@@ -991,9 +1003,14 @@ answers to Clead's questions, 19:05).
       `android.multipleShareMimeTypes` (`ACTION_SEND_MULTIPLE`); the
       plugin's settings take effect only in a new app binary;
     - the app reads a share with `useIncomingShare`, or with
-      `getSharedPayloads` and `getResolvedSharedPayloadsAsync`, each
-      payload with a URI, a type, a MIME type, a size and a name, and
+      `getSharedPayloads` (the raw payloads: a value, for a file
+      typically its URI, a share type and a MIME type) and
+      `getResolvedSharedPayloadsAsync` (each resolved payload with a
+      content URI, a content type, a MIME type, a size and a name), and
       drops it with `clearSharedPayloads`;
+    - resolving a payload may need a network connection, depending on
+      what was shared; for a shared web address the resolved payload
+      holds what a request gave;
     - with Expo Router, a `+native-intent.ts` file sends an incoming
       share to a route;
     - it does not say whether that URI is the sharing app's own address
@@ -1016,4 +1033,8 @@ answers to Clead's questions, 19:05).
       its own, in which formats; where it cannot, 3.9 holds: the photo
       is as one without metadata;
     - which image formats the loader loads from a share (as Known
-      unknown 13).
+      unknown 13);
+    - whether resolving a shared image file uses the network, and
+      whether a share declared as `image/*` can carry a web address:
+      read in the library's source before the build; 3.9 holds either
+      way.
