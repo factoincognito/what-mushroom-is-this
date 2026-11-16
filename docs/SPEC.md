@@ -115,6 +115,8 @@ may come through Cloudflare as its CDN (3.9).
    find marks it so. Without them, the time is that of saving and the find
    has no position. A photo from the files has no time or position of
    its own, as a gallery photo without metadata (3.9, Lookups). A photo
+   that another app shares to the app follows the gallery photo's rule
+   (**[Clead]**; 3.9, Shared photos; PBI-2.21). A photo
    whose find could not be saved is kept on the
    screen until it is saved again or discarded. It is dropped only after a
    question on the screen, not a system alert: when "Discard the photo" is
@@ -499,6 +501,103 @@ holds for Phase 2. Phase 1's test session (3.8) tests 3.1 to 3.8.
   photo is removed (**[Clead]**). If photos added since its answer are
   waiting for the queue, the analysis still runs, with the photos left
   (**[Clead]**).
+
+**Shared photos** (PBI-2.21).
+
+Adam, 2026-11-16, in chat. 08:46: "when taking a photo with the camera
+app, or looking at a photo in the gallery, or really wherever the photo
+is displayed I want Wushroom to come up as a Share with target". 08:57:
+"a photo being shared should get the option to be saved as a) a new
+find, or b) added to a previous find [...] multiple photos in the same
+share operation (all photos would be associated with the same find, new
+or previous)". 09:14, "apyr" to Clead's option A, which replaces 08:57
+for several photos: a share of one photo offers "New find" and "Add to
+an earlier find"; a share of several offers only "Add to an earlier
+find", with a line saying why, never "New find"; several photos added
+to an earlier find go in one after another, as the app adds photos
+today. In this part **[Clead]** marks Clead's proposals, which Adam had
+not confirmed when they were written.
+
+- The app is in Android's "Share with" list for images (Adam). It takes
+  a share of one image (`ACTION_SEND`) and of several
+  (`ACTION_SEND_MULTIPLE`), of the type `image/*`, and no other share
+  (**[Clead]**). Android only: no iOS build is made before PBI-1.23
+  (**[Clead]**). It reaches a phone only in a new native build (Known
+  unknown 16).
+- A share opens a screen of its own, the choice (**[Clead]**). It says
+  how many photos were shared (**[Clead]**). It offers, for one photo,
+  "New find" and "Add to an earlier find", and for several only "Add to
+  an earlier find", with the line saying why (Adam, 09:14): that a new
+  find is made from a share of one photo (**[Clead]**: the wording).
+  "Cancel", and leaving the screen, save nothing (**[Clead]**). The
+  choice takes its photos only from the share the library hands over,
+  never from the address that opens the screen (**[Clead]**).
+- Before the choice nothing of the share is saved to the find log or
+  sent, and the share uses no network (**[Clead]**). Only an image file
+  on the phone is taken: a shared item that is a web address or text is
+  refused, and nothing is fetched for it (**[Clead]**; Known unknown
+  16). All the app may hold of a share before the choice is a copy in
+  its cache (below). The app coming to the front for it is still the
+  queue trigger of 3.4, for the finds already waiting.
+- "Add to an earlier find" lists the finds as the Library's list does,
+  each as its row there, newest first, without the Library's filters;
+  tapping one chooses it (**[Clead]**). A find that holds the most
+  photos (Batches) is listed as full and cannot be chosen; a find that
+  could not be read (3.4) is left out (**[Clead]**). With no find to
+  choose, "Add to an earlier find" is not offered, and the choice says
+  so (**[Clead]**).
+- "New find": the shared photo is the first photo of a new photo lookup
+  on the New find screen, as if picked from the gallery there, and the
+  camera does not open (**[Clead]**). "Save" is on whatever its
+  starting value, as the choice was a find, so the find is saved at
+  once and the screen goes on as for any saved lookup (Lookups,
+  Batches; **[Clead]**). Its time and position are those the photo's
+  own metadata holds, by 3.1's rule for a gallery photo; what the app
+  cannot read from the shared file counts as missing, so the time is
+  then that of saving and the find has no position, never the phone's
+  (**[Clead]**; Known unknown 16). The location permission is asked
+  for when the New find screen opens, as Lookups says, not on the
+  choice.
+- "Add to an earlier find": the photos are saved to the chosen find one
+  after another (Adam, 09:14), in the order shared (**[Clead]**), as
+  photos added from the find's screen are (Batches): they are one
+  batch, the find keeps its time and position, and their own metadata
+  is not read (**[Clead]**). When the chosen find's batch is open on a
+  screen under the choice, the photos join that batch and the app goes
+  back to that screen, not to a second one (**[Clead]**). When the find
+  cannot hold them all, those that fit are saved and the app says how
+  many were left out (**[Clead]**). The app
+  then shows the find's "Add photos" screen with the batch open, the
+  camera not opened, and the batch is completed there as any batch
+  (**[Clead]**).
+- On either path a photo whose save fails is kept as in 3.1
+  (**[Clead]**). A shared file the app cannot load as an image is
+  refused before it is saved, as a file from the phone's files is
+  (Lookups), and does not count toward the find's photos; the other
+  photos of the share are saved, and the app says how many were refused
+  (**[Clead]**). A share the app cannot read at all saves nothing, and
+  the choice says so (**[Clead]**).
+- A shared photo saved to a find is copied into the find log as a
+  picked photo is (3.6). A copy of a shared photo in the app's cache,
+  made by the app or by the library (Known unknown 16), is removed when
+  the share ends without that photo saved to a find: when the share is
+  cancelled, the choice is left or a later share takes its place, and
+  when the photo is left out, refused, or discarded after a failed
+  save, as an unsaved lookup's copies are (Lookups). The original is
+  never removed (**[Clead]**).
+- A shared photo is sent for analysis only with its find, resized and
+  checked as any photo (3.3, Batches).
+- When the app is not running, a share starts it and the choice is its
+  first screen; when it is, the choice opens over the screen it was on,
+  which keeps what it held (**[Clead]**; **[not checked]**). A share
+  that arrives while a choice is open takes its place, and the earlier
+  one is dropped as if cancelled (**[Clead]**). Before the first-start
+  disclaimer is accepted (3.1), the disclaimer is shown first and the
+  choice once it is accepted (**[Clead]**; **[not checked]** that the
+  share can still be read then).
+- The texts are in the app's three languages (**[Clead]**: their
+  wording). Taking a shared photo in is not 3.7's sharing or importing
+  of finds (**[Clead]**).
 
 **Answers.**
 
@@ -955,3 +1054,59 @@ answers to Clead's questions, 19:05).
     release (PBI-1.24).
     Before release, the IP lawyer's review covers resizing under CC
     2.x/3.0 and sending pictures to Anthropic (policy rule 6).
+16. Phase 2's share target (3.9, Shared photos; PBI-2.21).
+    The app on `main`, read on 2026-11-16: `app.json` sets the scheme
+    `what-mushroom-is-this` and no intent filter, and none of its
+    plugins takes a share; `src/app` has no `+native-intent` file, and
+    no code of the app reads an incoming link; `expo-sharing` is not a
+    dependency (`package.json`). A photo's time and position are read
+    only from
+    the tags `expo-image-picker` gives with a gallery photo
+    (`src/newFind/devicePicker.ts`, `src/newFind/photoMetadata.ts`): the
+    app has no reader for the tags of a file.
+    Expo's SDK 57 page for `expo-sharing`
+    (`docs.expo.dev/versions/v57.0.0/sdk/sharing/`), read on 2026-11-16,
+    by the author through a tool that summarises a page and by the
+    reviewer of #111 as the page's own text; nothing of it was run:
+    - it calls receiving a share experimental;
+    - its config plugin, with `android.enabled`, adds the intent filter
+      to the manifest, for the MIME types in
+      `android.singleShareMimeTypes` (`ACTION_SEND`) and
+      `android.multipleShareMimeTypes` (`ACTION_SEND_MULTIPLE`); the
+      plugin's settings take effect only in a new app binary;
+    - the app reads a share with `useIncomingShare`, or with
+      `getSharedPayloads` (the raw payloads: a value, for a file
+      typically its URI, a share type and a MIME type) and
+      `getResolvedSharedPayloadsAsync` (each resolved payload with a
+      content URI, a content type, a MIME type, a size and a name), and
+      drops it with `clearSharedPayloads`;
+    - resolving a payload may need a network connection, depending on
+      what was shared; for a shared web address the resolved payload
+      holds what a request gave;
+    - with Expo Router, a `+native-intent.ts` file sends an incoming
+      share to a route;
+    - it does not say whether that URI is the sharing app's own address
+      or a copy, how long it can be read, what of a photo's metadata
+      comes with it, or what differs when the share starts the app.
+    `expo-sharing` is the library expected (**[Clead]**): `~57.0.26`
+    per that page, MIT per npm's entry for 57.0.26, from `expo/expo`,
+    `packages/expo-sharing`, used as a package. It is recorded under
+    the IP policy when it is added (section 2), with what its Android
+    side builds in and what its plugin adds to the merged manifest. No
+    other library is proposed.
+    Not known without a new native build on Adam's phone (the 0.2.0
+    install cannot be used: the manifest changes):
+    - which apps share a photo with its metadata, since the sharing app
+      can remove it, and Android can hide the position as for a gallery
+      photo (Known unknown 7);
+    - how Android hands the photos over, and how long the app may read
+      them: across the disclaimer, and after the app is restarted;
+    - whether the app can read the tags from a shared file with code of
+      its own, in which formats; where it cannot, 3.9 holds: the photo
+      is as one without metadata;
+    - which image formats the loader loads from a share (as Known
+      unknown 13);
+    - whether resolving a shared image file uses the network, and
+      whether a share declared as `image/*` can carry a web address:
+      read in the library's source before the build; 3.9 holds either
+      way.
