@@ -4,6 +4,8 @@ All notable changes to What mushroom is this? are documented here.
 
 ## [Unreleased]
 
+## [0.2.1]
+
 ### Changed
 
 - After a photo is removed from a failed find whose failure named one of
