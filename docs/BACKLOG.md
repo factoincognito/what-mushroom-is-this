@@ -219,6 +219,7 @@ the role that did not write it.
   Spec 3.9.
 
 ---
+- **[LATER] PBI-2.24** (Adam, 2026-11-16, by voice: "the version history feature should be used in our other apps also, such as vizi, wushroom, acuteping"; at 16:21 he said it belongs in the backlogs of the apps) — A version history in Wushroom. The model is the Snake demo's version history (`sugose/snake-demo` `docs/SPEC.md` 2.19, its PBI-2.33): a "Version history" link, and a panel that opens by itself the first time the app is loaded after an upgrade and shows what is new, with a button to the full history. Whether the logic is shared code or a copy, and whether a shared version becomes a project of its own, is not decided. A spec PR first (product-office Process P-2). Wushroom is an Expo and React Native app with asynchronous storage and the languages English, Italian and Swedish: the panel is a screen and not HTML, and each history entry needs its text in all three languages (the Italian for Jakob to check).
 
 ## Explicitly out of scope
 
