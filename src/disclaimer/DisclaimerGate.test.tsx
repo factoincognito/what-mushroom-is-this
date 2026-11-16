@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 import { getLocales } from "expo-localization";
 import { Text } from "react-native";
+import { type EdgeInsets, SafeAreaProvider } from "react-native-safe-area-context";
 
 import { LanguageProvider } from "../i18n/LanguageContext";
 import { STRINGS } from "../i18n/strings";
@@ -23,16 +24,29 @@ function memoryStore(initial: Record<string, string> = {}): KeyValueStore & {
   };
 }
 
-/** Renders the gate with its own store, and the language choice with a store of its own. */
+/** A status bar, the three navigation buttons, and a cutout that takes a little of each side. */
+const INSETS: EdgeInsets = { top: 40, bottom: 48, left: 7, right: 9 };
+
+/**
+ * Renders the gate with its own store, and the language choice with a store of its own, on a phone
+ * that reports the insets `INSETS` (in the app, expo-router's root gives them).
+ */
 async function renderGate(store: KeyValueStore) {
   await render(
-    <LanguageProvider store={memoryStore()}>
-      <DisclaimerGate store={store}>
-        <Text>the app</Text>
-      </DisclaimerGate>
-    </LanguageProvider>,
+    <SafeAreaProvider
+      initialMetrics={{ frame: { x: 0, y: 0, width: 412, height: 915 }, insets: INSETS }}
+    >
+      <LanguageProvider store={memoryStore()}>
+        <DisclaimerGate store={store}>
+          <Text>the app</Text>
+        </DisclaimerGate>
+      </LanguageProvider>
+    </SafeAreaProvider>,
   );
 }
+
+/** The padding that keeps a view clear of `INSETS` on all four edges. */
+const CLEAR_OF_ALL_EDGES = { paddingTop: 40, paddingBottom: 48, paddingLeft: 7, paddingRight: 9 };
 
 beforeEach(() => {
   jest
@@ -88,6 +102,37 @@ describe("DisclaimerGate", () => {
     expect(screen.getByTestId("disclaimer-loading")).toBeOnTheScreen();
     expect(screen.queryByText("the app")).not.toBeOnTheScreen();
     expect(screen.queryByText(STRINGS.en.disclaimer)).not.toBeOnTheScreen();
+  });
+
+  it("keeps the disclaimer and its button clear of the system bars and the cutout (PBI-2.20)", async () => {
+    await renderGate(memoryStore());
+    await screen.findByText(STRINGS.en.disclaimer);
+    const area = screen.getByTestId("screen-area");
+    expect(area).toHaveStyle(CLEAR_OF_ALL_EDGES);
+    const inArea = within(area);
+    expect(inArea.getByText(STRINGS.en.disclaimer)).toBeOnTheScreen();
+    expect(inArea.getByText(STRINGS.en.firstStart.title)).toBeOnTheScreen();
+    expect(inArea.getByRole("button", { name: STRINGS.en.firstStart.accept })).toBeOnTheScreen();
+  });
+
+  it("keeps the wait for the stored state clear of them too", async () => {
+    const store: KeyValueStore = {
+      getItem: () => new Promise<string | null>(() => undefined),
+      setItem: async () => undefined,
+    };
+    await renderGate(store);
+    const area = screen.getByTestId("screen-area");
+    expect(area).toHaveStyle(CLEAR_OF_ALL_EDGES);
+    expect(within(area).getByTestId("disclaimer-loading")).toBeOnTheScreen();
+  });
+
+  it("adds nothing around the app once accepted: the app's screens keep clear themselves", async () => {
+    await renderGate(memoryStore());
+    const accept = await screen.findByRole("button", { name: STRINGS.en.firstStart.accept });
+    expect(screen.getByTestId("screen-area")).toBeOnTheScreen();
+    await fireEvent.press(accept);
+    expect(await screen.findByText("the app")).toBeOnTheScreen();
+    expect(screen.queryByTestId("screen-area")).not.toBeOnTheScreen();
   });
 
   it("shows the disclaimer when the stored state cannot be read", async () => {
