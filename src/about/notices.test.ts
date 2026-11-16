@@ -630,6 +630,21 @@ describe("the licence texts", () => {
     }
   });
 
+  it("list expo-sharing, whose Android build file asks for no library but React Native's (PBI-2.21)", () => {
+    expect(NOTICES.libraries.find((entry) => entry.name === "expo-sharing")).toEqual({
+      name: "expo-sharing",
+      version: "57.0.26",
+      licence: "MIT",
+      source: "https://github.com/expo/expo",
+      textId: "expo",
+    });
+    const gradle = readFileSync(join(MODULES, "expo-sharing", "android", "build.gradle"), "utf8");
+    const asked = [
+      ...gradle.matchAll(/^\s*(?:api|implementation|compileOnly)\s+["']([^"']+)["']/gm),
+    ].map(([, dependency = ""]) => dependency);
+    expect(asked).toEqual(["com.facebook.react:react-android"]);
+  });
+
   it("name for expo-location the Play services version its Android build files ask for (PBI-1.19)", () => {
     const wanted = "com.google.android.gms:play-services-location:21.0.1";
     const gradle = readFileSync(join(MODULES, "expo-location", "android", "build.gradle"), "utf8");
