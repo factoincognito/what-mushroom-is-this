@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   AppState,
   BackHandler,
+  FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -204,8 +205,9 @@ export function ShareScreen({ appState = AppState, backHandler = BackHandler }: 
   const count = state.photos.length;
   const offers = choiceOffers(count, finds.kind === "ready" ? finds.finds : []);
   const busy = state.choosing;
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
+  /** What the screen says of the share, above the two choices and above the list of finds. */
+  const said = (
+    <>
       <Text style={styles.text}>
         {count === 1 ? t.onePhoto : fillIn(t.severalPhotos, { count: String(count) })}
       </Text>
@@ -213,76 +215,91 @@ export function ShareScreen({ appState = AppState, backHandler = BackHandler }: 
         <Text style={styles.text}>{fillIn(t.refused, { count: String(state.refused) })}</Text>
       )}
       {count > 1 && <Text style={styles.text}>{t.severalOnlyAdd}</Text>}
-      {finds.kind === "loading" && <ActivityIndicator testID="share-finds-loading" />}
-      {finds.kind === "unreadable" && (
-        <Text accessibilityLiveRegion="polite" style={styles.text}>
-          {strings.log.unreadable}
-        </Text>
-      )}
       {busy && (
         <View style={styles.row}>
           <ActivityIndicator />
           <Text style={styles.text}>{t.choosing}</Text>
         </View>
       )}
-      {listing && finds.kind === "ready" ? (
-        <>
-          <Text accessibilityRole="header" style={styles.heading}>
-            {t.chooseFind}
-          </Text>
-          {finds.finds.map(({ find, full }) => (
-            <FindRow
-              key={find.id}
-              find={find}
-              language={language}
-              strings={strings}
-              renderRow={(content) => (
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={full || busy}
-                  testID={`share-find-${find.id}`}
-                  // The choice's promise is not given back: the screen follows the share's state.
-                  onPress={() => void chooseFind(find.id)}
-                  style={[findRowStyle, (full || busy) && styles.disabled]}
-                >
-                  {content}
-                </Pressable>
-              )}
-              note={
-                full ? (
-                  <Text style={styles.note}>
-                    {fillIn(t.full, { max: String(config.maxPhotosPerFind) })}
-                  </Text>
-                ) : null
-              }
-            />
-          ))}
-        </>
+    </>
+  );
+
+  if (listing && finds.kind === "ready") {
+    // A list like the Library's own, which draws only the rows near the ones in view.
+    return (
+      <FlatList
+        data={finds.finds}
+        keyExtractor={({ find }) => String(find.id)}
+        contentContainerStyle={styles.container}
+        ListHeaderComponent={
+          <View style={styles.section}>
+            {said}
+            <Text accessibilityRole="header" style={styles.heading}>
+              {t.chooseFind}
+            </Text>
+          </View>
+        }
+        ListFooterComponent={cancelButton}
+        renderItem={({ item: { find, full } }) => (
+          <FindRow
+            find={find}
+            language={language}
+            strings={strings}
+            renderRow={(content) => (
+              <Pressable
+                accessibilityRole="button"
+                disabled={full || busy}
+                testID={`share-find-${find.id}`}
+                // The choice's promise is not given back: the screen follows the share's state.
+                onPress={() => void chooseFind(find.id)}
+                style={[findRowStyle, (full || busy) && styles.disabled]}
+              >
+                {content}
+              </Pressable>
+            )}
+            note={
+              full ? (
+                <Text style={styles.note}>
+                  {fillIn(t.full, { max: String(config.maxPhotosPerFind) })}
+                </Text>
+              ) : null
+            }
+          />
+        )}
+      />
+    );
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      {said}
+      {finds.kind === "loading" && <ActivityIndicator testID="share-finds-loading" />}
+      {finds.kind === "unreadable" && (
+        <Text accessibilityLiveRegion="polite" style={styles.text}>
+          {strings.log.unreadable}
+        </Text>
+      )}
+      {offers.newFind && (
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={() => void chooseNew()}
+          style={[styles.button, busy && styles.disabled]}
+        >
+          <Text style={styles.buttonText}>{t.newFind}</Text>
+        </Pressable>
+      )}
+      {offers.add ? (
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={() => setListing(true)}
+          style={[styles.button, busy && styles.disabled]}
+        >
+          <Text style={styles.buttonText}>{t.addToFind}</Text>
+        </Pressable>
       ) : (
-        <>
-          {offers.newFind && (
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={() => void chooseNew()}
-              style={[styles.button, busy && styles.disabled]}
-            >
-              <Text style={styles.buttonText}>{t.newFind}</Text>
-            </Pressable>
-          )}
-          {offers.add ? (
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={() => setListing(true)}
-              style={[styles.button, busy && styles.disabled]}
-            >
-              <Text style={styles.buttonText}>{t.addToFind}</Text>
-            </Pressable>
-          ) : (
-            finds.kind === "ready" && <Text style={styles.text}>{t.noFindToChoose}</Text>
-          )}
-        </>
+        finds.kind === "ready" && <Text style={styles.text}>{t.noFindToChoose}</Text>
       )}
       {cancelButton}
     </ScrollView>
@@ -293,6 +310,9 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     padding: 16,
+    gap: 16,
+  },
+  section: {
     gap: 16,
   },
   row: {
