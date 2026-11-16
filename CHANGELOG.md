@@ -19,6 +19,13 @@ All notable changes to What mushroom is this? are documented here.
   it shows clear of the system navigation bar (three buttons or gestures)
   and the display cutout, and the first-start disclaimer clear of the
   status bar too (PBI-2.20, #106).
+- A photo can be analysed when the phone writes metadata into the copy
+  the app makes of it for the analysis, as it did for a camera photo
+  picked from the gallery: the find failed and nothing was sent. The app
+  now removes that metadata from its copy, and anything after the end of
+  the picture, before the copy is checked and sent. The check is as
+  strict as before, and a copy it still refuses is not sent (PBI-2.22,
+  #113).
 
 ## [0.2.0]
 

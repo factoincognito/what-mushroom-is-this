@@ -32,6 +32,7 @@ import {
   messageBody,
   photoFailure,
   unloadableEncoder,
+  unstrippedJpegWith,
 } from "../../testing/failureDetails";
 import { memoryFindLog } from "../../testing/memoryFindLog";
 import { memoryPhotos, memorySqlite, sqliteDatabase } from "../../testing/sqliteDatabase";
@@ -503,7 +504,7 @@ describe("a waiting or failed find", () => {
   });
 
   it("names the marker a segment check refused in plain words, as the image module stored it", async () => {
-    const failure = await photoFailure(actualPrepare, encoderOf(jpegWith(JPEG.EXIF)));
+    const failure = await photoFailure(actualPrepare, encoderOf(unstrippedJpegWith(JPEG.EXIF)));
     expect(failure).toEqual({ cause: "segment-check", detail: "forbidden-segment 0xFFE1" });
     mockLog.finds.set(1, aFind({ state: "failed", failure }));
     await startApp();
@@ -643,7 +644,7 @@ describe("analyse again (SPEC 3.1, 3.3)", () => {
     jest
       .mocked(preparePhotoForAnalysis)
       .mockImplementationOnce((uri, model) =>
-        actualPrepare(uri, model, encoderOf(jpegWith(JPEG.IPTC))),
+        actualPrepare(uri, model, encoderOf(unstrippedJpegWith(JPEG.IPTC))),
       );
     await startApp();
     await fireEvent.press(await screen.findByRole("button", { name: en.find.analyse }));
