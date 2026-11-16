@@ -737,6 +737,11 @@ function insertedAt(
   return { input, expected };
 }
 
+/** Bytes as hex digits, to name a failing case. */
+function hexOf(bytes: ArrayLike<number>): string {
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 const SEEDS = Array.from({ length: 120 }, (_, index) => index + 1);
 
 describe("stripJpegSegments: strip then check, on generated JPEGs", () => {
@@ -754,7 +759,7 @@ describe("stripJpegSegments: strip then check, on generated JPEGs", () => {
           expected.some((value, index) => output[index] !== value) ||
           !checkJpegSegments(output).ok
         ) {
-          throw new Error(`seed ${seed}, gap ${gap}: ${Buffer.from(input).toString("hex")}`);
+          throw new Error(`seed ${seed}, gap ${gap}: ${hexOf(input)}`);
         }
         cases += 1;
       }
@@ -771,9 +776,7 @@ describe("stripJpegSegments: strip then check, on generated JPEGs", () => {
         ? soundJpeg(random).flat()
         : random.bytes(random.int(1, 20));
       const output = stripJpegSegments(Uint8Array.from([...input, ...trailing]));
-      expect(`${seed}: ${Buffer.from(output).toString("hex")}`).toBe(
-        `${seed}: ${Buffer.from(expected).toString("hex")}`,
-      );
+      expect(`${seed}: ${hexOf(output)}`).toBe(`${seed}: ${hexOf(expected)}`);
       expect(checkJpegSegments(output)).toEqual({ ok: true });
     }
   });
@@ -804,7 +807,7 @@ describe("stripJpegSegments: strip then check, on generated JPEGs", () => {
       const { input } = insertedAt(withBad, () => random.chance(0.5), random);
       const bytes = Uint8Array.from(input);
       if (stripJpegSegments(bytes) !== bytes || checkJpegSegments(bytes).ok) {
-        throw new Error(`seed ${seed}, gap ${gap}: ${Buffer.from(input).toString("hex")}`);
+        throw new Error(`seed ${seed}, gap ${gap}: ${hexOf(input)}`);
       }
     }
   });
@@ -839,7 +842,7 @@ describe("stripJpegSegments: strip then check, on generated JPEGs", () => {
           (output !== bytes && !checkJpegSegments(output).ok) ||
           (passedBefore && output !== bytes)
         ) {
-          throw new Error(`seed ${seed}, round ${round}: ${Buffer.from(damaged).toString("hex")}`);
+          throw new Error(`seed ${seed}, round ${round}: ${hexOf(damaged)}`);
         }
       }
     }
