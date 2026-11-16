@@ -631,6 +631,20 @@ describe('"Add to an earlier find" from a share (SPEC 3.9)', () => {
     expect(screen.getByRole("button", { name: t.cancel })).toBeEnabled();
   });
 
+  it("draws only the rows near the top of a long list of finds, as the Library's list does, the newest first", async () => {
+    for (let id = 1; id <= 40; id += 1) {
+      mockLog.finds.set(id, findWith(id, 1));
+    }
+    shareImages("a.jpg");
+    await startApp("/share");
+    await press(t.addToFind);
+    const rows = screen.getAllByTestId(/^share-find-\d+$/).map((row) => row.props.testID);
+    expect(rows[0]).toBe("share-find-40");
+    expect(rows[1]).toBe("share-find-39");
+    expect(rows.length).toBeLessThan(40);
+    expect(screen.getByRole("button", { name: t.cancel })).toBeEnabled();
+  });
+
   it("does not choose a full find when its row is pressed", async () => {
     mockLog.finds.set(1, findWith(1, 1));
     mockLog.finds.set(2, findWith(2, 5));
