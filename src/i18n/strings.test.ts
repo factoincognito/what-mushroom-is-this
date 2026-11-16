@@ -71,9 +71,10 @@ describe("NOT_CHECKED_BY_A_SPEAKER", () => {
     "queue",
     "find",
     "about",
+    "share",
   ];
 
-  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7, PBI-1.8, PBI-1.9 and PBI-2.4", () => {
+  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7, PBI-1.8, PBI-1.9, PBI-2.4 and PBI-2.21", () => {
     expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
   });
 
@@ -708,6 +709,99 @@ describe("the disclaimer for a lookup without photos (SPEC 3.9, Answers)", () =>
     );
     expect(NOT_CHECKED_BY_A_SPEAKER.it).toContain("disclaimerDescribed");
     expect(NOT_CHECKED_BY_A_SPEAKER.sv).toContain("disclaimerDescribed");
+  });
+});
+
+describe("the strings of the share target (SPEC 3.9, Shared photos; PBI-2.21)", () => {
+  const KEYS = [
+    "title",
+    "reading",
+    "onePhoto",
+    "severalPhotos",
+    "newFind",
+    "addToFind",
+    "severalOnlyAdd",
+    "noFindToChoose",
+    "chooseFind",
+    "full",
+    "cancel",
+    "choosing",
+    "refused",
+    "unreadable",
+    "none",
+    "leftOut",
+    "notImages",
+  ];
+
+  it.each(LANGUAGES)("are all there in %s, and no others", (language) => {
+    expect(Object.keys(STRINGS[language].share).sort()).toEqual([...KEYS].sort());
+  });
+
+  it("name the two choices and Cancel in English as the specification does", () => {
+    const t = STRINGS.en.share;
+    expect(t.newFind).toBe("New find");
+    expect(t.addToFind).toBe("Add to an earlier find");
+    expect(t.cancel).toBe("Cancel");
+  });
+
+  it("say in English why several photos get no New find: a new find is made from a share of one photo", () => {
+    expect(STRINGS.en.share.severalOnlyAdd).toBe(
+      "A new find is made from a share of one photo. Several photos can only be added to an earlier find.",
+    );
+  });
+
+  it.each([
+    ["sv", /ett nytt fynd/i, /ett foto/, /tidigare fynd/],
+    ["it", /un nuovo ritrovamento/i, /una sola foto/, /ritrovamento precedente/],
+  ] as const)("say it in %s too", (language, newFind, onePhoto, earlier) => {
+    const line = STRINGS[language].share.severalOnlyAdd;
+    expect(line).toMatch(newFind);
+    expect(line).toMatch(onePhoto);
+    expect(line).toMatch(earlier);
+  });
+
+  it.each(LANGUAGES)("call a new find in %s what the Library's own button calls it", (language) => {
+    expect(STRINGS[language].share.newFind).toBe(STRINGS[language].log.newFind);
+  });
+
+  it.each(LANGUAGES)("fill in the numbers they give in %s", (language) => {
+    const t = STRINGS[language].share;
+    expect(t.severalPhotos).toContain("{count}");
+    expect(t.onePhoto).toContain("1");
+    expect(t.onePhoto).not.toContain("{");
+    expect(t.full).toContain("{max}");
+    expect(t.refused).toContain("{count}");
+    expect(t.notImages).toContain("{count}");
+    expect(t.leftOut).toContain("{count}");
+    expect(t.leftOut).toContain("{max}");
+  });
+
+  it("say in English that nothing was saved of a share that cannot be read, and what is refused", () => {
+    const t = STRINGS.en.share;
+    expect(t.unreadable).toBe("The share could not be read, so nothing was saved.");
+    expect(t.refused).toBe(
+      "Shared items refused, as the app takes only image files on the phone: {count}.",
+    );
+    expect(t.notImages).toBe(
+      "Shared files refused, as they could not be loaded as images: {count}.",
+    );
+    expect(t.leftOut).toBe(
+      "Shared photos left out, as the find holds at most {max} photos: {count}.",
+    );
+    expect(t.noFindToChoose).toBe("There is no earlier find that photos can be added to.");
+  });
+
+  it.each(["sv", "it"] as const)("are translated in %s, not left in English", (language) => {
+    for (const key of KEYS) {
+      const text = (STRINGS[language].share as Record<string, string>)[key];
+      expect(text).not.toBe((STRINGS.en.share as Record<string, string>)[key]);
+    }
+  });
+
+  it("are a new group not checked by a speaker in Swedish and Italian", () => {
+    for (const language of ["sv", "it"] as const) {
+      expect(NOT_CHECKED_BY_A_SPEAKER[language]).toContain("share");
+    }
   });
 });
 

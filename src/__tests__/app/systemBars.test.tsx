@@ -82,12 +82,21 @@ const ROUTES: readonly { readonly file: string; readonly url: string }[] = [
   { file: "settings.tsx", url: "/settings" },
   { file: "about.tsx", url: "/about" },
   { file: "find/[id].tsx", url: "/find/1" },
+  // The choice a share opens (PBI-2.21); with no share it says so, in the same screen area.
+  { file: "share.tsx", url: "/share" },
   { file: "+not-found.tsx", url: "/no-such-screen" },
 ];
 
+/**
+ * A file under src/app that is no route and draws nothing: the layout, and the router's
+ * native-intent file, which only names the route an address from outside the app leads to
+ * (PBI-2.21).
+ */
+const NO_ROUTE = /(^|[\\/])(_layout\.tsx|\+native-intent\.ts)$/;
+
 const routeFiles = fs
   .readdirSync(path.join(PROJECT_ROOT, "src", "app"), { recursive: true })
-  .filter((file) => /\.tsx?$/.test(file) && !/(^|[\\/])_layout\.tsx$/.test(file))
+  .filter((file) => /\.tsx?$/.test(file) && !NO_ROUTE.test(file))
   .map((file) => file.replace(/\\/g, "/"))
   .sort();
 const tableFiles = ROUTES.map((route) => route.file).sort();

@@ -73,8 +73,14 @@ export async function pickFromFiles(encoder: JpegEncoder = deviceJpegEncoder): P
   return { kind: "photo", uri: result.uri, exif: null };
 }
 
-/** Whether the loader loads the file as an image of whole pixels; the image is released. */
-async function loadsAsImage(uri: string, encoder: JpegEncoder): Promise<boolean> {
+/**
+ * Whether the loader loads the file as an image of whole pixels; the image is released. Also the
+ * check of a file another app shared to the app (docs/SPEC.md 3.9, Shared photos; PBI-2.21).
+ */
+export async function loadsAsImage(
+  uri: string,
+  encoder: JpegEncoder = deviceJpegEncoder,
+): Promise<boolean> {
   let image: Awaited<ReturnType<JpegEncoder["load"]>>;
   try {
     image = await encoder.load(uri);

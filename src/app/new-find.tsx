@@ -34,6 +34,7 @@ import {
 import { deviceLocationSource, locationPermission } from "../position/deviceLocation";
 import { formatTimeIn } from "../queue/messages";
 import { useQueue } from "../queue/QueueContext";
+import { useShare } from "../share/ShareContext";
 import { deviceStore } from "../storage/keyValueStore";
 import { useFindLog } from "../store/FindLogContext";
 
@@ -60,17 +61,28 @@ import { useFindLog } from "../store/FindLogContext";
  * unsaved lookup asks too (3.9). A leave while a photo is being saved, the first save or Save
  * again, waits for the save: it goes ahead once the save succeeds, and is asked once it fails
  * (Clead's fix 1 on #32).
+ *
+ * Photos another app shared to the app (3.9, Shared photos; PBI-2.21) reach the screen from the
+ * choice, through the share's own hand-off (`useShare`), never through the address: the one photo
+ * of "New find" when this screen opens as a new lookup, the photos of "Add to an earlier find"
+ * when it opens for that find, and, while this screen holds its find's open batch, the photos of
+ * a share whose choice named that find. The camera then does not open. The screen says how many
+ * shared photos were left out of a find that could not hold them, and how many shared files were
+ * refused as no images.
  */
 export default function NewFindScreen() {
   const { language, strings } = useLanguage();
   const t = strings.newFind;
   const findLog = useFindLog();
   const { analysePhotoLookup } = useQueue();
+  const { takeHandOff, register } = useShare();
   const formatTime = useMemo(() => formatTimeIn(language), [language]);
   const { find } = useLocalSearchParams();
   const [target] = useState<NewFindTarget>(() =>
     find === undefined ? { kind: "new" } : { kind: "add", findId: parseFindId(find) },
   );
+  /** The shared photos a choice handed to this screen, taken once, as it opens. */
+  const [shared] = useState(() => takeHandOff(target));
   const [view, setView] = useState<NewFindView>(INITIAL_VIEW);
   const [flow] = useState(
     () =>
@@ -89,6 +101,7 @@ export default function NewFindScreen() {
         },
         setView,
         target,
+        shared,
       ),
   );
 
@@ -96,6 +109,17 @@ export default function NewFindScreen() {
     flow.start();
     return () => flow.close();
   }, [flow]);
+  // While the screen is shown, a share whose choice names its find can join the batch open here.
+  useEffect(
+    () =>
+      register({
+        canJoin: (findId) => flow.canJoin(findId),
+        join: (photos) => {
+          void flow.addShared(photos);
+        },
+      }),
+    [flow, register],
+  );
 
   const locationRefused = view.location === "denied" || view.location === "blocked";
   const navigation = useNavigation();
@@ -175,6 +199,19 @@ export default function NewFindScreen() {
       {view.phase === "saved" && (
         <Text accessibilityLiveRegion="polite" style={styles.text}>
           {t.saved}
+        </Text>
+      )}
+      {view.sharedLeftOut > 0 && (
+        <Text accessibilityLiveRegion="polite" style={styles.text}>
+          {fillIn(strings.share.leftOut, {
+            count: String(view.sharedLeftOut),
+            max: String(config.maxPhotosPerFind),
+          })}
+        </Text>
+      )}
+      {view.sharedRefused > 0 && (
+        <Text accessibilityLiveRegion="polite" style={styles.text}>
+          {fillIn(strings.share.notImages, { count: String(view.sharedRefused) })}
         </Text>
       )}
       {view.held > 0 ? (
