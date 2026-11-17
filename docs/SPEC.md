@@ -1,6 +1,6 @@
 # What mushroom is this? — Technical Specification
 
-This file is the index of the specification. The specification is the files of `docs/spec/`, listed below in reading order. They hold the text this file held before, unchanged, so the section numbers (such as 3.13) are the same. Read this index, then the files your task touches; read `front.md` for the approval lines.
+This file is the index of the specification. The specification is the files of `docs/spec/`, listed below in reading order. They hold the text this file held before, unchanged, so the section numbers (such as 3.9) are the same. Read this index, then the files your task touches; read `front.md` for the approval lines.
 
 A new or changed section is edited in its file. A new section gets a file in `docs/spec/` and a row here, in its place in the order.
 
