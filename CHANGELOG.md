@@ -19,6 +19,10 @@ All notable changes to What mushroom is this? are documented here.
   app reads neither from a shared file. This needs a new build of the
   app: a build already installed does not get it (PBI-2.21, #116).
 
+### Changed
+
+- The specification (`docs/SPEC.md`) is an index, and its text is in 14 section files in `docs/spec/`, unchanged (#124).
+
 ## [0.2.1]
 
 ### Changed
