@@ -22,6 +22,7 @@ All notable changes to What mushroom is this? are documented here.
 ### Changed
 
 - The specification (`docs/SPEC.md`) is an index, and its text is in 14 section files in `docs/spec/`, unchanged (#124).
+- README: one sentence says the project was developed with the assistance of AI (#126).
 
 ## [0.2.1]
 
