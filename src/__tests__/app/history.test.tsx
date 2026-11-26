@@ -20,6 +20,8 @@ import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import type { Language } from "../../i18n/languages";
 import { STRINGS } from "../../i18n/strings";
 import { INSTALL_MARKER_KEY } from "../../key/apiKey";
+import { openFindLog } from "../../store/deviceFindStore";
+import { appSourceFiles, fs, PROJECT_ROOT, path } from "../../testing/projectFiles";
 import { warmUpRouter } from "../../testing/warmUpRouter";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
@@ -138,7 +140,19 @@ async function acceptedEarlier(): Promise<void> {
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
 }
 
-const seenVersion = () => AsyncStorage.getItem(KEY);
+/**
+ * The version this phone saw last, as the store holds it. Read and set by the store's calls for
+ * several keys, which the app does not use, so that `storeCalls` counts the app's own calls only.
+ */
+async function seenVersion(): Promise<string | null> {
+  const [pair] = await AsyncStorage.multiGet([KEY]);
+  return pair?.[1] ?? null;
+}
+
+/** An earlier start of the app on this phone stored `version` as the version it saw. */
+async function phoneSaw(version: string): Promise<void> {
+  await AsyncStorage.multiSet([[KEY, version]]);
+}
 
 /** How often the app read and wrote the version last seen. */
 function storeCalls(): { reads: number; writes: string[] } {
@@ -151,11 +165,14 @@ function storeCalls(): { reads: number; writes: string[] } {
   };
 }
 
-const realGetItem = jest.mocked(AsyncStorage.getItem).getMockImplementation();
-const realSetItem = jest.mocked(AsyncStorage.setItem).getMockImplementation();
-if (realGetItem === undefined || realSetItem === undefined) {
+const getItemOfStandIn = jest.mocked(AsyncStorage.getItem).getMockImplementation();
+const setItemOfStandIn = jest.mocked(AsyncStorage.setItem).getMockImplementation();
+if (getItemOfStandIn === undefined || setItemOfStandIn === undefined) {
   throw new Error("the storage stand-in has no implementation to keep");
 }
+/** The storage stand-in's own reading and writing, which a test's failing store falls back on. */
+const realGetItem: typeof getItemOfStandIn = getItemOfStandIn;
+const realSetItem: typeof setItemOfStandIn = setItemOfStandIn;
 
 /** The store gives `answer()` when the version last seen is read; every other key is as it is. */
 function readOfSeenVersionGives(answer: () => Promise<string | null>): void {
@@ -188,7 +205,7 @@ beforeEach(async () => {
 warmUpRouter(async () => {
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
-  await AsyncStorage.setItem(KEY, V);
+  await phoneSaw(V);
   phoneIn("en");
   await startApp("/");
   await screen.findByText(en.log.empty);
@@ -264,7 +281,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
   beforeEach(acceptedEarlier);
 
   it("opens the history by itself over the Library, titled What's new, with the entry of the one newer version and the button", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
+    await phoneSaw(SECOND.version);
     const app = await startApp("/");
     expect(await screen.findByTestId("history")).toBeOnTheScreen();
     expect(app.pathname()).toBe("/history");
@@ -279,7 +296,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
   });
 
   it("writes the build's version when the decision is made, whatever the user then does with the screen", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
+    await phoneSaw(SECOND.version);
     await startApp("/");
     await screen.findByTestId("history");
     await expect(seenVersion()).resolves.toBe(V);
@@ -287,7 +304,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
   });
 
   it("shows the entries of every version an upgrade skipped, newest first, each under its heading", async () => {
-    await AsyncStorage.setItem(KEY, OLDEST.version);
+    await phoneSaw(OLDEST.version);
     await startApp("/");
     await screen.findByTestId("history");
     const skipped = HISTORY.slice(0, -1);
@@ -297,7 +314,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
   });
 
   it("shows every entry after an upgrade from a version older than the list's oldest", async () => {
-    await AsyncStorage.setItem(KEY, "0.0.0");
+    await phoneSaw("0.0.0");
     await startApp("/");
     await screen.findByTestId("history");
     expect(versionsShown()).toEqual(versionsOf(HISTORY));
@@ -305,7 +322,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
   });
 
   it("shows the Library when the header's back control or the phone's back closes it", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
+    await phoneSaw(SECOND.version);
     const app = await startApp("/");
     await screen.findByTestId("history");
     expect(router.canGoBack()).toBe(true);
@@ -317,7 +334,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
   });
 
   it("opens a version's news once: nothing opens at the next start", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
+    await phoneSaw(SECOND.version);
     await startApp("/");
     await screen.findByTestId("history");
     await screen.unmount();
@@ -330,7 +347,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
 
   describe('the button "Show full history"', () => {
     it("shows every entry under the title Version history and removes the button", async () => {
-      await AsyncStorage.setItem(KEY, SECOND.version);
+      await phoneSaw(SECOND.version);
       await startApp("/");
       await fireEvent.press(await screen.findByRole("button", { name: "Show full history" }));
       expect(headerTitles()).toEqual([en.log.title, "Version history"]);
@@ -343,7 +360,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
     });
 
     it("stays the same screen: back still shows the Library", async () => {
-      await AsyncStorage.setItem(KEY, SECOND.version);
+      await phoneSaw(SECOND.version);
       const app = await startApp("/");
       await fireEvent.press(await screen.findByRole("button", { name: "Show full history" }));
       expect(app.pathname()).toBe("/history");
@@ -353,7 +370,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
     });
 
     it("writes nothing more", async () => {
-      await AsyncStorage.setItem(KEY, SECOND.version);
+      await phoneSaw(SECOND.version);
       await startApp("/");
       await fireEvent.press(await screen.findByRole("button", { name: "Show full history" }));
       expect(storeCalls()).toEqual({ reads: 1, writes: [V] });
@@ -361,7 +378,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
   });
 
   it("is the full history, not What's new, when the link on About opens it later in the same run", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
+    await phoneSaw(SECOND.version);
     await startApp("/");
     await screen.findByTestId("history");
     await goBack();
@@ -386,7 +403,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
     "is in the app's language, %s: the title, the headings, the lines and the button",
     async (code, strings) => {
       phoneIn(code);
-      await AsyncStorage.setItem(KEY, SECOND.version);
+      await phoneSaw(SECOND.version);
       await startApp("/");
       await screen.findByTestId("history");
       expect(headerTitles()).toEqual([strings.log.title, strings.history.whatsNewTitle]);
@@ -403,7 +420,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
   );
 
   it("follows a change of the language in Settings", async () => {
-    await AsyncStorage.setItem(KEY, V);
+    await phoneSaw(V);
     await startApp("/settings");
     await fireEvent.press(await screen.findByRole("radio", { name: "Italiano" }));
     await fireEvent.press(await screen.findByRole("link", { name: STRINGS.it.about.title }));
@@ -419,8 +436,7 @@ describe("an upgrade: a lower version is stored, and the acceptance was stored e
 
 describe("the disclaimer asked for again after an upgrade: a lower version is stored, the acceptance is not (SPEC 3.10, item 8)", () => {
   it("shows the disclaimer first, with nothing of the history read or written, and What's new once it is accepted", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
-    jest.mocked(AsyncStorage.setItem).mockClear();
+    await phoneSaw(SECOND.version);
     const app = await startApp("/");
     expect(await screen.findByText(en.disclaimer)).toBeOnTheScreen();
     expect(screen.queryByTestId("history")).not.toBeOnTheScreen();
@@ -436,8 +452,7 @@ describe("the disclaimer asked for again after an upgrade: a lower version is st
   });
 
   it("writes nothing when it is accepted at a start not on the Library: the stored version is not missing", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
-    jest.mocked(AsyncStorage.setItem).mockClear();
+    await phoneSaw(SECOND.version);
     await startApp("/settings");
     await accept();
     expect(await screen.findByText(en.settings.languageHeading)).toBeOnTheScreen();
@@ -474,8 +489,7 @@ describe("a phone with a build from before the history: the acceptance is stored
 describe("a start whose first screen is not the Library, with a lower version stored (SPEC 3.10, item 8)", () => {
   beforeEach(async () => {
     await acceptedEarlier();
-    await AsyncStorage.setItem(KEY, SECOND.version);
-    jest.mocked(AsyncStorage.setItem).mockClear();
+    await phoneSaw(SECOND.version);
   });
 
   it.each([
@@ -541,8 +555,7 @@ describe("a start whose first screen is not the Library, with a lower version st
 describe("the history opened by an address from outside the app (SPEC 3.10, items 3 and 8)", () => {
   beforeEach(async () => {
     await acceptedEarlier();
-    await AsyncStorage.setItem(KEY, SECOND.version);
-    jest.mocked(AsyncStorage.setItem).mockClear();
+    await phoneSaw(SECOND.version);
   });
 
   it.each([
@@ -604,37 +617,37 @@ describe("the other stored versions, at a start on the Library (SPEC 3.10, item 
   }
 
   it("opens nothing and writes nothing when the stored version is the build's", async () => {
-    await AsyncStorage.setItem(KEY, V);
-    jest.mocked(AsyncStorage.setItem).mockClear();
+    await phoneSaw(V);
     await expectTheLibraryAlone(await startApp("/"));
     expect(storeCalls()).toEqual({ reads: 1, writes: [] });
   });
 
   it("opens nothing and writes the build's version when the stored version is higher", async () => {
-    await AsyncStorage.setItem(KEY, "999.0.0");
+    await phoneSaw("999.0.0");
     await expectTheLibraryAlone(await startApp("/"));
     await expect(seenVersion()).resolves.toBe(V);
   });
 
-  it.each(["", "v0.1.0", "0.1", "0.1.0-beta", "accepted", `${V} `])(
+  // An empty text is among the cases of `seenVersion.test.ts`: the storage stand-in reads it back
+  // as no value.
+  it.each(["v0.1.0", "0.1", "0.1.0-beta", "accepted", `${V} `])(
     "opens nothing and writes the build's version when the stored text is %p, which is not a version",
     async (text) => {
-      await AsyncStorage.setItem(KEY, text);
+      await phoneSaw(text);
       await expectTheLibraryAlone(await startApp("/"));
       await expect(seenVersion()).resolves.toBe(V);
     },
   );
 
   it("opens nothing and still tries the write when reading the stored version fails", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
-    jest.mocked(AsyncStorage.setItem).mockClear();
+    await phoneSaw(SECOND.version);
     readOfSeenVersionGives(() => Promise.reject(new Error("storage unavailable")));
     await expectTheLibraryAlone(await startApp("/"));
     expect(storeCalls().writes).toEqual([V]);
   });
 
   it("still opens the screen when the write fails, and opens it again at the next start", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
+    await phoneSaw(SECOND.version);
     writeOfSeenVersionFails();
     await startApp("/");
     await screen.findByTestId("history");
@@ -649,7 +662,7 @@ describe("the other stored versions, at a start on the Library (SPEC 3.10, item 
   });
 
   it("shows the Library only when the read of the stored version is finished", async () => {
-    await AsyncStorage.setItem(KEY, V);
+    await phoneSaw(V);
     let finishRead: (value: string | null) => void = () => undefined;
     readOfSeenVersionGives(
       () =>
@@ -657,20 +670,33 @@ describe("the other stored versions, at a start on the Library (SPEC 3.10, item 
           finishRead = resolve;
         }),
     );
+    jest.mocked(openFindLog).mockClear();
     const app = await startApp("/");
     expect(await screen.findByTestId("history-reading")).toBeOnTheScreen();
     expect(screen.queryByText(en.log.empty)).not.toBeOnTheScreen();
-    expect(headerTitles()).toEqual([]);
+    // The Library is not there yet, and has asked for nothing: the find log is not opened.
+    expect(screen.queryByRole("link", { name: en.log.settings })).not.toBeOnTheScreen();
+    expect(openFindLog).not.toHaveBeenCalled();
+    expect(app.pathname()).toBe("/");
 
     await act(async () => {
       finishRead(V);
     });
     await expectTheLibraryAlone(app);
     expect(screen.queryByTestId("history-reading")).not.toBeOnTheScreen();
+    expect(openFindLog).toHaveBeenCalled();
+  });
+
+  it("keeps the wait for that read in the screen's area, clear of the system bars as every screen is", async () => {
+    await phoneSaw(V);
+    readOfSeenVersionGives(() => new Promise<string | null>(() => undefined));
+    await startApp("/");
+    const reading = await screen.findByTestId("history-reading");
+    expect(screen.getByTestId("screen-area")).toContainElement(reading);
   });
 
   it("does not wait for that read at a start not on the Library", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
+    await phoneSaw(SECOND.version);
     readOfSeenVersionGives(() => new Promise<string | null>(() => undefined));
     await startApp("/settings");
     expect(await screen.findByText(en.settings.languageHeading)).toBeOnTheScreen();
@@ -685,7 +711,7 @@ describe("the other stored versions, at a start on the Library (SPEC 3.10, item 
   });
 
   it("does not update after it is gone, when the stored version is read too late", async () => {
-    await AsyncStorage.setItem(KEY, SECOND.version);
+    await phoneSaw(SECOND.version);
     let finishRead: (value: string | null) => void = () => undefined;
     readOfSeenVersionGives(
       () =>
@@ -708,7 +734,7 @@ describe("the other stored versions, at a start on the Library (SPEC 3.10, item 
 describe("the history opened from the link on About (SPEC 3.10, items 2 and 3)", () => {
   beforeEach(async () => {
     await acceptedEarlier();
-    await AsyncStorage.setItem(KEY, V);
+    await phoneSaw(V);
   });
 
   async function openFromAbout(): Promise<{ pathname: () => string }> {
@@ -745,4 +771,49 @@ describe("the history opened from the link on About (SPEC 3.10, items 2 and 3)",
     await openFromAbout();
     expect(storeCalls()).toEqual({ reads: 0, writes: [] });
   });
+});
+
+describe("the app's source (SPEC 3.10, items 3 and 8)", () => {
+  /** The history's own sources and its route, by their paths under src/. */
+  const sources = appSourceFiles()
+    .map((file) => file.slice(path.join(PROJECT_ROOT, "src").length + 1).replace(/\\/g, "/"))
+    .filter((file) => file.startsWith("history/") || file === "app/history.tsx");
+
+  it("holds the history's modules and its route", () => {
+    expect(sources).toEqual(
+      expect.arrayContaining([
+        "app/history.tsx",
+        "history/HistoryContext.tsx",
+        "history/HistoryScreen.tsx",
+        "history/historyStart.ts",
+      ]),
+    );
+  });
+
+  it.each([
+    "useLocalSearchParams",
+    "useGlobalSearchParams",
+    "usePathname",
+    "useSegments",
+    "useRootNavigationState",
+    "getInitialURL",
+  ])(
+    "reads nothing of the address that opens the history, nor the start's first screen from the router's record of the address: no %s",
+    (name) => {
+      for (const file of sources) {
+        const text = fs.readFileSync(path.join(PROJECT_ROOT, "src", file), "utf8");
+        expect({ file, uses: text.includes(name) }).toEqual({ file, uses: false });
+      }
+    },
+  );
+
+  it.each(["fetch(", "XMLHttpRequest", "expo-file-system", "expo-sqlite"])(
+    "reads none of the history's text from the network, a file or the database: no %s",
+    (name) => {
+      for (const file of sources) {
+        const text = fs.readFileSync(path.join(PROJECT_ROOT, "src", file), "utf8");
+        expect({ file, uses: text.includes(name) }).toEqual({ file, uses: false });
+      }
+    },
+  );
 });

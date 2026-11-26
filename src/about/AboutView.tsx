@@ -1,3 +1,4 @@
+import { Link } from "expo-router";
 import { useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -9,7 +10,8 @@ type AboutViewProps = {
 };
 
 /**
- * The About view (docs/SPEC.md 3.1): the app's own licence with its required notice, the
+ * The About view (docs/SPEC.md 3.1): the link to the version history, first on the screen, as the
+ * lists below it are long (SPEC 3.10, item 2); the app's own licence with its required notice, the
  * disclaimer of SPEC 3.5, the map data credits with links to their pages (SPEC 3.9, PBI-2.8),
  * and the licences of the libraries the app ships. A licence text is shown when asked for, as the
  * texts are long.
@@ -18,7 +20,11 @@ export function AboutView({ notices }: AboutViewProps) {
   const { strings } = useLanguage();
   const t = strings.about;
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={styles.container} testID="about">
+      <Link href="/history" accessibilityRole="link" style={[styles.text, styles.link]}>
+        {strings.history.title}
+      </Link>
+
       <View style={styles.section} testID="licence-app">
         <Text accessibilityRole="header" style={styles.heading}>
           {t.appHeading}

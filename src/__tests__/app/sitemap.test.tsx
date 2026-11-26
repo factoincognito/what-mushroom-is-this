@@ -9,6 +9,8 @@ import { getLocales } from "expo-localization";
 import { fireEvent, renderRouter, screen } from "expo-router/testing-library";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { BUILD_VERSION } from "../../history/buildVersion";
+import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import { STRINGS } from "../../i18n/strings";
 
 type ExpoConfig = { plugins?: unknown[]; extra?: { router?: Record<string, unknown> } };
@@ -72,6 +74,7 @@ describe("the generated sitemap", () => {
 
   it("is not reachable after acceptance: /_sitemap is the app's own not-found screen", async () => {
     await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
     const app = renderRouter("./src/app", { initialUrl: "/_sitemap" });
     await app;
     expect(await screen.findByText(STRINGS.en.notFound.message)).toBeOnTheScreen();

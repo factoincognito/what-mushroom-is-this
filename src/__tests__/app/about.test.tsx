@@ -10,6 +10,8 @@ import { Linking } from "react-native";
 
 import { NOTICES } from "../../about/notices";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { BUILD_VERSION } from "../../history/buildVersion";
+import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import { STRINGS } from "../../i18n/strings";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
@@ -66,6 +68,7 @@ describe("the About view", () => {
 
   beforeEach(async () => {
     await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   });
 
   it("is reached from Settings", async () => {

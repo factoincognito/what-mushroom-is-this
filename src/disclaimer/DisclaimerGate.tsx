@@ -1,12 +1,22 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useLanguage } from "../i18n/LanguageContext";
 import { ScreenArea } from "../screen/ScreenArea";
 import type { KeyValueStore } from "../storage/keyValueStore";
-import { acceptDisclaimer, isDisclaimerAccepted } from "./acceptance";
+import { type AcceptanceAtStart, acceptDisclaimer, isDisclaimerAccepted } from "./acceptance";
 
-type GateState = "loading" | "needed" | "accepted";
+type GateState = "loading" | "needed" | AcceptanceAtStart;
+
+const AcceptanceContext = createContext<AcceptanceAtStart | null>(null);
 
 type DisclaimerGateProps = {
   readonly store: KeyValueStore;
@@ -19,6 +29,10 @@ type DisclaimerGateProps = {
  * still opens, and the disclaimer is asked for again at the next start. What the gate itself
  * shows is laid out clear of the system bars and the display cutout (`ScreenArea`, PBI-2.20); the
  * app it lets through is not wrapped, since its screens keep clear themselves.
+ *
+ * The gate tells the app it lets through whether the acceptance was read or given at this start
+ * (`useAcceptanceAtStart`), which the version history's decision needs (docs/SPEC.md 3.10,
+ * item 7). An acceptance that was given counts as given also when storing it failed.
  */
 export function DisclaimerGate({ store, children }: DisclaimerGateProps) {
   const { strings } = useLanguage();
@@ -29,7 +43,7 @@ export function DisclaimerGate({ store, children }: DisclaimerGateProps) {
     mounted.current = true;
     isDisclaimerAccepted(store).then((accepted) => {
       if (mounted.current) {
-        setState(accepted ? "accepted" : "needed");
+        setState(accepted ? "read" : "needed");
       }
     });
     return () => {
@@ -40,13 +54,13 @@ export function DisclaimerGate({ store, children }: DisclaimerGateProps) {
   const accept = useCallback(() => {
     acceptDisclaimer(store).then(() => {
       if (mounted.current) {
-        setState("accepted");
+        setState("given");
       }
     });
   }, [store]);
 
-  if (state === "accepted") {
-    return children;
+  if (state === "read" || state === "given") {
+    return <AcceptanceContext.Provider value={state}>{children}</AcceptanceContext.Provider>;
   }
   // The gate's own views have no header above them, so their area takes the top inset too.
   if (state === "loading") {
@@ -71,6 +85,18 @@ export function DisclaimerGate({ store, children }: DisclaimerGateProps) {
       </View>
     </ScreenArea>
   );
+}
+
+/**
+ * Whether the disclaimer's acceptance was read from the store or given at this start. Only what
+ * the gate has let through can ask.
+ */
+export function useAcceptanceAtStart(): AcceptanceAtStart {
+  const acceptance = useContext(AcceptanceContext);
+  if (acceptance === null) {
+    throw new Error("useAcceptanceAtStart must be used inside a DisclaimerGate");
+  }
+  return acceptance;
 }
 
 const styles = StyleSheet.create({

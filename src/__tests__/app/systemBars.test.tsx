@@ -20,6 +20,8 @@ import { AppState } from "react-native";
 import type { EdgeInsets } from "react-native-safe-area-context";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { BUILD_VERSION } from "../../history/buildVersion";
+import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import { STRINGS } from "../../i18n/strings";
 import { INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { fetchDevicePicture } from "../../picture/devicePicture";
@@ -121,6 +123,7 @@ const refused = { status: "denied", granted: false, canAskAgain: false, expires:
 async function resetStandIns(): Promise<void> {
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+  await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
   mockLog.finds.clear();
   jest

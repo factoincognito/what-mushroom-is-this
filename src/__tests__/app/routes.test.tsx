@@ -11,6 +11,8 @@ import * as SecureStore from "expo-secure-store";
 import { config } from "../../config/config";
 import { MODEL_SETTING_KEY } from "../../config/modelSetting";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { BUILD_VERSION } from "../../history/buildVersion";
+import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import { LANGUAGE_CHOICE_KEY } from "../../i18n/languageChoice";
 import { STRINGS } from "../../i18n/strings";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
@@ -91,6 +93,7 @@ describe("first start", () => {
 describe("the Log screen", () => {
   beforeEach(async () => {
     await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   });
 
   it("is the start screen, without the disclaimer once it was accepted", async () => {
@@ -124,6 +127,7 @@ describe("the Log screen", () => {
 describe("the Settings screen", () => {
   beforeEach(async () => {
     await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   });
 
   it("offers the three languages, each named in itself, with the phone's language chosen", async () => {
@@ -180,6 +184,7 @@ describe("the Settings screen: the API key (SPEC 3.2)", () => {
 
   beforeEach(async () => {
     await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
     await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
   });
 
@@ -303,6 +308,7 @@ describe("the Settings screen: the API key (SPEC 3.2)", () => {
 describe("the first start after an install (SPEC 3.2)", () => {
   beforeEach(async () => {
     await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   });
 
   it("clears a key the secure store kept from an earlier install", async () => {
@@ -334,6 +340,7 @@ describe("the Settings screen: the model (SPEC 3.3)", () => {
 
   beforeEach(async () => {
     await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
     await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
   });
 
@@ -426,6 +433,7 @@ describe("an address that matches no route", () => {
   describe("after acceptance", () => {
     beforeEach(async () => {
       await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+      await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
     });
 
     it.each([

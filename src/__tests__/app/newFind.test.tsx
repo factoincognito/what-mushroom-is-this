@@ -12,6 +12,8 @@ import { act, fireEvent, renderRouter, screen } from "expo-router/testing-librar
 import { Alert, Linking } from "react-native";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { BUILD_VERSION } from "../../history/buildVersion";
+import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import { STRINGS } from "../../i18n/strings";
 import { deviceJpegEncoder } from "../../image/deviceJpegEncoder";
 import type { NewFind, Position, StoredFind } from "../../store/find";
@@ -138,6 +140,7 @@ async function resetStandIns(): Promise<void> {
   jest.clearAllMocks();
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+  await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   phoneIn("en");
   mockLog.added = [];
   mockLog.photosAdded = [];
