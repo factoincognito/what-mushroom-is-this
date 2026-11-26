@@ -1,6 +1,7 @@
 import { Directory, File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
+import * as cacheFile from "../storage/cacheFile";
 import { isCacheFileAddress } from "../storage/cacheFile";
 import { deviceShareFiles, deviceShareSource, keepSharedCopy, libraryCopy } from "./deviceShare";
 
@@ -264,8 +265,241 @@ describe("deviceShareFiles: the files of a share on the phone", () => {
     expect(photo.exists).toBe(true);
   });
 
+  it("removes a copy with the file system's removal, once, and nothing else", () => {
+    const library = libraryFile("IMG_12.jpg");
+    const other = libraryFile("IMG_13.jpg");
+    const removal = jest.spyOn(File.prototype, "delete");
+    try {
+      deviceShareFiles.remove(library.uri);
+      expect(removal).toHaveBeenCalledTimes(1);
+    } finally {
+      removal.mockRestore();
+    }
+    expect(library.exists).toBe(false);
+    expect(other.exists).toBe(true);
+  });
+
   it("is the three functions the session uses", () => {
     expect(deviceShareFiles.libraryCopy).toBe(libraryCopy);
     expect(deviceShareFiles.keep).toBe(keepSharedCopy);
+  });
+});
+
+/*
+ * `deviceShareFiles.remove` is given addresses that come from the library (`contentUri` of the
+ * resolved payloads, whose file names the sharing app chooses and whose address of a shared web
+ * address is the one the web server's redirects end at) and the app's own copies. It removes only
+ * a file in the library's folder or the app's own folder of the cache, at an address that passes
+ * the one guard of the app's removals (`isCacheFileAddress`); anything else is left alone, and the
+ * file system's removal is not called for it.
+ */
+describe("deviceShareFiles.remove: only the share's own copies, at a plain address", () => {
+  const cache = Paths.cache.uri;
+
+  /** A file the removal must leave, and the address at which it is named. */
+  type Refused = [string, () => { file: File; address: string }];
+
+  function pickerFile(): File {
+    return fileIn(new Directory(Paths.cache, "ImagePicker"), "pick.jpg");
+  }
+  function photoFile(): File {
+    return fileIn(new Directory(Paths.document, "photos"), "p20.jpg");
+  }
+
+  const refused: Refused[] = [
+    [
+      "a file of the find log's photos",
+      () => {
+        const file = photoFile();
+        return { file, address: file.uri };
+      },
+    ],
+    [
+      "a file of another folder of the cache, which is no copy of the share",
+      () => {
+        const file = pickerFile();
+        return { file, address: file.uri };
+      },
+    ],
+    [
+      "a file of another folder of the cache, at the address Java writes",
+      () => {
+        const file = pickerFile();
+        return { file, address: file.uri.replace("file:///", "file:/") };
+      },
+    ],
+    [
+      "a file of a folder whose name only starts as the library's",
+      () => {
+        const file = fileIn(new Directory(Paths.cache, "expo-sharing-other"), "a.jpg");
+        return { file, address: file.uri };
+      },
+    ],
+    [
+      "a file of a folder whose name only starts as the app's own",
+      () => {
+        const file = fileIn(new Directory(Paths.cache, "SharedPhotos-other"), "a.jpg");
+        return { file, address: file.uri };
+      },
+    ],
+    [
+      "a file of the cache's own top",
+      () => {
+        const file = fileIn(Paths.cache, "top.jpg");
+        return { file, address: file.uri };
+      },
+    ],
+  ];
+
+  it.each(refused)("leaves %s", (_, make) => {
+    const { file, address } = make();
+    const removal = jest.spyOn(File.prototype, "delete");
+    try {
+      deviceShareFiles.remove(address);
+      expect(removal).not.toHaveBeenCalled();
+    } finally {
+      removal.mockRestore();
+    }
+    expect(file.exists).toBe(true);
+  });
+
+  /** Addresses that start in the library's folder and are not a plain file in the cache. */
+  const notPlain: [string, (copy: string, own: string) => string][] = [
+    ["a parent step", () => `${cache}expo-sharing/../../document/photos/p21.jpg`],
+    ["a parent step, one slash after the scheme", () => `file:/mock/cache/expo-sharing/../x.jpg`],
+    ["an encoded parent step", () => `${cache}expo-sharing/%2e%2e/%2e%2e/document/photos/p21.jpg`],
+    ["an upper-case encoded parent step", () => `${cache}expo-sharing/%2E%2E/%2E%2E/a.jpg`],
+    ["a half-encoded parent step", () => `${cache}expo-sharing/.%2e/.%2e/a.jpg`],
+    ["an encoded separator", () => `${cache}expo-sharing/..%2f..%2fdocument/photos/p21.jpg`],
+    ["backslashes", () => `${cache}expo-sharing/..\\..\\document\\photos\\p21.jpg`],
+    ["an encoded backslash", () => `${cache}expo-sharing/..%5c..%5cdocument/photos/p21.jpg`],
+    ["a parent step with a tab in it", () => `${cache}expo-sharing/.\t./.\t./a.jpg`],
+    ["a parent step with a line break in it", () => `${cache}expo-sharing/.\n./a.jpg`],
+    ["a parent step at the end", () => `${cache}expo-sharing/folder-1/..`],
+    ["a parent step before a fragment", () => `${cache}expo-sharing/..#x`],
+    ["a raw question mark", (copy) => `${copy}?x=1`],
+    ["a raw number sign", (copy) => `${copy}#x`],
+    ["a question mark in the path", () => `${cache}expo-sharing/a?/../../b.jpg`],
+    ["a trailing line break", (copy) => `${copy}\n`],
+    ["a trailing tab", (copy) => `${copy}\t`],
+    ["a trailing space", (copy) => `${copy} `],
+    ["a trailing control character", (copy) => `${copy}\u0001`],
+    [
+      "a parent step in the app's own folder",
+      () => `${cache}SharedPhotos/../../document/photos/p21.jpg`,
+    ],
+    ["a trailing line break in the app's own folder", (_, own) => `${own}\n`],
+  ];
+
+  it.each(notPlain)("leaves a file named with %s", (_, address) => {
+    const copy = libraryFile("IMG_14.jpg");
+    const own = keepSharedCopy(libraryFile("IMG_15.jpg").uri) ?? "";
+    const photo = photoFile();
+    // The in-memory file system does not read a parent step or an escape as a real one does, so
+    // every address is made to name a file that is there, and the removal is observed, not run.
+    const exists = jest.spyOn(File.prototype, "exists", "get").mockReturnValue(true);
+    const removal = jest.spyOn(File.prototype, "delete").mockImplementation(() => undefined);
+    try {
+      deviceShareFiles.remove(address(copy.uri, own));
+      expect(removal).not.toHaveBeenCalled();
+    } finally {
+      removal.mockRestore();
+      exists.mockRestore();
+    }
+    expect(copy.exists).toBe(true);
+    expect(new File(own).exists).toBe(true);
+    expect(photo.exists).toBe(true);
+  });
+
+  it("leaves the cache directory, the library's folder, a copy's folder and the app's own folder", () => {
+    const copy = libraryFile("IMG_16.jpg");
+    const own = keepSharedCopy(libraryFile("IMG_17.jpg").uri) ?? "";
+    const removal = jest.spyOn(File.prototype, "delete");
+    const folders = [
+      cache,
+      cache.replace(/\/$/, ""),
+      `${cache}expo-sharing`,
+      `${cache}expo-sharing/`,
+      copy.uri.slice(0, copy.uri.lastIndexOf("/")),
+      `${copy.uri.slice(0, copy.uri.lastIndexOf("/"))}/`,
+      `${cache}SharedPhotos`,
+      `${cache}SharedPhotos/`,
+    ];
+    try {
+      for (const address of folders) {
+        deviceShareFiles.remove(address);
+      }
+      expect(removal).not.toHaveBeenCalled();
+    } finally {
+      removal.mockRestore();
+    }
+    expect(copy.exists).toBe(true);
+    expect(new File(own).exists).toBe(true);
+  });
+
+  it.each([
+    "https://example.org/a.jpg",
+    "http://example.org/expo-sharing/a.jpg",
+    "content://media/external/images/media/1",
+    "file:///data/user/0/other.app/cache/expo-sharing/a.jpg",
+    "",
+    "expo-sharing/a.jpg",
+    null,
+    undefined,
+    7,
+    { uri: "file:///mock/cache/expo-sharing/a.jpg" },
+  ])("leaves what is no address of a file in the cache: %p", (address) => {
+    const copy = libraryFile("IMG_18.jpg");
+    const removal = jest.spyOn(File.prototype, "delete");
+    try {
+      expect(() => deviceShareFiles.remove(address as never)).not.toThrow();
+      expect(removal).not.toHaveBeenCalled();
+    } finally {
+      removal.mockRestore();
+    }
+    expect(copy.exists).toBe(true);
+  });
+
+  it("asks the app's one guard for a cache file, and leaves a copy that guard refuses", () => {
+    const copy = libraryFile("IMG_19.jpg");
+    const guard = jest.spyOn(cacheFile, "isCacheFileAddress").mockReturnValue(false);
+    try {
+      deviceShareFiles.remove(copy.uri);
+      expect(guard).toHaveBeenCalledWith(copy.uri);
+    } finally {
+      guard.mockRestore();
+    }
+    expect(copy.exists).toBe(true);
+    deviceShareFiles.remove(copy.uri);
+    expect(copy.exists).toBe(false);
+  });
+
+  it("removes a copy at its exact address, in either form, in either folder", () => {
+    const library = libraryFile("IMG_20.jpg");
+    const asJava = libraryFile("IMG_21.jpg");
+    const own = keepSharedCopy(libraryFile("IMG_22.jpg").uri) ?? "";
+    const named = libraryFile("a%20name%3F%23.png");
+    deviceShareFiles.remove(library.uri);
+    deviceShareFiles.remove(asJava.uri.replace("file:///", "file:/"));
+    deviceShareFiles.remove(own);
+    deviceShareFiles.remove(named.uri);
+    expect(library.exists).toBe(false);
+    expect(asJava.exists).toBe(false);
+    expect(new File(own).exists).toBe(false);
+    expect(named.exists).toBe(false);
+  });
+
+  it("does not fail for a copy that is gone, or when the removal fails", () => {
+    const copy = libraryFile("IMG_23.jpg");
+    deviceShareFiles.remove(`${cache}expo-sharing/folder-z/gone.jpg`);
+    const removal = jest.spyOn(File.prototype, "delete").mockImplementation(() => {
+      throw new Error("read-only file system");
+    });
+    try {
+      expect(() => deviceShareFiles.remove(copy.uri)).not.toThrow();
+    } finally {
+      removal.mockRestore();
+    }
+    expect(copy.exists).toBe(true);
   });
 });
