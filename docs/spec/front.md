@@ -71,11 +71,17 @@ section 2, as merged: his choice "Confirm all 40 as written
 but some, or not confirm), after Clead gave him a numbered list of the
 40 choices, quoted from the merged text. Of item 12, the tests, the list
 gave the eight groups of tests by their names and left their cases out,
-so the cases are not part of what he confirmed. What no one has decided is
-stated as undecided in the part: the first version with the history, and
-whether a shared version history becomes a project or a repository of
-its own. The product office's `DECISIONS.md` records the answers and the
-approval.
+so the cases are not part of what he confirmed. At about 17:54 the same
+day he decided, in chat, that the first version with the history is
+0.2.1 ("Keep 0.2.1 (Recommended)", #137), and confirmed Clead's reading
+of item 7 ("Yes, as read (Recommended)"). At about 18:10 he approved
+the English and Swedish of the three lines the 0.2.1 entry took for the
+share target and the history ("Approve both (Recommended)", #136) and
+decided the date rule of item 10 ("Day the build is made
+(Recommended)", worded as #137 has it). What no one has decided is
+stated as undecided in the part: whether a shared version history
+becomes a project or a repository of its own. The product office's
+`DECISIONS.md` records the answers and the approval.
 
 ---
 
