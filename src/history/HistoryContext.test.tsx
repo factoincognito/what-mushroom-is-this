@@ -141,6 +141,21 @@ function holdTheReadOf(store: Store): (value: string | null) => void {
   return (value) => finish(value);
 }
 
+/** Node's own timer, which Jest's stand-in timers do not replace: it is asked for by its module. */
+const realTimers: { setImmediate(callback: () => void): unknown } =
+  jest.requireActual("node:timers");
+
+/**
+ * Waits until every promise that can settle has settled, however many turns its chain takes: the
+ * event loop runs a timer's callback only when no promise's continuation is left to run. The stores of
+ * this file answer by promises alone, so after it the read's continuation has run to its end.
+ */
+function everyPromiseSettled(): Promise<void> {
+  return new Promise((resolve) => {
+    realTimers.setImmediate(resolve);
+  });
+}
+
 const [, SECOND] = HISTORY;
 const LOWER = SECOND?.version ?? "0.0.0";
 
@@ -307,8 +322,10 @@ describe("the version history's start among the screens (SPEC 3.10, items 3, 7 a
     await screen.findByTestId("history-reading");
     await screen.unmount();
     finishRead(LOWER);
-    await Promise.resolve();
-    await Promise.resolve();
+    await everyPromiseSettled();
+    // The decision is made, as its write shows: the read's continuation has run, and with it the
+    // place where the history would have been opened.
+    expect(seenWrites(store)).toEqual([[HISTORY_SEEN_VERSION_KEY, BUILD_VERSION]]);
     expect(router.push).not.toHaveBeenCalled();
     expect(errors).not.toHaveBeenCalled();
     errors.mockRestore();

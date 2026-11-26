@@ -190,6 +190,21 @@ function writeOfSeenVersionFails(): void {
     );
 }
 
+/** Node's own timer, which Jest's stand-in timers do not replace: it is asked for by its module. */
+const realTimers: { setImmediate(callback: () => void): unknown } =
+  jest.requireActual("node:timers");
+
+/**
+ * Waits until every promise that can settle has settled, however many turns its chain takes: the
+ * event loop runs a timer's callback only when no promise's continuation is left to run. The storage
+ * stand-in answers by promises alone, so after it a read's continuation has run to its end.
+ */
+function everyPromiseSettled(): Promise<void> {
+  return new Promise((resolve) => {
+    realTimers.setImmediate(resolve);
+  });
+}
+
 beforeEach(async () => {
   jest.mocked(AsyncStorage.getItem).mockImplementation(realGetItem);
   jest.mocked(AsyncStorage.setItem).mockImplementation(realSetItem);
@@ -720,13 +735,20 @@ describe("the other stored versions, at a start on the Library (SPEC 3.10, item 
         }),
     );
     const errors = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const opened = jest.spyOn(router, "push");
     await startApp("/");
     await screen.findByTestId("history-reading");
     await screen.unmount();
     await act(async () => {
       finishRead(SECOND.version);
+      await everyPromiseSettled();
     });
+    // The decision is made, as its write shows: the read's continuation has run, and with it the
+    // place where the history would have been opened.
+    expect(storeCalls().writes).toEqual([V]);
+    expect(opened).not.toHaveBeenCalled();
     expect(errors).not.toHaveBeenCalled();
+    opened.mockRestore();
     errors.mockRestore();
   });
 });
