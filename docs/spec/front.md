@@ -42,5 +42,14 @@ image, the disclaimer, a second share, a shared photo's time and
 position, Android only, the files taken, and a find whose batch is
 open), with the further marks that list said it covered.
 
+The share window and two lines of the share target (3.9, Shared photos),
+added in #127: Adam confirmed them on 2026-11-26 at about 14:44, in chat
+("Confirm all three"), answering Clead's question that quoted them: a
+share that holds a web address or a text beside image files is refused
+whole; the window, stated with the redirects the library follows (his
+acceptance of that wording, about 14:36, is recorded in the product
+office's `DECISIONS.md`); and the "Add photos" screen opening over the
+New find screen when that screen cannot take shared photos.
+
 ---
 
