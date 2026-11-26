@@ -19,4 +19,5 @@ A new or changed section is edited in its file. A new section gets a file in `do
 | 3.7 | 3.7 Not in this version | `docs/spec/3.7-not-in-this-version.md` |
 | 3.8 | 3.8 Distribution and done | `docs/spec/3.8-distribution-and-done.md` |
 | 3.9 | 3.9 Phase 2 | `docs/spec/3.9-phase-2.md` |
+| 3.10 | 3.10 Version history | `docs/spec/3.10-version-history.md` |
 | 4 | 4. Known unknowns | `docs/spec/4-known-unknowns.md` |

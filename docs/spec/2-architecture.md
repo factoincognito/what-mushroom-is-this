@@ -25,6 +25,7 @@ its own tests; the screens only wire them together. The modules:
 | queue | the finds waiting for analysis, when the queue runs and stops |
 | store | the database of finds and the photo files |
 | position | taking the position for a new find |
+| history | the version history's entries in the three languages, the comparison of versions, what opens by itself after an upgrade, the version last seen (3.10; **[Clead]**, 2026-11-26, #131) |
 
 Nothing leaves the phone except the photo sent for analysis (section 3.3).
 There is no server. Phase 2 adds the text and the several photos of a
