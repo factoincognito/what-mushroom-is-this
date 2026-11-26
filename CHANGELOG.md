@@ -22,6 +22,19 @@ All notable changes to What mushroom is this? are documented here.
   saved and no position, as the app reads neither from a shared file.
   This needs a new build of the app: a build already installed does not
   get it (PBI-2.21, #116).
+- A version history. A "Version history" link, first on the About
+  screen, opens it: one entry for each version of the app, newest
+  first, each saying in plain words what the version brought, in the
+  app's language. The first time the app is started after a version
+  upgrade the history opens by itself over the Library as "What's
+  new", with the entries of the versions new to the phone and a button
+  to the full history; this is decided after the first-start
+  disclaimer, and only at a start that opens on the Library, so a start
+  that a share or another address opens leaves it to the next one. On a
+  new install nothing opens. A phone that holds a build from before the
+  history is shown the entry of its first build with the history, once.
+  The entries are for 0.2.1, 0.2.0 and 0.1.0; their Swedish and Italian
+  are not checked by a speaker yet (SPEC 3.10; PBI-2.24, #134).
 
 ### Changed
 
