@@ -9,6 +9,11 @@
  * for line; and name the version in both lists of `ENTRIES_NOT_CHECKED_BY_A_SPEAKER`. A line says
  * in plain words what the user can now do or what has changed for them: no PR or backlog number,
  * and no name from the code. The tests beside this file check the list.
+ *
+ * The date of an entry whose version is not built yet (item 10; Adam, 2026-11-26): the day of the
+ * last commit that changes the entry's text before the version's first build, also when the entry
+ * gains lines. A commit that changes such an entry's text sets its date to that commit's day.
+ * Once the version is built, the date stays when the text is corrected.
  */
 
 import type { Language } from "../i18n/languages";
@@ -24,27 +29,39 @@ export type HistoryEntry = {
 };
 
 /**
- * The entries, newest first. The first is the entry of app.json's version. The entries of 0.2.0
- * and 0.1.0 are of the versions from before the history that were installed on a phone, written
- * from `CHANGELOG.md` and the specification; each one's date is the day its version was set in
- * app.json.
+ * The entries, newest first. The first is the entry of app.json's version. 0.2.1 is the first
+ * version with the history (Adam, 2026-11-26), so its entry also tells of the share target and of
+ * the history itself; its date is the day those lines were written, the last change of its text
+ * before its first build, and not the day 0.2.1 was set in app.json (2026-11-16). The entries of
+ * 0.2.0 and 0.1.0 are of the versions from before the history that were installed on a phone,
+ * written from `CHANGELOG.md` and the specification; each one's date is the day its version was
+ * set in app.json.
  */
 export const HISTORY: readonly HistoryEntry[] = [
   {
     version: "0.2.1",
-    date: "2026-11-16",
+    date: "2026-11-26",
     lines: {
       en: [
+        "Photos can now be shared with the app from the gallery, the camera app or another app that shows a photo. For one shared photo you choose New find or Add to an earlier find; several photos shared at once can only be added to an earlier find.",
+        "The app takes only image files on the phone from a share: a shared web address or text is refused. Photos that do not fit in the chosen find, which holds at most 5, are left out, and the app says how many.",
+        "The app now has a version history. The Version history link, first on the About screen, opens it, and the first time the app is opened after an update it shows What's new.",
         "The Settings link at the bottom of the Library is no longer hidden behind Android's navigation buttons. Every screen now keeps clear of the phone's navigation bar and its display cutout.",
         "The app now removes camera data and other metadata from the copy of a photo that it sends for analysis. Before, a photo whose copy held such data, for example a camera photo picked from the gallery, was not analysed.",
         "After a photo is removed from a find whose analysis failed, the reason shown no longer names a photo by its number, as the photos left may have other numbers.",
       ],
       sv: [
+        "Foton kan nu delas med appen från galleriet, kameraappen eller en annan app som visar ett foto. För ett delat foto väljer du Nytt fynd eller Lägg till i ett tidigare fynd; flera foton som delas samtidigt kan bara läggas till i ett tidigare fynd.",
+        "Vid en delning tar appen bara emot bildfiler som finns på telefonen: en delad webbadress eller text tas inte emot. Foton som inte får plats i det valda fyndet, som har högst 5 foton, tas inte med, och appen anger hur många.",
+        "Appen har nu en versionshistorik. Länken Versionshistorik, överst på sidan Om appen, öppnar den, och första gången appen öppnas efter en uppdatering visar den Nyheter.",
         "Länken Inställningar längst ner i Biblioteket döljs inte längre bakom Androids navigeringsknappar. Inget på någon sida hamnar nu bakom telefonens navigeringsfält eller skärmutskärningen.",
         "Appen tar nu bort kameradata och andra metadata ur den kopia av ett foto som den skickar för analys. Tidigare analyserades inte ett foto vars kopia innehöll sådana data, till exempel ett kamerafoto som valts i galleriet.",
         "När ett foto har tagits bort ur ett fynd vars analys misslyckades nämner orsaken som visas inte längre något foto med nummer, eftersom de foton som är kvar kan ha fått andra nummer.",
       ],
       it: [
+        "Ora le foto si possono condividere con l'app dalla galleria, dall'app della fotocamera o da un'altra app che mostra una foto. Per una sola foto condivisa scegli Nuovo ritrovamento o Aggiungi a un ritrovamento precedente; più foto condivise insieme si possono solo aggiungere a un ritrovamento precedente.",
+        "Da una condivisione l'app accetta solo file immagine presenti sul telefono: la condivisione di un indirizzo web o di un testo viene rifiutata. Le foto che non entrano nel ritrovamento scelto, che ha al massimo 5 foto, vengono escluse, e l'app indica quante.",
+        "Ora l'app ha una cronologia delle versioni. La apre il link Cronologia delle versioni, in cima alla pagina Informazioni; la prima volta che viene aperta dopo un aggiornamento, l'app mostra Novità.",
         "Il link Impostazioni in fondo alla Biblioteca non è più nascosto dietro i pulsanti di navigazione di Android. Ora nessuna pagina mostra più contenuti dietro la barra di navigazione del telefono o il ritaglio del display.",
         "Ora l'app rimuove i dati della fotocamera e gli altri metadati dalla copia di una foto che invia per l'analisi. Prima una foto la cui copia conteneva questi dati, ad esempio una foto della fotocamera scelta dalla galleria, non veniva analizzata.",
         "Dopo la rimozione di una foto da un ritrovamento la cui analisi non è riuscita, il motivo mostrato non indica più una foto con il suo numero, perché le foto rimaste possono avere numeri diversi.",

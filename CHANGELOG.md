@@ -4,6 +4,8 @@ All notable changes to What mushroom is this? are documented here.
 
 ## [Unreleased]
 
+## [0.2.1]
+
 ### Added
 
 - Wushroom is in Android's "Share with" list for photos. Share a photo
@@ -38,24 +40,13 @@ All notable changes to What mushroom is this? are documented here.
 
 ### Changed
 
-- The specification (`docs/SPEC.md`) is an index, and its text is in 14 section files in `docs/spec/`, unchanged (#124).
-- README: one sentence says the project was developed with the assistance of AI (#126).
-
-### Fixed
-
-- After a share the app removes only the copies of it that lie in the
-  library's own folder and in the app's own, and no longer any cache file
-  it is given an address for (#128).
-
-## [0.2.1]
-
-### Changed
-
 - After a photo is removed from a failed find whose failure named one of
   its photos by number, the find says why it failed without a photo
   number, since the photos left may have other numbers and the number
   could name a photo that did not fail; when the find is analysed again
   and fails, the photo is named by the number it then has (#101).
+- The specification (`docs/SPEC.md`) is an index, and its text is in 14 section files in `docs/spec/`, unchanged (#124).
+- README: one sentence says the project was developed with the assistance of AI (#126).
 
 ### Fixed
 
@@ -71,6 +62,9 @@ All notable changes to What mushroom is this? are documented here.
   the picture, before the copy is checked and sent. The check is as
   strict as before, and a copy it still refuses is not sent (PBI-2.22,
   #113).
+- After a share the app removes only the copies of it that lie in the
+  library's own folder and in the app's own, and no longer any cache file
+  it is given an address for (#128).
 
 ## [0.2.0]
 
