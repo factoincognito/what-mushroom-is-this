@@ -10,6 +10,8 @@ import { Linking } from "react-native";
 
 import { NOTICES } from "../../about/notices";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { BUILD_VERSION } from "../../history/buildVersion";
+import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import { STRINGS } from "../../i18n/strings";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
@@ -66,6 +68,7 @@ describe("the About view", () => {
 
   beforeEach(async () => {
     await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+    await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   });
 
   it("is reached from Settings", async () => {
@@ -199,6 +202,53 @@ describe("the About view", () => {
     } finally {
       openURL.mockRestore();
     }
+  });
+
+  describe("the link to the version history (SPEC 3.10, item 2; PBI-2.24)", () => {
+    /** The texts the About view shows, in the order it shows them. */
+    function textsShown(): string[] {
+      return within(screen.getByTestId("about"))
+        .getAllByText(/\S/)
+        .map((node) => node.props.children)
+        .filter((text): text is string => typeof text === "string");
+    }
+
+    it("is first on the screen, above the app's licence", async () => {
+      await startApp("/about");
+      await screen.findByText(t.librariesHeading);
+      const texts = textsShown();
+      expect(texts[0]).toBe(STRINGS.en.history.title);
+      expect(texts[1]).toBe(t.appHeading);
+      expect(texts.indexOf(STRINGS.en.history.title)).toBeLessThan(
+        texts.indexOf(NOTICES.app.licence),
+      );
+    });
+
+    it("is a link to a screen reader, named Version history", async () => {
+      await startApp("/about");
+      expect(await screen.findByRole("link", { name: "Version history" })).toBeOnTheScreen();
+      expect(screen.queryByRole("button", { name: "Version history" })).not.toBeOnTheScreen();
+    });
+
+    it("opens the history over About", async () => {
+      const app = await startApp("/about");
+      await fireEvent.press(await screen.findByRole("link", { name: STRINGS.en.history.title }));
+      expect(await screen.findByTestId("history")).toBeOnTheScreen();
+      expect(app.pathname()).toBe("/history");
+    });
+
+    it.each([
+      ["sv", STRINGS.sv],
+      ["it", STRINGS.it],
+    ] as const)(
+      "is named in the app's language, %s, and is first there too",
+      async (code, strings) => {
+        phoneIn(code);
+        await startApp("/about");
+        expect(await screen.findByRole("link", { name: strings.history.title })).toBeOnTheScreen();
+        expect(textsShown()[0]).toBe(strings.history.title);
+      },
+    );
   });
 
   it.each([

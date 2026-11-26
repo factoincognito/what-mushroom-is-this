@@ -13,6 +13,8 @@ import { AppState } from "react-native";
 import type { Answer, ApiMatch } from "../../analysis/answer";
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
 import { formatFindTime } from "../../find/display";
+import { BUILD_VERSION } from "../../history/buildVersion";
+import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import { STRINGS } from "../../i18n/strings";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { monthName } from "../../library/filters";
@@ -122,6 +124,7 @@ const fetchMock = jest.fn();
 async function resetStandIns(): Promise<void> {
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+  await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
   mockSecrets.clear();
   mockSecrets.set(API_KEY_STORE_KEY, "sk-ant-api03-abcDEF_123");

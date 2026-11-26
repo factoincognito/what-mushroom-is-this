@@ -6,6 +6,13 @@ export const DISCLAIMER_ACCEPTED_KEY = "disclaimer.accepted";
 const ACCEPTED = "accepted";
 
 /**
+ * How the acceptance came about at this start of the app: "read", when it was stored at an
+ * earlier start, or "given", when the disclaimer was shown and accepted at this one
+ * (docs/SPEC.md 3.10, item 7).
+ */
+export type AcceptanceAtStart = "read" | "given";
+
+/**
  * Whether the disclaimer was accepted at an earlier start (docs/SPEC.md 3.1). Anything but the
  * exact stored value, and a store that cannot be read, count as not accepted, so the
  * disclaimer is shown again rather than skipped.

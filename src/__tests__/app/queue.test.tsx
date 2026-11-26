@@ -10,6 +10,8 @@ import { act, fireEvent, renderRouter, screen } from "expo-router/testing-librar
 import { AppState } from "react-native";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { BUILD_VERSION } from "../../history/buildVersion";
+import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import { STRINGS } from "../../i18n/strings";
 import { preparePhotoForAnalysis } from "../../image/prepareForAnalysis";
 import { API_KEY_STORE_KEY, INSTALL_MARKER_KEY } from "../../key/apiKey";
@@ -124,6 +126,7 @@ async function startApp(initialUrl = "/"): Promise<{ pathname: () => string }> {
 beforeEach(async () => {
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+  await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
   mockSecrets.clear();
   mockSecrets.set(API_KEY_STORE_KEY, A_KEY);

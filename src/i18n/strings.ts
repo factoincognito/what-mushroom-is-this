@@ -535,6 +535,20 @@ export type Strings = {
     /** On the New find screen: `{count}` shared files could not be loaded as images. */
     readonly notImages: string;
   };
+  /**
+   * The version history screen's own texts (docs/SPEC.md 3.10; PBI-2.24). Its entries are not
+   * here: they are the data of `src/history/entries.ts`.
+   */
+  readonly history: {
+    /** The title of the full history, which is also the text of its link on About. */
+    readonly title: string;
+    /** The title when the screen opens by itself after an upgrade. */
+    readonly whatsNewTitle: string;
+    /** The button that shows every entry, below what is new. */
+    readonly showFull: string;
+    /** The word before a version in an entry's heading. */
+    readonly version: string;
+  };
 };
 
 /**
@@ -571,6 +585,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "find",
     "about",
     "share",
+    "history",
   ],
   // The disclaimer for a lookup without photos is to be checked by the Italian speaker who
   // checked the disclaimer of SPEC 3.5 (docs/SPEC.md 3.9, Answers; docs/BACKLOG.md PBI-2.4).
@@ -591,6 +606,7 @@ export const NOT_CHECKED_BY_A_SPEAKER: {
     "find",
     "about",
     "share",
+    "history",
   ],
 };
 
@@ -985,6 +1001,12 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       notImages:
         "Delade filer som inte togs emot, eftersom de inte gick att läsa in som bilder: {count}.",
     },
+    history: {
+      title: "Versionshistorik",
+      whatsNewTitle: "Nyheter",
+      showFull: "Visa hela historiken",
+      version: "Version",
+    },
   },
   en: {
     languageName: "English",
@@ -1369,6 +1391,12 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       none: "Nothing is shared with the app right now.",
       leftOut: "Shared photos left out, as the find holds at most {max} photos: {count}.",
       notImages: "Shared files refused, as they could not be loaded as images: {count}.",
+    },
+    history: {
+      title: "Version history",
+      whatsNewTitle: "What's new",
+      showFull: "Show full history",
+      version: "Version",
     },
   },
   // Not checked by an Italian speaker, but for the disclaimer (NOT_CHECKED_BY_A_SPEAKER).
@@ -1770,6 +1798,12 @@ export const STRINGS: { readonly [L in Language]: Strings } = {
       leftOut: "Foto condivise escluse, perché il ritrovamento ha al massimo {max} foto: {count}.",
       notImages:
         "File condivisi rifiutati, perché non è stato possibile caricarli come immagini: {count}.",
+    },
+    history: {
+      title: "Cronologia delle versioni",
+      whatsNewTitle: "Novità",
+      showFull: "Mostra la cronologia completa",
+      version: "Versione",
     },
   },
 };

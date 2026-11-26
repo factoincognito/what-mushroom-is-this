@@ -20,6 +20,8 @@ import { AppState } from "react-native";
 import type { EdgeInsets } from "react-native-safe-area-context";
 
 import { DISCLAIMER_ACCEPTED_KEY } from "../../disclaimer/acceptance";
+import { BUILD_VERSION } from "../../history/buildVersion";
+import { HISTORY_SEEN_VERSION_KEY } from "../../history/seenVersion";
 import { STRINGS } from "../../i18n/strings";
 import { INSTALL_MARKER_KEY } from "../../key/apiKey";
 import { fetchDevicePicture } from "../../picture/devicePicture";
@@ -81,6 +83,8 @@ const ROUTES: readonly { readonly file: string; readonly url: string }[] = [
   { file: "text-lookup.tsx", url: "/text-lookup" },
   { file: "settings.tsx", url: "/settings" },
   { file: "about.tsx", url: "/about" },
+  // The version history (PBI-2.24), opened by its address: the screen the link on About opens.
+  { file: "history.tsx", url: "/history" },
   { file: "find/[id].tsx", url: "/find/1" },
   // The choice a share opens (PBI-2.21); with no share it says so, in the same screen area.
   { file: "share.tsx", url: "/share" },
@@ -119,6 +123,7 @@ const refused = { status: "denied", granted: false, canAskAgain: false, expires:
 async function resetStandIns(): Promise<void> {
   await AsyncStorage.clear();
   await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, "accepted");
+  await AsyncStorage.setItem(HISTORY_SEEN_VERSION_KEY, BUILD_VERSION);
   await AsyncStorage.setItem(INSTALL_MARKER_KEY, "installed");
   mockLog.finds.clear();
   jest
