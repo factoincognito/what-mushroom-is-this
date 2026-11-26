@@ -40,6 +40,11 @@ function cacheUri(): string {
   return Paths.cache.uri.endsWith("/") ? Paths.cache.uri : `${Paths.cache.uri}/`;
 }
 
+/** Whether an address is under one folder of the cache, the folder's name given without slashes. */
+function inFolder(address: string, folder: string): boolean {
+  return address.startsWith(`${cacheUri()}${folder}/`);
+}
+
 /** A file address with three slashes after the scheme, as the app's file code writes it. */
 function threeSlashes(address: string): string {
   return address.replace(/^file:\/(?=[^/])/, "file:///");
@@ -57,7 +62,7 @@ export function libraryCopy(contentUri: string): string | null {
     return null;
   }
   const address = threeSlashes(contentUri);
-  if (!isCacheFileAddress(address) || !address.startsWith(`${cacheUri()}${LIBRARY_FOLDER}/`)) {
+  if (!isCacheFileAddress(address) || !inFolder(address, LIBRARY_FOLDER)) {
     return null;
   }
   try {
@@ -96,9 +101,28 @@ export function keepSharedCopy(uri: string): string | null {
   }
 }
 
-/** Removes a copy in the cache, the library's or the app's own, at either form of its address. */
+/**
+ * Removes a copy of the share, the library's or the app's own, at either form of its address: a
+ * file in the library's folder or the app's own folder of the cache, at an address that passes the
+ * guard of the app's removals (`isCacheFileAddress`, which `removePickedCopy` asks again). Any
+ * other address is left alone and the file system's removal is not called for it: not another file
+ * of the cache, not a folder, not the find log's photos, not a web address.
+ *
+ * The addresses come from the library (the resolved payloads' `contentUri`, whose file name the
+ * sharing app chooses and whose address for a shared web address is where a web server's
+ * redirects end) and from `keepSharedCopy`; none is taken as safe.
+ */
 function removeCopy(uri: string): void {
-  removePickedCopy(typeof uri === "string" ? threeSlashes(uri) : uri);
+  if (typeof uri !== "string") {
+    return;
+  }
+  const address = threeSlashes(uri);
+  if (
+    isCacheFileAddress(address) &&
+    (inFolder(address, LIBRARY_FOLDER) || inFolder(address, APP_FOLDER))
+  ) {
+    removePickedCopy(address);
+  }
 }
 
 export const deviceShareFiles: ShareFiles = {

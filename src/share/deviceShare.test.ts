@@ -371,7 +371,7 @@ describe("deviceShareFiles.remove: only the share's own copies, at a plain addre
     ["an upper-case encoded parent step", () => `${cache}expo-sharing/%2E%2E/%2E%2E/a.jpg`],
     ["a half-encoded parent step", () => `${cache}expo-sharing/.%2e/.%2e/a.jpg`],
     ["an encoded separator", () => `${cache}expo-sharing/..%2f..%2fdocument/photos/p21.jpg`],
-    ["backslashes", () => `${cache}expo-sharing\\..\\..\\document\\photos\\p21.jpg`],
+    ["backslashes", () => `${cache}expo-sharing/..\\..\\document\\photos\\p21.jpg`],
     ["an encoded backslash", () => `${cache}expo-sharing/..%5c..%5cdocument/photos/p21.jpg`],
     ["a parent step with a tab in it", () => `${cache}expo-sharing/.\t./.\t./a.jpg`],
     ["a parent step with a line break in it", () => `${cache}expo-sharing/.\n./a.jpg`],
@@ -395,13 +395,16 @@ describe("deviceShareFiles.remove: only the share's own copies, at a plain addre
     const copy = libraryFile("IMG_14.jpg");
     const own = keepSharedCopy(libraryFile("IMG_15.jpg").uri) ?? "";
     const photo = photoFile();
-    fileIn(new Directory(Paths.cache, "expo-sharing"), "a.jpg");
-    const removal = jest.spyOn(File.prototype, "delete");
+    // The in-memory file system does not read a parent step or an escape as a real one does, so
+    // every address is made to name a file that is there, and the removal is observed, not run.
+    const exists = jest.spyOn(File.prototype, "exists", "get").mockReturnValue(true);
+    const removal = jest.spyOn(File.prototype, "delete").mockImplementation(() => undefined);
     try {
       deviceShareFiles.remove(address(copy.uri, own));
       expect(removal).not.toHaveBeenCalled();
     } finally {
       removal.mockRestore();
+      exists.mockRestore();
     }
     expect(copy.exists).toBe(true);
     expect(new File(own).exists).toBe(true);
