@@ -257,3 +257,38 @@
       whether a share declared as `image/*` can carry a web address:
       read in the library's source before the build; 3.9 holds either
       way.
+17. The version history (3.10; PBI-2.24).
+    The app on `main`, read on 2026-11-26 at `41d833d`, nothing run: it
+    shows its own version nowhere and stores none; the keys of its
+    plain key-value store are `install.marker`, `disclaimer.accepted`,
+    `language.chosen`, `model.id`, `lookup.text.save` and
+    `lookup.photo.save`. It reads its version in two ways: from the
+    imported `app.json` for the map's User-Agent
+    (`src/library/LibraryMap.tsx`), and through `expo-constants` for
+    the Wikimedia User-Agent (`src/picture/devicePicture.ts`). The
+    history reads the imported file (3.10, item 5), whose content the
+    bundler builds into the app, so its version is not a phone
+    question; whether `expo-constants` gives the same version in an
+    EAS build is not checked, and 3.10 does not rest on it.
+    Not known without builds on Adam's phone (**[not checked]**):
+    - that the key-value store's content is kept when a build is
+      installed over an earlier one, which is what lets the app see
+      an upgrade;
+    - that installing a build ends the running app, so that its next
+      opening is a start (3.10, item 7);
+    - whether the app can tell, before it shows a screen, which
+      screen a start opens on: the Library, a share's choice or
+      another address (3.10, item 8), and how long the decision then
+      waits while Android keeps the app's process;
+    - how the opening by itself looks: whether the Library shows for
+      an instant first, and that back shows the Library and does not
+      leave the app;
+    - what TalkBack says when the screen opens by itself, and where
+      its focus goes when "Show full history" is pressed and the
+      button is removed;
+    - the screen at the phone's largest text size, with long entries.
+    The opening by itself can be tried on a phone only with two builds
+    of different versions, the earlier of them already with the
+    history; or, with Clead's recommendation in 3.10, item 7, with the
+    first build that has the history, installed over a 0.2.x build.
+    iOS: nothing checked (no build before PBI-1.23).
