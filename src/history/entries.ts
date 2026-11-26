@@ -9,6 +9,11 @@
  * for line; and name the version in both lists of `ENTRIES_NOT_CHECKED_BY_A_SPEAKER`. A line says
  * in plain words what the user can now do or what has changed for them: no PR or backlog number,
  * and no name from the code. The tests beside this file check the list.
+ *
+ * The date of an entry whose version is not built yet (item 10; Adam, 2026-11-26): the day of the
+ * last commit that changes the entry's text before the version's first build, also when the entry
+ * gains lines. A commit that changes such an entry's text sets its date to that commit's day.
+ * Once the version is built, the date stays when the text is corrected.
  */
 
 import type { Language } from "../i18n/languages";
@@ -26,14 +31,16 @@ export type HistoryEntry = {
 /**
  * The entries, newest first. The first is the entry of app.json's version. 0.2.1 is the first
  * version with the history (Adam, 2026-11-26), so its entry also tells of the share target and of
- * the history itself. The entries of 0.2.0 and 0.1.0 are of the versions from before the history
- * that were installed on a phone, written from `CHANGELOG.md` and the specification; each one's
- * date is the day its version was set in app.json.
+ * the history itself; its date is the day those lines were written, the last change of its text
+ * before its first build, and not the day 0.2.1 was set in app.json (2026-11-16). The entries of
+ * 0.2.0 and 0.1.0 are of the versions from before the history that were installed on a phone,
+ * written from `CHANGELOG.md` and the specification; each one's date is the day its version was
+ * set in app.json.
  */
 export const HISTORY: readonly HistoryEntry[] = [
   {
     version: "0.2.1",
-    date: "2026-11-16",
+    date: "2026-11-26",
     lines: {
       en: [
         "Photos can now be shared with the app from the gallery, the camera app or another app that shows a photo. For one shared photo you choose New find or Add to an earlier find; several photos shared at once can only be added to an earlier find.",
