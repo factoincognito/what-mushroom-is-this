@@ -81,6 +81,8 @@ const ROUTES: readonly { readonly file: string; readonly url: string }[] = [
   { file: "text-lookup.tsx", url: "/text-lookup" },
   { file: "settings.tsx", url: "/settings" },
   { file: "about.tsx", url: "/about" },
+  // The version history (PBI-2.24), opened by its address: the screen the link on About opens.
+  { file: "history.tsx", url: "/history" },
   { file: "find/[id].tsx", url: "/find/1" },
   // The choice a share opens (PBI-2.21); with no share it says so, in the same screen area.
   { file: "share.tsx", url: "/share" },

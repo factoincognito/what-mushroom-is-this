@@ -72,9 +72,10 @@ describe("NOT_CHECKED_BY_A_SPEAKER", () => {
     "find",
     "about",
     "share",
+    "history",
   ];
 
-  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7, PBI-1.8, PBI-1.9, PBI-2.4 and PBI-2.21", () => {
+  it("marks the Swedish and the Italian strings of PBI-1.1, PBI-1.2, PBI-1.6, PBI-1.7, PBI-1.8, PBI-1.9, PBI-2.4, PBI-2.21 and PBI-2.24", () => {
     expect(NOT_CHECKED_BY_A_SPEAKER).toEqual({ sv: UNCHECKED, it: UNCHECKED });
   });
 
@@ -801,6 +802,62 @@ describe("the strings of the share target (SPEC 3.9, Shared photos; PBI-2.21)", 
   it("are a new group not checked by a speaker in Swedish and Italian", () => {
     for (const language of ["sv", "it"] as const) {
       expect(NOT_CHECKED_BY_A_SPEAKER[language]).toContain("share");
+    }
+  });
+});
+
+describe("the strings of the version history (SPEC 3.10, item 4; PBI-2.24)", () => {
+  const KEYS = ["title", "whatsNewTitle", "showFull", "version"];
+
+  it.each(LANGUAGES)("are all there in %s, and no others", (language) => {
+    expect(Object.keys(STRINGS[language].history).sort()).toEqual([...KEYS].sort());
+  });
+
+  it("name the two titles, the link, the button and the word for Version in English as the specification does", () => {
+    const t = STRINGS.en.history;
+    // The title is also the text of the link on About, as About's title is of its link in Settings.
+    expect(t.title).toBe("Version history");
+    expect(t.whatsNewTitle).toBe("What's new");
+    expect(t.showFull).toBe("Show full history");
+    expect(t.version).toBe("Version");
+  });
+
+  it("name them in Swedish", () => {
+    expect(STRINGS.sv.history).toEqual({
+      title: "Versionshistorik",
+      whatsNewTitle: "Nyheter",
+      showFull: "Visa hela historiken",
+      version: "Version",
+    });
+  });
+
+  it("name them in Italian", () => {
+    expect(STRINGS.it.history).toEqual({
+      title: "Cronologia delle versioni",
+      whatsNewTitle: "Novità",
+      showFull: "Mostra la cronologia completa",
+      version: "Versione",
+    });
+  });
+
+  it.each(LANGUAGES)("give the two forms of the screen different titles in %s", (language) => {
+    const t = STRINGS[language].history;
+    expect(t.whatsNewTitle).not.toBe(t.title);
+    expect(t.showFull).not.toBe(t.title);
+  });
+
+  it.each(LANGUAGES)(
+    "have no place to fill in, in %s: the version and the date are put beside the word",
+    (language) => {
+      for (const key of KEYS) {
+        expect((STRINGS[language].history as Record<string, string>)[key]).not.toMatch(/[{}]/);
+      }
+    },
+  );
+
+  it("are a new group not checked by a speaker in Swedish and Italian", () => {
+    for (const language of ["sv", "it"] as const) {
+      expect(NOT_CHECKED_BY_A_SPEAKER[language]).toContain("history");
     }
   });
 });

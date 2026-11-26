@@ -7,7 +7,7 @@ import { LanguageProvider } from "../i18n/LanguageContext";
 import { STRINGS } from "../i18n/strings";
 import type { KeyValueStore } from "../storage/keyValueStore";
 import { DISCLAIMER_ACCEPTED_KEY } from "./acceptance";
-import { DisclaimerGate } from "./DisclaimerGate";
+import { DisclaimerGate, useAcceptanceAtStart } from "./DisclaimerGate";
 
 jest.mock("expo-localization", () => ({ getLocales: jest.fn() }));
 
@@ -39,10 +39,16 @@ async function renderGate(store: KeyValueStore) {
       <LanguageProvider store={memoryStore()}>
         <DisclaimerGate store={store}>
           <Text>the app</Text>
+          <ToldByTheGate />
         </DisclaimerGate>
       </LanguageProvider>
     </SafeAreaProvider>,
   );
+}
+
+/** What the gate tells the app it lets through: how the acceptance came about at this start. */
+function ToldByTheGate() {
+  return <Text>{`the acceptance was ${useAcceptanceAtStart()} at this start`}</Text>;
 }
 
 /** The padding that keeps a view clear of `INSETS` on all four edges. */
@@ -204,5 +210,62 @@ describe("DisclaimerGate", () => {
     await screen.unmount();
     await renderGate(failing);
     expect(await screen.findByText(STRINGS.en.disclaimer)).toBeOnTheScreen();
+  });
+
+  describe("tells the app whether the acceptance was read or given at this start (SPEC 3.10, item 7)", () => {
+    it("says read when the acceptance was stored at an earlier start", async () => {
+      await renderGate(memoryStore({ [DISCLAIMER_ACCEPTED_KEY]: "accepted" }));
+      expect(await screen.findByText("the acceptance was read at this start")).toBeOnTheScreen();
+    });
+
+    it("says given when the disclaimer is accepted at this start", async () => {
+      await renderGate(memoryStore());
+      await fireEvent.press(
+        await screen.findByRole("button", { name: STRINGS.en.firstStart.accept }),
+      );
+      expect(await screen.findByText("the acceptance was given at this start")).toBeOnTheScreen();
+    });
+
+    it("says given when the disclaimer is accepted and storing the acceptance fails", async () => {
+      const failing: KeyValueStore = {
+        getItem: async () => null,
+        setItem: async () => {
+          throw new Error("disk full");
+        },
+      };
+      await renderGate(failing);
+      await fireEvent.press(
+        await screen.findByRole("button", { name: STRINGS.en.firstStart.accept }),
+      );
+      expect(await screen.findByText("the acceptance was given at this start")).toBeOnTheScreen();
+    });
+
+    it("says given when the stored state could not be read and the disclaimer is accepted again", async () => {
+      const store: KeyValueStore = {
+        getItem: async () => {
+          throw new Error("storage unavailable");
+        },
+        setItem: async () => undefined,
+      };
+      await renderGate(store);
+      await fireEvent.press(
+        await screen.findByRole("button", { name: STRINGS.en.firstStart.accept }),
+      );
+      expect(await screen.findByText("the acceptance was given at this start")).toBeOnTheScreen();
+    });
+
+    it("tells nothing before the disclaimer is accepted: what asks is not shown", async () => {
+      await renderGate(memoryStore());
+      await screen.findByText(STRINGS.en.disclaimer);
+      expect(screen.queryByText(/the acceptance was/)).not.toBeOnTheScreen();
+    });
+
+    it("cannot be asked outside the gate", async () => {
+      const errors = jest.spyOn(console, "error").mockImplementation(() => undefined);
+      await expect(render(<ToldByTheGate />)).rejects.toThrow(
+        "useAcceptanceAtStart must be used inside a DisclaimerGate",
+      );
+      errors.mockRestore();
+    });
   });
 });
