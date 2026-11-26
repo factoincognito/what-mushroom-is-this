@@ -141,6 +141,11 @@ describe("the entry of 0.2.1, the first version with the history (Adam, 2026-11-
     return [STRINGS[language].history.whatsNewTitle];
   }
 
+  it("has as its date the day of the last commit that changed its text before its first build, not the day its version was set (item 10)", () => {
+    const entry = HISTORY.find((candidate) => candidate.version === "0.2.1");
+    expect(entry?.date).toBe("2026-11-26");
+  });
+
   it.each(LANGUAGES)(
     "tells in %s of the share target: one line names a shared photo's two choices as the choice does",
     (language) => {
