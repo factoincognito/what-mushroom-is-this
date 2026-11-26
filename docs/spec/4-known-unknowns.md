@@ -287,8 +287,9 @@
       its focus goes when "Show full history" is pressed and the
       button is removed;
     - the screen at the phone's largest text size, with long entries.
-    The opening by itself can be tried on a phone only with two builds
-    of different versions, the earlier of them already with the
-    history; or, with Clead's recommendation in 3.10, item 7, with the
-    first build that has the history, installed over a 0.2.x build.
+    The opening by itself can be tried on a phone with the first build
+    that has the history, installed over a 0.2.x build on which the
+    disclaimer was accepted (3.10, item 7, the second rule); otherwise
+    only with two builds of different versions, the earlier of them
+    already with the history.
     iOS: nothing checked (no build before PBI-1.23).
