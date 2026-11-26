@@ -69,7 +69,9 @@ marked **[Clead]** in 3.10, in the two lines of 3.1 and in the row of
 section 2, as merged: his choice "Confirm all 40 as written
 (Recommended)" among the options Clead put to him (that, confirm all
 but some, or not confirm), after Clead gave him a numbered list of the
-40 choices, quoted from the merged text. What no one has decided is
+40 choices, quoted from the merged text. Of item 12, the tests, the list
+gave the eight groups of tests by their names and left their cases out,
+so the cases are not part of what he confirmed. What no one has decided is
 stated as undecided in the part: the first version with the history, and
 whether a shared version history becomes a project or a repository of
 its own. The product office's `DECISIONS.md` records the answers and the
