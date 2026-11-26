@@ -139,18 +139,12 @@ function startOfDateInUtc(text: unknown): number | null {
   if (match === null) {
     return null;
   }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
   // Set as a full year, so that the years 0 to 99 are not read as 1900 to 1999.
   const date = new Date(0);
-  date.setUTCFullYear(year, month - 1, day);
-  // A day the month does not have rolls over into the next month, and the parts no longer match.
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
+  date.setUTCFullYear(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  // A day the month does not have, or a month the year does not have, rolls over into a later
+  // one, and the date is then no longer the one written.
+  if (date.toISOString().slice(0, 10) !== text) {
     return null;
   }
   return date.getTime();
