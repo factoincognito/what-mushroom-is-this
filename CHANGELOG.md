@@ -13,16 +13,26 @@ All notable changes to What mushroom is this? are documented here.
   find, one after another; those that do not fit in the find, which
   holds at most 5, are left out, and the app says how many. "Cancel"
   saves nothing. Only image files on the phone are taken: a shared link
-  or text is refused, and nothing is fetched for it. A shared photo is
-  sent for analysis only with its find, as any other photo. A find made
-  from a shared photo has the time it was saved and no position, as the
-  app reads neither from a shared file. This needs a new build of the
-  app: a build already installed does not get it (PBI-2.21, #116).
+  or text is refused, and the app fetches nothing for it; one short
+  window is left, in which another app's share of a web address can be
+  resolved by the library with a GET request that follows redirects,
+  with nothing of the app's sent and nothing of the answer taken (SPEC
+  3.9, #127). A shared photo is sent for analysis only with its find, as
+  any other photo. A find made from a shared photo has the time it was
+  saved and no position, as the app reads neither from a shared file.
+  This needs a new build of the app: a build already installed does not
+  get it (PBI-2.21, #116).
 
 ### Changed
 
 - The specification (`docs/SPEC.md`) is an index, and its text is in 14 section files in `docs/spec/`, unchanged (#124).
 - README: one sentence says the project was developed with the assistance of AI (#126).
+
+### Fixed
+
+- After a share the app removes only the copies of it that lie in the
+  library's own folder and in the app's own, and no longer any cache file
+  it is given an address for (#128).
 
 ## [0.2.1]
 
