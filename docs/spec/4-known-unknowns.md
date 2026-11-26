@@ -262,19 +262,24 @@
     shows its own version nowhere and stores none; the keys of its
     plain key-value store are `install.marker`, `disclaimer.accepted`,
     `language.chosen`, `model.id`, `lookup.text.save` and
-    `lookup.photo.save`; it reads its version from `expo-constants`
-    for the Wikimedia User-Agent (`src/picture/devicePicture.ts`).
+    `lookup.photo.save`. It reads its version in two ways: from the
+    imported `app.json` for the map's User-Agent
+    (`src/library/LibraryMap.tsx`), and through `expo-constants` for
+    the Wikimedia User-Agent (`src/picture/devicePicture.ts`). The
+    history reads the imported file (3.10, item 5), whose content the
+    bundler builds into the app, so its version is not a phone
+    question; whether `expo-constants` gives the same version in an
+    EAS build is not checked, and 3.10 does not rest on it.
     Not known without builds on Adam's phone (**[not checked]**):
     - that the key-value store's content is kept when a build is
       installed over an earlier one, which is what lets the app see
       an upgrade;
-    - that the version the app reads when it runs is the `version` of
-      `app.json` at the build, in an EAS build;
     - that installing a build ends the running app, so that its next
       opening is a start (3.10, item 7);
-    - whether the app can tell, before its first screen, that a share
-      started it (3.10, item 8), and how long the decision then waits
-      while Android keeps the app's process;
+    - whether the app can tell, before it shows a screen, which
+      screen a start opens on: the Library, a share's choice or
+      another address (3.10, item 8), and how long the decision then
+      waits while Android keeps the app's process;
     - how the opening by itself looks: whether the Library shows for
       an instant first, and that back shows the Library and does not
       leave the app;
