@@ -1,4 +1,5 @@
-import { LANGUAGES } from "../i18n/languages";
+import { LANGUAGES, type Language } from "../i18n/languages";
+import { STRINGS } from "../i18n/strings";
 import { formatFindDate } from "../library/mapPins";
 import { fs, PROJECT_ROOT, path } from "../testing/projectFiles";
 import { BUILD_VERSION } from "./buildVersion";
@@ -106,6 +107,77 @@ describe("the list of entries (SPEC 3.10, item 4)", () => {
     expect(versions).toContain("0.2.0");
     expect(versions).toContain("0.1.0");
   });
+});
+
+describe("the entry of 0.2.1, the first version with the history (Adam, 2026-11-26)", () => {
+  /** The lines of the entry of 0.2.1 in a language. */
+  function linesOf(language: Language): readonly string[] {
+    const entry = HISTORY.find((candidate) => candidate.version === "0.2.1");
+    if (entry === undefined) {
+      throw new Error("the list has no entry of 0.2.1");
+    }
+    return entry.lines[language];
+  }
+
+  /** The places of the lines that hold every one of the texts, counted from 0. */
+  function placesOfLinesWith(language: Language, texts: readonly string[]): number[] {
+    return linesOf(language).flatMap((line, index) =>
+      texts.every((text) => line.includes(text)) ? [index] : [],
+    );
+  }
+
+  /** The two choices of a shared photo, as the choice names them (SPEC 3.9, Shared photos). */
+  function choicesOfAShare(language: Language): readonly string[] {
+    return [STRINGS[language].share.newFind, STRINGS[language].share.addToFind];
+  }
+
+  /** The history's link and the screen it is on, as the app names them (SPEC 3.10, item 2). */
+  function linkOnAbout(language: Language): readonly string[] {
+    return [STRINGS[language].history.title, STRINGS[language].about.title];
+  }
+
+  /** What opens by itself after an upgrade, by its title (SPEC 3.10, item 3). */
+  function whatOpensByItself(language: Language): readonly string[] {
+    return [STRINGS[language].history.whatsNewTitle];
+  }
+
+  it.each(LANGUAGES)(
+    "tells in %s of the share target: one line names a shared photo's two choices as the choice does",
+    (language) => {
+      expect(placesOfLinesWith(language, choicesOfAShare(language))).toHaveLength(1);
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "tells in %s of the version history: one line names its link and the About screen as the app does",
+    (language) => {
+      expect(placesOfLinesWith(language, linkOnAbout(language))).toHaveLength(1);
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "tells in %s of what opens by itself after an upgrade, by its title",
+    (language) => {
+      expect(placesOfLinesWith(language, whatOpensByItself(language))).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    ["the share's two choices", choicesOfAShare],
+    ["the history's link on About", linkOnAbout],
+    ["what opens by itself", whatOpensByItself],
+  ] as const)(
+    "has the line of %s at the same place in the three languages, line for line",
+    (_what, texts) => {
+      const [first, ...others] = LANGUAGES.map((language) =>
+        placesOfLinesWith(language, texts(language)),
+      );
+      expect(first).toHaveLength(1);
+      for (const places of others) {
+        expect(places).toEqual(first);
+      }
+    },
+  );
 });
 
 describe("the entries no speaker has checked (SPEC 3.10, item 10)", () => {
