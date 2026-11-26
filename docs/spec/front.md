@@ -57,5 +57,23 @@ office's `DECISIONS.md`); and, when the chosen find's batch is open on a
 screen under the choice and that screen cannot take the photos, the
 find's "Add photos" screen opening over it.
 
+The version history (3.10; PBI-2.24), written in #131 and #132: Adam
+gave intent approval to 3.10 and its `history` row in section 2 on
+2026-11-26 at about 15:41, in chat. At that time he answered the three
+questions of the section: item 4, the earlier versions installed on a
+phone in the list ("Yes, each installed version (Recommended)"); item 7,
+the two rules for a missing stored version ("Accept the two rules
+(Recommended)"); item 10, a build does not wait for the Italian check
+("Do not wait (Recommended)"). At about 15:52 he confirmed the choices
+marked **[Clead]** in 3.10, in the two lines of 3.1 and in the row of
+section 2, as merged: his choice "Confirm all 40 as written
+(Recommended)" among the options Clead put to him (that, confirm all
+but some, or not confirm), after Clead gave him a numbered list of the
+40 choices, quoted from the merged text. What no one has decided is
+stated as undecided in the part: the first version with the history, and
+whether a shared version history becomes a project or a repository of
+its own. The product office's `DECISIONS.md` records the answers and the
+approval.
+
 ---
 
