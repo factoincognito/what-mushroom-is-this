@@ -45,7 +45,7 @@ export const HISTORY: readonly HistoryEntry[] = [
         "När ett foto har tagits bort ur ett fynd vars analys misslyckades nämner orsaken som visas inte längre något foto med nummer, eftersom de foton som är kvar kan ha fått andra nummer.",
       ],
       it: [
-        "Il link Impostazioni in fondo alla Biblioteca non è più nascosto dietro i pulsanti di navigazione di Android. Ora in nessuna pagina qualcosa finisce dietro la barra di navigazione del telefono o il ritaglio del display.",
+        "Il link Impostazioni in fondo alla Biblioteca non è più nascosto dietro i pulsanti di navigazione di Android. Ora nessuna pagina mostra più contenuti dietro la barra di navigazione del telefono o il ritaglio del display.",
         "Ora l'app rimuove i dati della fotocamera e gli altri metadati dalla copia di una foto che invia per l'analisi. Prima una foto la cui copia conteneva questi dati, ad esempio una foto della fotocamera scelta dalla galleria, non veniva analizzata.",
         "Dopo la rimozione di una foto da un ritrovamento la cui analisi non è riuscita, il motivo mostrato non indica più una foto con il suo numero, perché le foto rimaste possono avere numeri diversi.",
       ],
